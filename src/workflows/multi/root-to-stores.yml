@@ -1,0 +1,84 @@
+# climaybe — Root to Stores (Multi-store)
+# When direct commits (hotfixes) land on live-* branches,
+# syncs root JSON files back to stores/<alias>/ directory.
+# This prepares the data for backporting to main.
+
+name: Root to Stores
+
+on:
+  push:
+    branches:
+      - 'live-*'
+
+# Prevent concurrent runs per branch
+concurrency:
+  group: root-to-stores-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip workflow commits
+        id: gate
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if echo "$COMMIT_MSG" | grep -qE "\[root-to-stores\]|\[stores-to-root\]|\[hotfix-backport\]|chore\(release\)"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract store alias
+        if: steps.gate.outputs.skip != 'true'
+        id: alias
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          ALIAS="${BRANCH#live-}"
+          echo "alias=$ALIAS" >> $GITHUB_OUTPUT
+
+      - name: Sync root to stores/<alias>/
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          ALIAS="${{ steps.alias.outputs.alias }}"
+          STORE_DIR="stores/${ALIAS}"
+
+          # Ensure store directory exists
+          mkdir -p "${STORE_DIR}/config" "${STORE_DIR}/templates" "${STORE_DIR}/sections"
+
+          # Sync directories: config, templates, sections
+          for DIR in config templates sections; do
+            if [ -d "$DIR" ]; then
+              find "$DIR" -name "*.json" | while read -r FILE; do
+                # Skip excluded files
+                if [ "$FILE" = "config/settings_schema.json" ]; then
+                  continue
+                fi
+
+                DEST="${STORE_DIR}/${FILE}"
+                mkdir -p "$(dirname "$DEST")"
+                cp "$FILE" "$DEST"
+                echo "  Synced: $FILE → $DEST"
+              done
+            fi
+          done
+
+      - name: Commit changes
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync root to stores/${{ steps.alias.outputs.alias }}/ [root-to-stores]"
+            git push
+          else
+            echo "No changes to commit."
+          fi

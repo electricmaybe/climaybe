@@ -1,0 +1,31 @@
+{
+  "name": "climaybe",
+  "version": "1.0.0",
+  "description": "Shopify CI/CD CLI — scaffolds workflows, branch strategy, and store config for single-store and multi-store theme repos",
+  "type": "module",
+  "bin": {
+    "climaybe": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "shopify",
+    "ci",
+    "cd",
+    "theme",
+    "workflow",
+    "github-actions"
+  ],
+  "author": "Electric Maybe",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0",
+    "picocolors": "^1.1.1",
+    "prompts": "^2.4.2"
+  }
+}

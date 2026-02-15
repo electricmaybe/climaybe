@@ -1,0 +1,122 @@
+# climaybe — Version Bump (Reusable Workflow)
+# Bumps version in settings_schema.json, creates a git tag, and pushes.
+
+name: Version Bump
+
+on:
+  workflow_call:
+    inputs:
+      bump_type:
+        description: 'Type of version bump: minor or patch'
+        required: true
+        type: string
+      version:
+        description: 'Explicit version to set (e.g., v3.2.0). If empty, auto-increments based on bump_type.'
+        required: false
+        type: string
+        default: ''
+      changelog:
+        description: 'Changelog text for the tag annotation'
+        required: false
+        type: string
+        default: ''
+    outputs:
+      new_version:
+        description: 'The new version tag that was created'
+        value: ${{ jobs.bump.outputs.new_version }}
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine new version
+        id: bump
+        run: |
+          BUMP_TYPE="${{ inputs.bump_type }}"
+          EXPLICIT_VERSION="${{ inputs.version }}"
+
+          if [ -n "$EXPLICIT_VERSION" ]; then
+            # Use explicit version, ensure it starts with v
+            NEW_VERSION="${EXPLICIT_VERSION#v}"
+            NEW_VERSION="v${NEW_VERSION}"
+          else
+            # Get latest tag
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            LATEST_TAG="${LATEST_TAG#v}"
+
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_TAG"
+            MAJOR=${MAJOR:-0}
+            MINOR=${MINOR:-0}
+            PATCH=${PATCH:-0}
+
+            if [ "$BUMP_TYPE" = "minor" ]; then
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            elif [ "$BUMP_TYPE" = "patch" ]; then
+              PATCH=$((PATCH + 1))
+            fi
+
+            NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update settings_schema.json
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+          SCHEMA_FILE="config/settings_schema.json"
+
+          if [ -f "$SCHEMA_FILE" ]; then
+            # Update the theme_info version in settings_schema.json
+            node -e "
+              const fs = require('fs');
+              const schema = JSON.parse(fs.readFileSync('$SCHEMA_FILE', 'utf-8'));
+              const themeInfo = schema.find(s => s.name === 'theme_info');
+              if (themeInfo) {
+                themeInfo.theme_version = '${NEW_VERSION#v}';
+              }
+              fs.writeFileSync('$SCHEMA_FILE', JSON.stringify(schema, null, 2) + '\n');
+            "
+            echo "Updated $SCHEMA_FILE to ${NEW_VERSION}"
+          else
+            echo "No $SCHEMA_FILE found, skipping schema update."
+          fi
+
+      - name: Commit and tag
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+
+          # Stage changes
+          git add -A
+
+          # Only commit if there are changes
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): bump version to ${NEW_VERSION}"
+          fi
+
+          # Create annotated tag
+          CHANGELOG="${{ inputs.changelog }}"
+          if [ -n "$CHANGELOG" ]; then
+            git tag -a "$NEW_VERSION" -m "$CHANGELOG"
+          else
+            git tag -a "$NEW_VERSION" -m "Release ${NEW_VERSION}"
+          fi
+
+          git push origin HEAD --follow-tags

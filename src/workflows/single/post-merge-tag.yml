@@ -1,0 +1,96 @@
+# climaybe — Post-Merge Tag (Single-store)
+# After a staging → main PR is merged, detects the target version from the PR title
+# and bumps the minor version accordingly.
+# PR title convention: "Release v3.2" or "Release v3.2.0"
+
+name: Post-Merge Tag
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent version bumps
+concurrency:
+  group: post-merge-tag
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      is_release: ${{ steps.check.outputs.is_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Check if this push is from a merged staging PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check the commit message for merge indicator
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
+
+          # Skip hotfix backports
+          if echo "$COMMIT_MSG" | grep -q "\[hotfix-backport\]"; then
+            echo "is_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Skip version bump commits from this workflow
+          if echo "$COMMIT_MSG" | grep -q "chore(release): bump version"; then
+            echo "is_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Look for merged PR that targeted main from staging
+          PR_NUMBER=$(echo "$COMMIT_MSG" | grep -oP '#\K\d+' | head -1 || true)
+
+          if [ -n "$PR_NUMBER" ]; then
+            PR_DATA=$(gh api repos/${{ github.repository }}/pulls/$PR_NUMBER 2>/dev/null || echo "")
+
+            if [ -n "$PR_DATA" ]; then
+              HEAD_REF=$(echo "$PR_DATA" | jq -r '.head.ref')
+              TITLE=$(echo "$PR_DATA" | jq -r '.title')
+
+              if [ "$HEAD_REF" = "staging" ]; then
+                # Extract version from PR title: "Release v3.2" or "Release v3.2.0"
+                VERSION=$(echo "$TITLE" | grep -oP 'v\d+\.\d+(\.\d+)?' || true)
+
+                if [ -n "$VERSION" ]; then
+                  # Ensure it has 3 parts
+                  PARTS=$(echo "$VERSION" | tr '.' '\n' | wc -l)
+                  if [ "$PARTS" -eq "2" ]; then
+                    VERSION="${VERSION}.0"
+                  fi
+
+                  echo "is_release=true" >> $GITHUB_OUTPUT
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Detected release version: $VERSION"
+                  exit 0
+                fi
+              fi
+            fi
+          fi
+
+          echo "is_release=false" >> $GITHUB_OUTPUT
+
+  # Generate changelog for the release
+  changelog:
+    needs: detect
+    if: needs.detect.outputs.is_release == 'true'
+    uses: ./.github/workflows/ai-changelog.yml
+    with:
+      base_ref: ${{ needs.detect.outputs.version }}
+      head_ref: HEAD
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+  # Apply version bump
+  bump:
+    needs: [detect, changelog]
+    if: needs.detect.outputs.is_release == 'true'
+    uses: ./.github/workflows/version-bump.yml
+    with:
+      bump_type: minor
+      version: ${{ needs.detect.outputs.version }}
+      changelog: ${{ needs.changelog.outputs.changelog }}
+    secrets: inherit

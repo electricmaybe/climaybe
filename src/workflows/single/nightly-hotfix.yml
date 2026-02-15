@@ -1,0 +1,73 @@
+# climaybe — Nightly Hotfix Tagger (Single-store)
+# Runs at 02:00 US Eastern (07:00 UTC) every night.
+# If there are untagged commits on main (not from staging merges),
+# generates a changelog and creates a patch version tag.
+
+name: Nightly Hotfix Tag
+
+on:
+  schedule:
+    # 02:00 US Eastern = 07:00 UTC
+    - cron: '0 7 * * *'
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+# Prevent concurrent runs
+concurrency:
+  group: nightly-hotfix
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check.outputs.has_changes }}
+      last_tag: ${{ steps.check.outputs.last_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for untagged commits
+        id: check
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No tags found, skipping."
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "last_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+          # Count commits since last tag, excluding version bump commits
+          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s" | grep -v "chore(release): bump version" | grep -v "\[hotfix-backport\]" || true)
+
+          if [ -n "$COMMITS" ]; then
+            COMMIT_COUNT=$(echo "$COMMITS" | wc -l | tr -d ' ')
+            echo "Found $COMMIT_COUNT untagged commit(s) since $LATEST_TAG"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "No untagged hotfix commits since $LATEST_TAG"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+  changelog:
+    needs: check
+    if: needs.check.outputs.has_changes == 'true'
+    uses: ./.github/workflows/ai-changelog.yml
+    with:
+      base_ref: ${{ needs.check.outputs.last_tag }}
+      head_ref: HEAD
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+  bump:
+    needs: [check, changelog]
+    if: needs.check.outputs.has_changes == 'true'
+    uses: ./.github/workflows/version-bump.yml
+    with:
+      bump_type: patch
+      changelog: ${{ needs.changelog.outputs.changelog }}
+    secrets: inherit

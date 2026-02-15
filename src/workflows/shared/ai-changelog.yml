@@ -1,0 +1,108 @@
+# climaybe — AI Changelog Generator (Reusable Workflow)
+# Uses Google Gemini to classify commits and generate a changelog.
+
+name: AI Changelog
+
+on:
+  workflow_call:
+    inputs:
+      base_ref:
+        description: 'Base ref (tag or commit) to collect commits from'
+        required: true
+        type: string
+      head_ref:
+        description: 'Head ref to collect commits to (default: HEAD)'
+        required: false
+        type: string
+        default: 'HEAD'
+    outputs:
+      changelog:
+        description: 'Generated changelog in markdown format'
+        value: ${{ jobs.generate.outputs.changelog }}
+    secrets:
+      GEMINI_API_KEY:
+        required: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.ai.outputs.changelog }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect commits
+        id: commits
+        run: |
+          COMMITS=$(git log --pretty=format:"%h %s" ${{ inputs.base_ref }}..${{ inputs.head_ref }} 2>/dev/null || echo "")
+          if [ -z "$COMMITS" ]; then
+            echo "No commits found between ${{ inputs.base_ref }} and ${{ inputs.head_ref }}"
+            echo "commits=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # Escape for JSON
+          COMMITS_ESCAPED=$(echo "$COMMITS" | jq -Rs .)
+          echo "commits=$COMMITS_ESCAPED" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog with Gemini
+        id: ai
+        if: steps.commits.outputs.commits != ''
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          COMMITS=${{ steps.commits.outputs.commits }}
+
+          PROMPT=$(cat <<'PROMPT_EOF'
+          You are a changelog generator for a Shopify theme repository.
+          Given the following git commits, classify each into one of these categories:
+          - **Features**: New functionality
+          - **Fixes**: Bug fixes
+          - **Improvements**: Enhancements to existing features
+          - **Chore**: Maintenance, refactoring, docs
+
+          Format the output as a markdown changelog. Group by category.
+          Omit empty categories. Write concise, merchant-friendly descriptions.
+          Do NOT include commit hashes in the output.
+
+          Commits:
+          PROMPT_EOF
+          )
+
+          PAYLOAD=$(jq -n \
+            --arg prompt "$PROMPT" \
+            --argjson commits "$COMMITS" \
+            '{
+              "contents": [{
+                "parts": [{"text": ($prompt + "\n" + $commits)}]
+              }],
+              "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 2048
+              }
+            }')
+
+          RESPONSE=$(curl -s -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          CHANGELOG=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Changelog generation failed."')
+
+          # Write to output (multiline)
+          {
+            echo "changelog<<CHANGELOG_EOF"
+            echo "$CHANGELOG"
+            echo "CHANGELOG_EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Fallback if no commits
+        if: steps.commits.outputs.commits == ''
+        run: |
+          {
+            echo "changelog<<CHANGELOG_EOF"
+            echo "No changes detected."
+            echo "CHANGELOG_EOF"
+          } >> $GITHUB_OUTPUT

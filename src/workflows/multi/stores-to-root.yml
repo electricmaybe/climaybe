@@ -1,0 +1,89 @@
+# climaybe — Stores to Root (Multi-store)
+# When a push happens on staging-* branches (e.g., after main sync),
+# copies JSON files from stores/<alias>/ to the repo root.
+
+name: Stores to Root
+
+on:
+  push:
+    branches:
+      - 'staging-*'
+
+# Prevent concurrent runs per branch
+concurrency:
+  group: stores-to-root-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip if this is a sync commit
+        id: gate
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if echo "$COMMIT_MSG" | grep -q "\[stores-to-root\]"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract store alias from branch name
+        if: steps.gate.outputs.skip != 'true'
+        id: alias
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          ALIAS="${BRANCH#staging-}"
+          echo "alias=$ALIAS" >> $GITHUB_OUTPUT
+          echo "Store alias: $ALIAS"
+
+      - name: Sync stores/<alias>/ to root
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          ALIAS="${{ steps.alias.outputs.alias }}"
+          STORE_DIR="stores/${ALIAS}"
+
+          if [ ! -d "$STORE_DIR" ]; then
+            echo "Store directory $STORE_DIR does not exist, skipping."
+            exit 0
+          fi
+
+          # Sync directories: config, templates, sections
+          for DIR in config templates sections; do
+            SRC="${STORE_DIR}/${DIR}"
+            if [ -d "$SRC" ]; then
+              # Copy JSON files only, preserving directory structure
+              find "$SRC" -name "*.json" | while read -r FILE; do
+                REL_PATH="${FILE#$STORE_DIR/}"
+
+                # Skip excluded files
+                if [ "$REL_PATH" = "config/settings_schema.json" ]; then
+                  continue
+                fi
+
+                mkdir -p "$(dirname "$REL_PATH")"
+                cp "$FILE" "$REL_PATH"
+                echo "  Copied: $REL_PATH"
+              done
+            fi
+          done
+
+      - name: Commit changes
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync stores/${{ steps.alias.outputs.alias }}/ to root [stores-to-root]"
+            git push
+          else
+            echo "No changes to commit."
+          fi
