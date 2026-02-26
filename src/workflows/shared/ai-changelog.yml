@@ -1,5 +1,5 @@
 # climaybe — AI Changelog Generator (Reusable Workflow)
-# Uses Google Gemini to classify commits and generate a changelog.
+# Uses Gemini when available, otherwise falls back to GitHub Models.
 
 name: AI Changelog
 
@@ -21,11 +21,14 @@ on:
         value: ${{ jobs.generate.outputs.changelog }}
     secrets:
       GEMINI_API_KEY:
-        required: true
+        required: false
 
 jobs:
   generate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      models: read
     outputs:
       changelog: ${{ steps.ai.outputs.changelog }}
 
@@ -47,11 +50,12 @@ jobs:
           COMMITS_ESCAPED=$(echo "$COMMITS" | jq -Rs .)
           echo "commits=$COMMITS_ESCAPED" >> $GITHUB_OUTPUT
 
-      - name: Generate changelog with Gemini
+      - name: Generate changelog (Gemini -> GitHub Models fallback)
         id: ai
         if: steps.commits.outputs.commits != ''
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           COMMITS=${{ steps.commits.outputs.commits }}
 
@@ -71,30 +75,70 @@ jobs:
           PROMPT_EOF
           )
 
-          PAYLOAD=$(jq -n \
-            --arg prompt "$PROMPT" \
-            --argjson commits "$COMMITS" \
-            '{
-              "contents": [{
-                "parts": [{"text": ($prompt + "\n" + $commits)}]
-              }],
-              "generationConfig": {
+          CHANGELOG=""
+
+          # 1) Gemini path (if secret exists)
+          if [ -n "$GEMINI_API_KEY" ]; then
+            PAYLOAD=$(jq -n \
+              --arg prompt "$PROMPT" \
+              --argjson commits "$COMMITS" \
+              '{
+                "contents": [{
+                  "parts": [{"text": ($prompt + "\n" + $commits)}]
+                }],
+                "generationConfig": {
+                  "temperature": 0.3,
+                  "maxOutputTokens": 2048
+                }
+              }')
+
+            RESPONSE=$(curl -s -X POST \
+              "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
+
+            CHANGELOG=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+          fi
+
+          # 2) GitHub Models path (Copilot-backed models)
+          if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "null" ]; then
+            GH_PAYLOAD=$(jq -n \
+              --arg prompt "$PROMPT" \
+              --argjson commits "$COMMITS" \
+              '{
+                "model": "gpt-4o-mini",
+                "messages": [
+                  {"role":"system","content":"You are a changelog generator for Shopify theme repos. Output markdown only."},
+                  {"role":"user","content": ($prompt + "\n" + $commits)}
+                ],
                 "temperature": 0.3,
-                "maxOutputTokens": 2048
-              }
-            }')
+                "max_tokens": 1200
+              }')
 
-          RESPONSE=$(curl -s -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            GH_RESPONSE=$(curl -s -X POST \
+              "https://models.inference.ai.azure.com/chat/completions" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -d "$GH_PAYLOAD")
 
-          CHANGELOG=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Changelog generation failed."')
+            CHANGELOG=$(echo "$GH_RESPONSE" | jq -r '.choices[0].message.content // empty')
+          fi
+
+          # 3) Safe fallback if both providers fail
+          if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "null" ]; then
+            COMMIT_LINES=$(echo "$COMMITS" | jq -r '.')
+            CHANGELOG=$(printf "## Chore\n")
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              SUBJECT="${line#* }"
+              CHANGELOG="${CHANGELOG}- ${SUBJECT}\n"
+            done <<< "$COMMIT_LINES"
+          fi
 
           # Write to output (multiline)
           {
             echo "changelog<<CHANGELOG_EOF"
-            echo "$CHANGELOG"
+            printf "%b\n" "$CHANGELOG"
             echo "CHANGELOG_EOF"
           } >> $GITHUB_OUTPUT
 
