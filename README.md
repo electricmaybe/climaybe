@@ -26,10 +26,12 @@ Interactive setup that configures your repo for CI/CD.
 1. Prompts for your store URL (e.g., `voldt-staging.myshopify.com`)
 2. Extracts subdomain as alias, lets you override
 3. Asks if you want to add more stores
-4. Based on store count, sets up **single-store** or **multi-store** mode
-5. Writes `package.json` config
-6. Scaffolds GitHub Actions workflows
-7. Creates git branches and store directories (multi-store)
+4. Asks whether to enable optional **preview + cleanup** workflows
+5. Asks whether to enable optional **build + Lighthouse** workflows
+6. Based on store count, sets up **single-store** or **multi-store** mode
+7. Writes `package.json` config
+8. Scaffolds GitHub Actions workflows
+9. Creates git branches and store directories (multi-store)
 
 ### `climaybe add-store`
 
@@ -83,6 +85,8 @@ The CLI writes config into the `config` field of your `package.json`:
   "config": {
     "port": 9295,
     "default_store": "voldt-staging.myshopify.com",
+    "preview_workflows": true,
+    "build_workflows": true,
     "stores": {
       "voldt-staging": "voldt-staging.myshopify.com",
       "voldt-norway": "voldt-norway.myshopify.com"
@@ -142,6 +146,30 @@ staging → main → staging-<store> → live-<store>
 | `root-to-stores.yml` | Push to `live-*` (hotfix) | Syncs root JSONs back to `stores/<alias>/` |
 | `hotfix-backport.yml` | After root-to-stores | Creates backport PR to `main` |
 
+### Optional preview + cleanup package
+
+Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`).
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `pr-update.yml` | PR opened/synchronize/reopened | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs |
+| `pr-close.yml` | PR closed | Deletes matching preview themes and comments deleted count + names |
+| `reusable-share-theme.yml` | workflow_call | Shares Shopify draft theme and returns `theme_id` |
+| `reusable-rename-theme.yml` | workflow_call | Renames shared theme to include `PR<number>` (fails job on rename failure) |
+| `reusable-comment-on-pr.yml` | workflow_call | Posts preview comment including Customize URL |
+| `reusable-cleanup-themes.yml` | workflow_call | Deletes preview themes by PR number and exposes cleanup outputs |
+| `reusable-extract-pr-number.yml` | workflow_call | Extracts padded/unpadded PR number outputs for naming and API-safe usage |
+
+### Optional build + Lighthouse package
+
+Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`).
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `build-pipeline.yml` | Push to `main/staging/develop` | Runs reusable build and Lighthouse checks (when required secrets exist) |
+| `reusable-build.yml` | workflow_call | Runs Node build + Tailwind compile, then commits compiled assets when changed |
+| `create-release.yml` | Push tag `v*` | Builds release archive and creates GitHub Release using `release-notes.md` |
+
 ## Versioning
 
 - **Release merge** (`staging` → `main`): Minor bump (e.g., `v3.1.x` → `v3.2.0`)
@@ -175,6 +203,12 @@ Add the following secret to your GitHub repository:
 | Secret | Required | Description |
 |--------|----------|-------------|
 | `GEMINI_API_KEY` | Yes | Google Gemini API key for changelog generation |
+| `SHOPIFY_STORE_URL` | Optional* | Required only when optional preview workflows are enabled |
+| `SHOPIFY_CLI_THEME_TOKEN` | Optional* | Required only when optional preview workflows are enabled |
+| `SHOP_STORE` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
+| `SHOP_ACCESS_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
+| `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
+| `SHOP_PASSWORD` | Optional | Used by Lighthouse action when your store requires password auth |
 
 ## Directory Structure (Multi-store)
 

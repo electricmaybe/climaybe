@@ -1,0 +1,57 @@
+# climaybe — PR Update (Optional Preview Package)
+# Creates a Shopify preview theme on PR update, renames it with PR number,
+# and posts preview/customize links back to the PR.
+
+name: PR Update
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, staging, develop]
+
+jobs:
+  extract-pr-number:
+    uses: ./.github/workflows/reusable-extract-pr-number.yml
+
+  validate-environment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Shopify credentials
+        env:
+          SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+        run: |
+          if [ -z "$SHOPIFY_STORE_URL" ]; then
+            echo "SHOPIFY_STORE_URL is not set."
+            exit 1
+          fi
+          if [ -z "$SHOPIFY_CLI_THEME_TOKEN" ]; then
+            echo "SHOPIFY_CLI_THEME_TOKEN is not set."
+            exit 1
+          fi
+          echo "Shopify credentials are configured."
+
+  share-theme:
+    needs: [validate-environment, extract-pr-number]
+    uses: ./.github/workflows/reusable-share-theme.yml
+    with:
+      pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
+    secrets: inherit
+
+  rename-theme:
+    needs: [share-theme, extract-pr-number]
+    uses: ./.github/workflows/reusable-rename-theme.yml
+    with:
+      theme_id: ${{ needs.share-theme.outputs.theme_id }}
+      theme_name: ${{ needs.share-theme.outputs.theme_name }}
+      pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
+    secrets: inherit
+
+  comment-on-pr:
+    needs: [share-theme, rename-theme, extract-pr-number]
+    uses: ./.github/workflows/reusable-comment-on-pr.yml
+    with:
+      theme_id: ${{ needs.share-theme.outputs.theme_id }}
+      share_output: ${{ needs.share-theme.outputs.share_output }}
+      pr_number: ${{ needs.extract-pr-number.outputs.pr_number_unpadded }}
+    secrets: inherit

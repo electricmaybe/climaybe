@@ -1,0 +1,63 @@
+# climaybe — PR Close (Optional Preview Package)
+# Cleans preview themes for the PR number and comments cleanup details.
+
+name: PR Close
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main, staging, develop]
+
+jobs:
+  extract-pr-number:
+    uses: ./.github/workflows/reusable-extract-pr-number.yml
+
+  cleanup-theme:
+    needs: extract-pr-number
+    uses: ./.github/workflows/reusable-cleanup-themes.yml
+    with:
+      pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
+    secrets: inherit
+
+  comment-on-pr:
+    needs: cleanup-theme
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on PR about cleanup
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const deletedCount = parseInt('${{ needs.cleanup-theme.outputs.deleted_count }}') || 0;
+            const deletedThemesRaw = `${{ needs.cleanup-theme.outputs.deleted_themes }}`.trim();
+
+            const lines = [
+              '## 🧹 Theme Cleanup Complete',
+              '',
+              'The preview theme cleanup has finished.',
+              '',
+              `**Branch:** ${context.payload.pull_request.head.ref}`,
+              `**PR Status:** ${context.payload.pull_request.state}`,
+              `**Deleted Themes:** ${deletedCount}`
+            ];
+
+            if (deletedCount > 0 && deletedThemesRaw) {
+              const deletedThemeLines = deletedThemesRaw
+                .split('\n')
+                .map(name => name.trim())
+                .filter(Boolean)
+                .map(name => `- ${name}`);
+
+              if (deletedThemeLines.length > 0) {
+                lines.push('', '### Deleted Theme Names', ...deletedThemeLines);
+              }
+            }
+
+            lines.push('', '---', '*Theme cleanup runs automatically when a PR is closed.*');
+
+            await github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: lines.join('\n')
+            });

@@ -1,0 +1,112 @@
+# Workflow Updates (Current Branch)
+
+This document summarizes the CI workflow hardening changes applied in the current `climaybe` branch.
+
+## Updated files
+
+- `src/workflows/shared/ai-changelog.yml`
+- `src/workflows/single/release-pr-check.yml`
+- `src/workflows/single/post-merge-tag.yml`
+- `src/workflows/preview/*` (new optional package)
+- `src/workflows/build/*` (new optional package)
+
+## 1) `ai-changelog.yml` improvements
+
+- Switched commit payload handling to multiline plain text output (instead of JSON-encoded string output).
+- Fixed shell parsing safety by passing commit content through `COMMITS_RAW` env and assigning `COMMITS="$COMMITS_RAW"` in script.
+- Replaced `jq --argjson commits ...` with `jq --arg commits ...` to avoid invalid JSON parse failures.
+- Added provider fallback chain stability:
+  - Gemini (when `GEMINI_API_KEY` is available)
+  - GitHub Models fallback
+  - Static markdown fallback from commit subjects
+- Added provider visibility logs:
+  - `gemini`
+  - `github-models`
+  - `static-fallback`
+- Added safer `jq` extraction behavior so parse failures fall through to fallback logic instead of crashing the step.
+
+## 2) `release-pr-check.yml` improvements
+
+- Fixed `github-script` interpolation risk by passing values via environment variables:
+  - `PRE_RELEASE_TAG`
+  - `CHANGELOG_TEXT`
+- Updated script to read from `process.env` instead of embedding raw `${{ ... }}` output in JavaScript source.
+- Added changelog guard:
+  - Uses `No changes detected.` when changelog is empty/whitespace.
+- Added duplicate pre-release tag protection:
+  - If the computed tag already exists locally, reuse it instead of re-creating/re-pushing.
+
+## 3) `post-merge-tag.yml` observability improvements
+
+- Added explicit skip-reason logs for easier debugging, including:
+  - hotfix backport commit skip
+  - version bump commit skip
+  - staging PR title missing a release version
+  - push that is not a merged staging release PR
+
+## 4) Optional preview + cleanup workflows package
+
+- Added `init` prompt: `Enable preview + cleanup workflows?`
+- Persisted selection in `package.json` config via `preview_workflows` flag.
+- Updated workflow scaffolding so `update-workflows` and `add-store` preserve this flag.
+- Added optional template workflows under `src/workflows/preview`:
+  - `pr-update.yml`
+  - `pr-close.yml`
+  - `reusable-share-theme.yml`
+  - `reusable-rename-theme.yml`
+  - `reusable-comment-on-pr.yml`
+  - `reusable-cleanup-themes.yml`
+  - `reusable-extract-pr-number.yml`
+- Included requested hardening behaviors from testing:
+  - Preview comment includes `Customize URL` before preview URL.
+  - Cleanup comment reports deleted theme count and names.
+  - Rename failure fails job (no silent success).
+  - PR comment waits for rename completion.
+  - PR numbering is standardized via padded/unpadded outputs to avoid cleanup name collisions.
+
+## 5) Optional build + Lighthouse workflows package
+
+- Added `init` prompt: `Enable build + Lighthouse workflows?`
+- Persisted selection in `package.json` config via `build_workflows` flag.
+- Updated workflow scaffolding so `update-workflows` and `add-store` preserve this flag.
+- Added optional template workflows under `src/workflows/build`:
+  - `build-pipeline.yml`
+  - `reusable-build.yml`
+  - `create-release.yml`
+- Lighthouse job remains conditionally active via secret checks to avoid hard failures on repos that do not use Lighthouse credentials.
+
+## 6) Preview theme upload fix
+
+- Updated `src/workflows/preview/reusable-share-theme.yml`:
+  - Added `actions/checkout@v4` before `shopify theme share`.
+  - Added repository root validation (`layout/theme.liquid`) to fail fast on misconfigured runs.
+- This prevents empty/404 preview themes caused by sharing from an empty runner workspace.
+
+## 7) Multi-store downstream trigger hardening
+
+- Updated `src/workflows/multi/stores-to-root.yml`:
+  - Added `workflow_dispatch` trigger support.
+  - Made commit-message gate push-only, so dispatch runs are not incorrectly skipped.
+- Updated `src/workflows/multi/main-to-staging-stores.yml`:
+  - Added `actions: write` permission.
+  - After successful auto-merge to each `staging-<alias>`, explicitly triggers `Stores to Root` via `gh workflow run --ref staging-<alias>`.
+- Updated `src/workflows/multi/pr-to-live.yml`:
+  - Added `workflow_dispatch` support.
+  - Added dual event handling for alias extraction (`workflow_run` and `workflow_dispatch`).
+- Added fallback trigger in `main-to-staging-stores.yml` to explicitly run `PR to Live` after successful sync.
+- This avoids missing `stores-to-root` / `pr-to-live` chains when upstream merges are performed by automation tokens.
+
+## 8) Version bump exclusion hardening for store backports
+
+- Updated `src/workflows/single/nightly-hotfix.yml` commit filtering to exclude:
+  - `[skip-store-sync]`
+  - `[stores-to-root]`
+  - `[root-to-stores]`
+  - merge commits coming from `staging-*` branches
+- This prevents `staging-<store> -> main` sync/backport activity from being treated as hotfix input for nightly patch bumps.
+
+## Why these changes were made
+
+- Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.
+- Improve fallback resilience when AI providers return unexpected payloads.
+- Make release/tag workflow behavior more transparent and easier to debug.

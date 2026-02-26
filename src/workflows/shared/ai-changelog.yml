@@ -46,9 +46,12 @@ jobs:
             echo "commits=" >> $GITHUB_OUTPUT
             exit 0
           fi
-          # Escape for JSON
-          COMMITS_ESCAPED=$(echo "$COMMITS" | jq -Rs .)
-          echo "commits=$COMMITS_ESCAPED" >> $GITHUB_OUTPUT
+          # Keep commits as multiline plain text
+          {
+            echo "commits<<COMMITS_EOF"
+            echo "$COMMITS"
+            echo "COMMITS_EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Generate changelog (Gemini -> GitHub Models fallback)
         id: ai
@@ -56,8 +59,10 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMITS_RAW: ${{ steps.commits.outputs.commits }}
         run: |
-          COMMITS=${{ steps.commits.outputs.commits }}
+          COMMITS="$COMMITS_RAW"
+          PROVIDER="fallback"
 
           PROMPT=$(cat <<'PROMPT_EOF'
           You are a changelog generator for a Shopify theme repository.
@@ -81,7 +86,7 @@ jobs:
           if [ -n "$GEMINI_API_KEY" ]; then
             PAYLOAD=$(jq -n \
               --arg prompt "$PROMPT" \
-              --argjson commits "$COMMITS" \
+              --arg commits "$COMMITS" \
               '{
                 "contents": [{
                   "parts": [{"text": ($prompt + "\n" + $commits)}]
@@ -97,14 +102,17 @@ jobs:
               -H "Content-Type: application/json" \
               -d "$PAYLOAD")
 
-            CHANGELOG=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+            CHANGELOG=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null || true)
+            if [ -n "$CHANGELOG" ] && [ "$CHANGELOG" != "null" ]; then
+              PROVIDER="gemini"
+            fi
           fi
 
           # 2) GitHub Models path (Copilot-backed models)
           if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "null" ]; then
             GH_PAYLOAD=$(jq -n \
               --arg prompt "$PROMPT" \
-              --argjson commits "$COMMITS" \
+              --arg commits "$COMMITS" \
               '{
                 "model": "gpt-4o-mini",
                 "messages": [
@@ -121,19 +129,25 @@ jobs:
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
               -d "$GH_PAYLOAD")
 
-            CHANGELOG=$(echo "$GH_RESPONSE" | jq -r '.choices[0].message.content // empty')
+            CHANGELOG=$(echo "$GH_RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
+            if [ -n "$CHANGELOG" ] && [ "$CHANGELOG" != "null" ]; then
+              PROVIDER="github-models"
+            fi
           fi
 
           # 3) Safe fallback if both providers fail
           if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "null" ]; then
-            COMMIT_LINES=$(echo "$COMMITS" | jq -r '.')
+            COMMIT_LINES="$COMMITS"
             CHANGELOG=$(printf "## Chore\n")
             while IFS= read -r line; do
               [ -z "$line" ] && continue
               SUBJECT="${line#* }"
               CHANGELOG="${CHANGELOG}- ${SUBJECT}\n"
             done <<< "$COMMIT_LINES"
+            PROVIDER="static-fallback"
           fi
+
+          echo "Changelog provider: $PROVIDER"
 
           # Write to output (multiline)
           {

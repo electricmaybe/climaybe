@@ -10,11 +10,12 @@ on:
     types: [completed]
     branches:
       - 'staging-*'
+  workflow_dispatch:
 
 jobs:
   create-pr:
-    # Only run if the triggering workflow succeeded
-    if: github.event.workflow_run.conclusion == 'success'
+    # Run on successful Stores to Root completion, or explicit dispatch.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,7 +28,17 @@ jobs:
       - name: Extract store alias
         id: alias
         run: |
-          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BRANCH="${{ github.ref_name }}"
+          else
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+          fi
+
+          if [[ "$BRANCH" != staging-* ]]; then
+            echo "Branch $BRANCH is not a staging-* branch, skipping."
+            exit 0
+          fi
+
           ALIAS="${BRANCH#staging-}"
           echo "alias=$ALIAS" >> $GITHUB_OUTPUT
           echo "staging_branch=$BRANCH" >> $GITHUB_OUTPUT

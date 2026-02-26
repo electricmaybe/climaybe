@@ -1,5 +1,5 @@
 import pc from 'picocolors';
-import { promptStoreLoop } from '../lib/prompts.js';
+import { promptStoreLoop, promptPreviewWorkflows, promptBuildWorkflows } from '../lib/prompts.js';
 import { readConfig, writeConfig } from '../lib/config.js';
 import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
@@ -20,6 +20,8 @@ export async function initCommand() {
   // 1. Collect stores from user
   const stores = await promptStoreLoop();
   const mode = stores.length > 1 ? 'multi' : 'single';
+  const enablePreviewWorkflows = await promptPreviewWorkflows();
+  const enableBuildWorkflows = await promptBuildWorkflows();
 
   console.log(pc.dim(`\n  Mode: ${mode}-store (${stores.length} store(s))`));
 
@@ -27,6 +29,8 @@ export async function initCommand() {
   const config = {
     port: 9295,
     default_store: stores[0].domain,
+    preview_workflows: enablePreviewWorkflows,
+    build_workflows: enableBuildWorkflows,
     stores: {},
   };
 
@@ -55,7 +59,10 @@ export async function initCommand() {
   }
 
   // 6. Scaffold workflows
-  scaffoldWorkflows(mode);
+  scaffoldWorkflows(mode, {
+    includePreview: enablePreviewWorkflows,
+    includeBuild: enableBuildWorkflows,
+  });
 
   // Done
   console.log(pc.bold(pc.green('\n  Setup complete!\n')));
@@ -70,6 +77,8 @@ export async function initCommand() {
     }
     console.log(pc.dim('  Workflow: staging → main → staging-<store> → live-<store>'));
   }
+  console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
 
   console.log(pc.dim('\n  Next steps:'));
   console.log(pc.dim('    1. Add GEMINI_API_KEY to your GitHub repo secrets'));

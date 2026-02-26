@@ -41,8 +41,15 @@ jobs:
 
           echo "last_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
-          # Count commits since last tag, excluding version bump commits
-          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s" | grep -v "chore(release): bump version" | grep -v "\[hotfix-backport\]" || true)
+          # Count commits since last tag, excluding workflow/system commits and
+          # staging-<store> -> main backport merges (must not trigger version bump).
+          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s" | \
+            grep -v "chore(release): bump version" | \
+            grep -v "\[hotfix-backport\]" | \
+            grep -v "\[skip-store-sync\]" | \
+            grep -v "\[stores-to-root\]" | \
+            grep -v "\[root-to-stores\]" | \
+            grep -vE "Merge pull request #[0-9]+ from .*/staging-" || true)
 
           if [ -n "$COMMITS" ]; then
             COMMIT_COUNT=$(echo "$COMMITS" | wc -l | tr -d ' ')

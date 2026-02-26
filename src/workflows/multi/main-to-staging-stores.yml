@@ -72,6 +72,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -112,7 +113,20 @@ jobs:
 
             # Auto-merge
             PR_NUM=$(echo "$PR_URL" | grep -oP '\d+$')
-            gh pr merge "$PR_NUM" --merge --admin 2>/dev/null || echo "Auto-merge failed — manual review may be needed."
+            if gh pr merge "$PR_NUM" --merge --admin 2>/dev/null; then
+              echo "Auto-merge succeeded for $BRANCH"
+
+              # Explicitly trigger Stores to Root to avoid missing downstream runs
+              # when merges are performed by GITHUB_TOKEN-based automation.
+              gh workflow run "Stores to Root" --ref "$BRANCH" 2>/dev/null || \
+                echo "Failed to trigger Stores to Root for $BRANCH"
+
+              # Explicitly trigger PR to Live as a fallback to prevent chain breaks.
+              gh workflow run "PR to Live" --ref "$BRANCH" 2>/dev/null || \
+                echo "Failed to trigger PR to Live for $BRANCH"
+            else
+              echo "Auto-merge failed — manual review may be needed."
+            fi
           else
             echo "No changes to sync for $BRANCH"
           fi

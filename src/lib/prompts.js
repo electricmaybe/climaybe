@@ -99,6 +99,34 @@ export async function promptStoreLoop() {
 }
 
 /**
+ * Ask whether preview + cleanup workflows should be scaffolded.
+ */
+export async function promptPreviewWorkflows() {
+  const { enablePreviewWorkflows } = await prompts({
+    type: 'confirm',
+    name: 'enablePreviewWorkflows',
+    message: 'Enable preview + cleanup workflows?',
+    initial: false,
+  });
+
+  return !!enablePreviewWorkflows;
+}
+
+/**
+ * Ask whether build workflows should be scaffolded.
+ */
+export async function promptBuildWorkflows() {
+  const { enableBuildWorkflows } = await prompts({
+    type: 'confirm',
+    name: 'enableBuildWorkflows',
+    message: 'Enable build + Lighthouse workflows?',
+    initial: false,
+  });
+
+  return !!enableBuildWorkflows;
+}
+
+/**
  * Prompt for a single new store (used by add-store command).
  * Takes existing aliases to prevent duplicates.
  */
