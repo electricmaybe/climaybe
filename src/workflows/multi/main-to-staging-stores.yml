@@ -120,10 +120,6 @@ jobs:
               # when merges are performed by GITHUB_TOKEN-based automation.
               gh workflow run "Stores to Root" --ref "$BRANCH" 2>/dev/null || \
                 echo "Failed to trigger Stores to Root for $BRANCH"
-
-              # Explicitly trigger PR to Live as a fallback to prevent chain breaks.
-              gh workflow run "PR to Live" --ref "$BRANCH" 2>/dev/null || \
-                echo "Failed to trigger PR to Live for $BRANCH"
             else
               echo "Auto-merge failed — manual review may be needed."
             fi

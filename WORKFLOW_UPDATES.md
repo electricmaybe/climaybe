@@ -93,8 +93,8 @@ This document summarizes the CI workflow hardening changes applied in the curren
 - Updated `src/workflows/multi/pr-to-live.yml`:
   - Added `workflow_dispatch` support.
   - Added dual event handling for alias extraction (`workflow_run` and `workflow_dispatch`).
-- Added fallback trigger in `main-to-staging-stores.yml` to explicitly run `PR to Live` after successful sync.
-- This avoids missing `stores-to-root` / `pr-to-live` chains when upstream merges are performed by automation tokens.
+- Kept `PR to Live` sequencing through `Stores to Root` completion to avoid opening deploy PRs before root sync commits land.
+- This avoids missing chains while preserving correct run order (`stores-to-root` first, `pr-to-live` second).
 
 ## 8) Version bump exclusion hardening for store backports
 
@@ -102,8 +102,34 @@ This document summarizes the CI workflow hardening changes applied in the curren
   - `[skip-store-sync]`
   - `[stores-to-root]`
   - `[root-to-stores]`
-  - merge commits coming from `staging-*` branches
-- This prevents `staging-<store> -> main` sync/backport activity from being treated as hotfix input for nightly patch bumps.
+  - commits associated with PRs whose source branch is `staging-*` (queried by commit SHA)
+- Added fail-safe behavior: commits with missing PR metadata are skipped from bump candidates and logged.
+- This prevents `staging-<store> -> main` sync/backport activity from being treated as hotfix input even when merge message formats differ.
+
+## 9) Deploy PR body links for store branches
+
+- Updated `src/workflows/multi/pr-to-live.yml` to resolve the store domain from `package.json` (`config.stores[alias]`).
+- Hardened store domain parsing to strip protocol/path segments before URL generation.
+- PR body for `staging-<alias> -> live-<alias>` now includes:
+  - `Customize URL` (`https://<store>/admin/themes/current/editor`)
+  - `Preview URL` (`https://<store>`)
+
+## 10) Store URL normalization hardening
+
+- Updated `src/lib/prompts.js` `normalizeDomain()` to sanitize user input by stripping:
+  - `http://` / `https://`
+  - path segments after the host
+  - whitespace
+- Added strict Shopify domain validation (`<subdomain>.myshopify.com`) at prompt-time.
+- This prevents malformed values like `*.myshopify.com/.myshopify.com` from entering `package.json` config.
+
+## 11) Version tag collision guard
+
+- Updated `src/workflows/shared/version-bump.yml` to avoid duplicate tag failures.
+- Workflow now:
+  - reuses existing tags when found on remote/local
+  - creates a new tag only when missing
+  - pushes `HEAD` and only pushes tag when a new tag is created
 
 ## Why these changes were made
 
