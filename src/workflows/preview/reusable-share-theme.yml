@@ -7,6 +7,14 @@ on:
         required: false
         type: string
         description: "PR number for theme naming context"
+      store_alias:
+        required: false
+        type: string
+        description: "Store alias for scoped secret lookup"
+      store_alias_secret:
+        required: false
+        type: string
+        description: "Upper snake-case alias for scoped secret lookup"
     outputs:
       theme_id:
         description: "Shared theme ID"
@@ -17,6 +25,11 @@ on:
       share_output:
         description: "Raw share command output"
         value: ${{ jobs.share.outputs.share_output }}
+    secrets:
+      SHOPIFY_STORE_URL:
+        required: false
+      SHOPIFY_CLI_THEME_TOKEN:
+        required: false
 
 jobs:
   share:

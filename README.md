@@ -210,6 +210,19 @@ Add the following secret to your GitHub repository:
 | `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
 | `SHOP_PASSWORD` | Optional | Used by Lighthouse action when your store requires password auth |
 
+For multi-store deploy PR links, you can optionally define store-scoped secrets:
+
+- `SHOPIFY_STORE_URL_<ALIAS>`
+- `SHOPIFY_CLI_THEME_TOKEN_<ALIAS>`
+
+`<ALIAS>` must be uppercase with hyphens converted to underscores.  
+Example: alias `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`.
+
+Preview workflows also support the same scoped secret pattern and will use:
+
+1. `SHOPIFY_*_<ALIAS>`
+2. fallback to `SHOPIFY_*` (default)
+
 ## Directory Structure (Multi-store)
 
 ```

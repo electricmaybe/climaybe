@@ -15,6 +15,19 @@ on:
         required: true
         type: string
         description: "PR number to append"
+      store_alias:
+        required: false
+        type: string
+        description: "Store alias for scoped secret lookup"
+      store_alias_secret:
+        required: false
+        type: string
+        description: "Upper snake-case alias for scoped secret lookup"
+    secrets:
+      SHOPIFY_STORE_URL:
+        required: false
+      SHOPIFY_CLI_THEME_TOKEN:
+        required: false
 
 jobs:
   rename:
@@ -33,6 +46,10 @@ jobs:
         run: |
           if [ -z "$THEME_ID" ] || [ -z "$THEME_NAME" ]; then
             echo "Missing theme_id/theme_name."
+            exit 1
+          fi
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_CLI_THEME_TOKEN" ]; then
+            echo "Missing Shopify store URL/token for rename."
             exit 1
           fi
 

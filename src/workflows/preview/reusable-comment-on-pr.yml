@@ -12,6 +12,15 @@ on:
       pr_number:
         required: true
         type: string
+      store_alias:
+        required: false
+        type: string
+      store_alias_secret:
+        required: false
+        type: string
+    secrets:
+      SHOPIFY_STORE_URL:
+        required: false
 
 jobs:
   comment:

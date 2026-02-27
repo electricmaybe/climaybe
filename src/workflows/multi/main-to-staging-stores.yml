@@ -120,6 +120,37 @@ jobs:
               # when merges are performed by GITHUB_TOKEN-based automation.
               gh workflow run "Stores to Root" --ref "$BRANCH" 2>/dev/null || \
                 echo "Failed to trigger Stores to Root for $BRANCH"
+
+              # Wait for the latest Stores to Root run on this branch to complete,
+              # then trigger PR to Live to keep ordering deterministic.
+              for i in $(seq 1 30); do
+                RUN_STATUS=$(gh run list \
+                  --workflow "Stores to Root" \
+                  --branch "$BRANCH" \
+                  --limit 1 \
+                  --json status,conclusion \
+                  --jq '.[0].status + "|" + (.[0].conclusion // "")' 2>/dev/null || echo "")
+
+                if [ -z "$RUN_STATUS" ]; then
+                  sleep 5
+                  continue
+                fi
+
+                STATUS="${RUN_STATUS%%|*}"
+                CONCLUSION="${RUN_STATUS##*|}"
+
+                if [ "$STATUS" = "completed" ]; then
+                  if [ "$CONCLUSION" = "success" ]; then
+                    gh workflow run "PR to Live" --ref "$BRANCH" 2>/dev/null || \
+                      echo "Failed to trigger PR to Live for $BRANCH"
+                  else
+                    echo "Stores to Root did not succeed for $BRANCH (conclusion: $CONCLUSION)"
+                  fi
+                  break
+                fi
+
+                sleep 5
+              done
             else
               echo "Auto-merge failed — manual review may be needed."
             fi

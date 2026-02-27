@@ -90,6 +90,9 @@ This document summarizes the CI workflow hardening changes applied in the curren
 - Updated `src/workflows/multi/main-to-staging-stores.yml`:
   - Added `actions: write` permission.
   - After successful auto-merge to each `staging-<alias>`, explicitly triggers `Stores to Root` via `gh workflow run --ref staging-<alias>`.
+- Added deterministic ordering in `main-to-staging-stores.yml`:
+  - waits for `Stores to Root` completion on each `staging-<alias>`
+  - triggers `PR to Live` only after `Stores to Root` succeeds
 - Updated `src/workflows/multi/pr-to-live.yml`:
   - Added `workflow_dispatch` support.
   - Added dual event handling for alias extraction (`workflow_run` and `workflow_dispatch`).
@@ -110,9 +113,15 @@ This document summarizes the CI workflow hardening changes applied in the curren
 
 - Updated `src/workflows/multi/pr-to-live.yml` to resolve the store domain from `package.json` (`config.stores[alias]`).
 - Hardened store domain parsing to strip protocol/path segments before URL generation.
-- PR body for `staging-<alias> -> live-<alias>` now includes:
-  - `Customize URL` (`https://<store>/admin/themes/current/editor`)
-  - `Preview URL` (`https://<store>`)
+- Added support for store-scoped secrets in `pr-to-live.yml`:
+  - `SHOPIFY_STORE_URL_<ALIAS>`
+  - `SHOPIFY_CLI_THEME_TOKEN_<ALIAS>`
+  - Alias transformation: uppercase + hyphen to underscore.
+- PR body for `staging-<alias> -> live-<alias>` now targets staging/non-live themes:
+  - resolves a non-main theme ID via `shopify theme list --json` when possible
+  - prioritizes exact branch naming (`<repo>/<staging-branch>`) to avoid generic staging themes
+  - includes staging-theme-specific `Customize URL` and `Preview URL`
+  - no generic fallback: if branch-specific staging theme is not found, PR body includes a clear warning instead of live/admin links
 
 ## 10) Store URL normalization hardening
 
@@ -130,6 +139,17 @@ This document summarizes the CI workflow hardening changes applied in the curren
   - reuses existing tags when found on remote/local
   - creates a new tag only when missing
   - pushes `HEAD` and only pushes tag when a new tag is created
+
+## 12) Preview secret fallback hardening
+
+- Updated preview workflows to support scoped secrets without requiring defaults:
+  - `pr-update.yml` resolves default alias from `package.json` and validates scoped/default credential fallback.
+  - `reusable-share-theme.yml`, `reusable-rename-theme.yml`, and `reusable-comment-on-pr.yml` now accept `store_alias_secret`.
+  - Secret resolution order: `SHOPIFY_*_<ALIAS>` first, then default `SHOPIFY_*`.
+- Hardened reusable secret passing:
+  - `pr-update.yml` now resolves scoped/default secrets once and passes them explicitly to called reusable workflows.
+  - Reusable preview workflows now consume mapped `workflow_call` secrets directly, avoiding runtime dynamic secret lookup gaps.
+  - Fixed job dependency graph so `rename-theme` and `comment-on-pr` can safely access resolved alias outputs from `validate-environment`.
 
 ## Why these changes were made
 
