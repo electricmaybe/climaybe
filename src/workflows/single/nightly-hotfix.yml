@@ -30,6 +30,8 @@ jobs:
 
       - name: Check for untagged commits
         id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
@@ -41,8 +43,42 @@ jobs:
 
           echo "last_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
-          # Count commits since last tag, excluding version bump commits
-          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s" | grep -v "chore(release): bump version" | grep -v "\[hotfix-backport\]" || true)
+          # Collect candidate commits since last tag.
+          # Exclude known workflow/system commits first, then exclude commits
+          # that are associated with PRs whose source branch is staging-*.
+          CANDIDATES=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%H%x09%s" | \
+            grep -v "chore(release): bump version" | \
+            grep -v "\[hotfix-backport\]" | \
+            grep -v "\[skip-store-sync\]" | \
+            grep -v "\[stores-to-root\]" | \
+            grep -v "\[root-to-stores\]" || true)
+
+          COMMITS=""
+          SKIPPED_UNKNOWN=0
+          while IFS=$'\t' read -r SHA SUBJECT; do
+            [ -z "$SHA" ] && continue
+
+            HEAD_REF=$(gh api \
+              repos/${{ github.repository }}/commits/$SHA/pulls \
+              --jq '.[0].head.ref // ""' 2>/dev/null || true)
+
+            if [ -z "$HEAD_REF" ]; then
+              SKIPPED_UNKNOWN=$((SKIPPED_UNKNOWN + 1))
+              echo "Skipping commit due to missing PR metadata: $SHA"
+              continue
+            fi
+
+            if [[ "$HEAD_REF" == staging-* ]]; then
+              echo "Skipping store-backport commit from $HEAD_REF: $SHA"
+              continue
+            fi
+
+            COMMITS="${COMMITS}${SUBJECT}"$'\n'
+          done <<< "$CANDIDATES"
+
+          if [ "$SKIPPED_UNKNOWN" -gt 0 ]; then
+            echo "Skipped $SKIPPED_UNKNOWN commit(s) due to missing PR metadata (fail-safe)."
+          fi
 
           if [ -n "$COMMITS" ]; then
             COMMIT_COUNT=$(echo "$COMMITS" | wc -l | tr -d ' ')

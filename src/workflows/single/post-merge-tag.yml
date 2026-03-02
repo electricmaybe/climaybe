@@ -31,12 +31,14 @@ jobs:
 
           # Skip hotfix backports
           if echo "$COMMIT_MSG" | grep -q "\[hotfix-backport\]"; then
+            echo "Skipping post-merge tag: hotfix backport commit."
             echo "is_release=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           # Skip version bump commits from this workflow
           if echo "$COMMIT_MSG" | grep -q "chore(release): bump version"; then
+            echo "Skipping post-merge tag: version bump commit."
             echo "is_release=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -67,10 +69,12 @@ jobs:
                   echo "Detected release version: $VERSION"
                   exit 0
                 fi
+                echo "Skipping post-merge tag: staging PR title missing release version."
               fi
             fi
           fi
 
+          echo "Skipping post-merge tag: push is not a merged staging release PR."
           echo "is_release=false" >> $GITHUB_OUTPUT
 
   # Generate changelog for the release

@@ -14,9 +14,24 @@ export function extractAlias(domain) {
  * Appends ".myshopify.com" if not present.
  */
 export function normalizeDomain(input) {
-  const trimmed = input.trim().toLowerCase();
-  if (trimmed.endsWith('.myshopify.com')) return trimmed;
-  return `${trimmed}.myshopify.com`;
+  const cleaned = input
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/\s+/g, '');
+
+  if (!cleaned) return '';
+  if (cleaned.endsWith('.myshopify.com')) return cleaned;
+  return `${cleaned}.myshopify.com`;
+}
+
+/**
+ * Validate normalized Shopify store domain format.
+ * Expected: "<subdomain>.myshopify.com"
+ */
+export function isValidShopifyDomain(domain) {
+  return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(domain);
 }
 
 /**
@@ -29,13 +44,20 @@ export async function promptStore(defaultDomain = '') {
     name: 'domain',
     message: 'Store URL',
     initial: defaultDomain,
-    validate: (v) =>
-      v.trim().length > 0 ? true : 'Store URL is required',
+    validate: (v) => {
+      if (v.trim().length === 0) return 'Store URL is required';
+      const normalized = normalizeDomain(v);
+      if (!normalized || !isValidShopifyDomain(normalized)) {
+        return 'Enter a valid Shopify domain (e.g. voldt-staging.myshopify.com)';
+      }
+      return true;
+    },
   });
 
   if (!domain) return null;
 
   const normalized = normalizeDomain(domain);
+  if (!isValidShopifyDomain(normalized)) return null;
   const suggestedAlias = extractAlias(normalized);
 
   const { alias } = await prompts({
@@ -96,6 +118,34 @@ export async function promptStoreLoop() {
   }
 
   return stores;
+}
+
+/**
+ * Ask whether preview + cleanup workflows should be scaffolded.
+ */
+export async function promptPreviewWorkflows() {
+  const { enablePreviewWorkflows } = await prompts({
+    type: 'confirm',
+    name: 'enablePreviewWorkflows',
+    message: 'Enable preview + cleanup workflows?',
+    initial: false,
+  });
+
+  return !!enablePreviewWorkflows;
+}
+
+/**
+ * Ask whether build workflows should be scaffolded.
+ */
+export async function promptBuildWorkflows() {
+  const { enableBuildWorkflows } = await prompts({
+    type: 'confirm',
+    name: 'enableBuildWorkflows',
+    message: 'Enable build + Lighthouse workflows?',
+    initial: false,
+  });
+
+  return !!enableBuildWorkflows;
 }
 
 /**

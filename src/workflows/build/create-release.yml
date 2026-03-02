@@ -1,0 +1,52 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create release archive
+        run: |
+          mkdir release-temp
+          mkdir -p .sys/release-notes
+
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          cp release-notes.md ".sys/release-notes/release-note-${TAG_NAME}.md"
+
+          for dir in assets layout locales sections snippets config; do
+            mkdir -p "release-temp/$dir"
+            find "$dir" -type f ! -name "*.md" -exec cp --parents {} release-temp/ \;
+          done
+
+          mkdir -p release-temp/templates
+          find templates -type f ! -name "*.md" ! -name "page.test-*" -exec cp --parents {} release-temp/ \;
+
+          find release-temp -type f -name "*.liquid" -exec sed -i '
+            /{% comment %}/{
+              N
+              /{% comment %}\s*\nINTERNAL/{
+                :a
+                N
+                /{% endcomment %}/!ba
+                d
+              }
+            }' {} \;
+
+          cd release-temp
+          zip -r ../release.zip ./*
+          cd ..
+          rm -rf release-temp
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release.zip
+          body_path: release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

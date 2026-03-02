@@ -1,5 +1,5 @@
 import pc from 'picocolors';
-import { getMode, readConfig } from '../lib/config.js';
+import { getMode, isBuildWorkflowsEnabled, isPreviewWorkflowsEnabled, readConfig } from '../lib/config.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 
 export async function updateWorkflowsCommand() {
@@ -12,7 +12,9 @@ export async function updateWorkflowsCommand() {
   }
 
   const mode = getMode();
-  scaffoldWorkflows(mode);
+  const includePreview = isPreviewWorkflowsEnabled();
+  const includeBuild = isBuildWorkflowsEnabled();
+  scaffoldWorkflows(mode, { includePreview, includeBuild });
 
   console.log(pc.bold(pc.green('\n  Workflows updated!\n')));
 }

@@ -102,6 +102,7 @@ jobs:
       - name: Commit and tag
         run: |
           NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+          TAG_CREATED="false"
 
           # Stage changes
           git add -A
@@ -111,12 +112,22 @@ jobs:
             git commit -m "chore(release): bump version to ${NEW_VERSION}"
           fi
 
-          # Create annotated tag
-          CHANGELOG="${{ inputs.changelog }}"
-          if [ -n "$CHANGELOG" ]; then
-            git tag -a "$NEW_VERSION" -m "$CHANGELOG"
+          # Guard against duplicate tag creation (local or remote).
+          if git ls-remote --exit-code --tags origin "refs/tags/${NEW_VERSION}" >/dev/null 2>&1; then
+            echo "Tag ${NEW_VERSION} already exists on origin, reusing."
+          elif git rev-parse -q --verify "refs/tags/${NEW_VERSION}" >/dev/null; then
+            echo "Tag ${NEW_VERSION} already exists locally, reusing."
           else
-            git tag -a "$NEW_VERSION" -m "Release ${NEW_VERSION}"
+            CHANGELOG="${{ inputs.changelog }}"
+            if [ -n "$CHANGELOG" ]; then
+              git tag -a "$NEW_VERSION" -m "$CHANGELOG"
+            else
+              git tag -a "$NEW_VERSION" -m "Release ${NEW_VERSION}"
+            fi
+            TAG_CREATED="true"
           fi
 
-          git push origin HEAD --follow-tags
+          git push origin HEAD
+          if [ "$TAG_CREATED" = "true" ]; then
+            git push origin "$NEW_VERSION"
+          fi

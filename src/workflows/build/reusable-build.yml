@@ -1,0 +1,52 @@
+name: Build
+
+on:
+  workflow_call:
+    outputs:
+      build-success:
+        description: "Whether build was successful"
+        value: ${{ jobs.build.outputs.success }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      success: ${{ steps.build.outputs.success }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build scripts
+        run: node build-scripts.js
+
+      - name: Run Tailwind build
+        id: build
+        run: |
+          NODE_ENV=production npx @tailwindcss/cli -i _styles/main.css -o assets/style.css --minify
+          echo "success=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          BRANCH_NAME=${{ github.head_ref || github.ref_name }}
+          git fetch origin "$BRANCH_NAME" || echo "Branch does not exist yet"
+          git checkout -B "$BRANCH_NAME" "origin/$BRANCH_NAME" 2>/dev/null || git checkout -B "$BRANCH_NAME"
+          git add -f assets/index.js assets/style.css
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update compiled assets (JavaScript and CSS)"
+            git push origin "$BRANCH_NAME"
+          fi

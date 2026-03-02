@@ -73,6 +73,22 @@ export function getMode(cwd = process.cwd()) {
 }
 
 /**
+ * Whether optional preview/cleanup workflows are enabled.
+ */
+export function isPreviewWorkflowsEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.preview_workflows === true;
+}
+
+/**
+ * Whether optional build/Lighthouse workflows are enabled.
+ */
+export function isBuildWorkflowsEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.build_workflows === true;
+}
+
+/**
  * Add a store entry to the config.
  * Returns the updated config.
  */

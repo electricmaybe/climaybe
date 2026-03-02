@@ -1,6 +1,6 @@
 import pc from 'picocolors';
 import { promptNewStore } from '../lib/prompts.js';
-import { readConfig, addStoreToConfig, getStoreAliases, getMode } from '../lib/config.js';
+import { readConfig, addStoreToConfig, getStoreAliases, getMode, isPreviewWorkflowsEnabled, isBuildWorkflowsEnabled } from '../lib/config.js';
 import { createStoreBranches } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
@@ -17,6 +17,8 @@ export async function addStoreCommand() {
 
   const existingAliases = getStoreAliases();
   const previousMode = getMode();
+  const includePreview = isPreviewWorkflowsEnabled();
+  const includeBuild = isBuildWorkflowsEnabled();
 
   // Prompt for new store
   const store = await promptNewStore(existingAliases);
@@ -42,11 +44,11 @@ export async function addStoreCommand() {
     createStoreDirectories(originalAlias);
 
     // Re-scaffold workflows for multi mode
-    scaffoldWorkflows('multi');
+    scaffoldWorkflows('multi', { includePreview, includeBuild });
     console.log(pc.green('  Migration complete — workflows updated to multi-store mode.'));
   } else if (newMode === 'multi') {
     // Already multi, just make sure workflows are current
-    scaffoldWorkflows('multi');
+    scaffoldWorkflows('multi', { includePreview, includeBuild });
   }
 
   console.log(pc.bold(pc.green('\n  Store added successfully!\n')));

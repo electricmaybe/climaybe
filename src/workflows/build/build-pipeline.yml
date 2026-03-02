@@ -1,0 +1,57 @@
+# climaybe — Build Pipeline (Optional Build Package)
+
+name: Build Pipeline
+
+on:
+  push:
+    branches: [main, staging, develop]
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build.yml
+
+  lighthouse-ci:
+    runs-on: ubuntu-latest
+    needs: [build]
+    env:
+      SHOP_STORE: ${{ secrets.SHOP_STORE }}
+      SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
+      LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+    steps:
+      - name: Check conditions and log skip reason
+        run: |
+          SKIP_REASONS=()
+
+          if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.ref }}" != "refs/heads/staging" ]; then
+            SKIP_REASONS+=("Not on main or staging branch (current: ${{ github.ref }})")
+          fi
+
+          if [ -z "$SHOP_STORE" ] || [ -z "$SHOP_ACCESS_TOKEN" ] || [ -z "$LHCI_GITHUB_APP_TOKEN" ]; then
+            SKIP_REASONS+=("Missing required secrets: SHOP_STORE, SHOP_ACCESS_TOKEN, or LHCI_GITHUB_APP_TOKEN")
+          fi
+
+          if [ ${#SKIP_REASONS[@]} -gt 0 ]; then
+            echo "Lighthouse CI skipped"
+            echo "Reasons:"
+            for reason in "${SKIP_REASONS[@]}"; do
+              echo "  - $reason"
+            done
+            exit 0
+          fi
+
+          echo "All conditions met, proceeding with Lighthouse CI"
+
+      - name: Checkout code
+        if: env.SHOP_STORE != '' && env.SHOP_ACCESS_TOKEN != '' && env.LHCI_GITHUB_APP_TOKEN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+        uses: actions/checkout@v4
+
+      - name: Lighthouse
+        if: env.SHOP_STORE != '' && env.SHOP_ACCESS_TOKEN != '' && env.LHCI_GITHUB_APP_TOKEN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+        uses: shopify/lighthouse-ci-action@v1
+        with:
+          store: ${{ secrets.SHOP_STORE }}
+          access_token: ${{ secrets.SHOP_ACCESS_TOKEN }}
+          password: ${{ secrets.SHOP_PASSWORD }}
+          lhci_github_app_token: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+          lhci_min_score_performance: 0.9
+          lhci_min_score_accessibility: 0.9
