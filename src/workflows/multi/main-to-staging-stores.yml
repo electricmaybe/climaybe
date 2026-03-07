@@ -1,7 +1,7 @@
-# climaybe — Main to Staging Stores (Multi-store)
+# climaybe — Main to Staging <store> (Multi-store)
 # When a PR is merged into main (from staging), this workflow
 # opens and auto-merges PRs from main to each staging-<alias> branch.
-# Skips hotfix backport commits to prevent recursive triggers.
+# Skips [hotfix-backport] and version-bump commits so multistore-hotfix-to-main syncs are not re-pushed to stores.
 
 name: Main to Staging Stores
 

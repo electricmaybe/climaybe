@@ -1,0 +1,84 @@
+# climaybe — Multistore Hotfix to Main
+# Automatically syncs direct hotfixes from staging-<store> or live-<store> back to main.
+# Triggers: push to staging-* or live-*; also after Root to Stores completes (live-*).
+# Merges the store branch into main with [hotfix-backport] so post-merge-tag runs patch bump.
+# main-to-staging-stores skips [hotfix-backport] commits so hotfixes are not re-pushed to stores.
+
+name: Multistore Hotfix to Main
+
+on:
+  push:
+    branches:
+      - 'staging-*'
+      - 'live-*'
+  workflow_run:
+    workflows: ["Root to Stores"]
+    types: [completed]
+    branches:
+      - 'live-*'
+
+concurrency:
+  group: multistore-hotfix-to-main-${{ github.event_name == 'push' && github.ref_name || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  sync-to-main:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Resolve source branch ref
+        id: ref
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          else
+            echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if backport is needed
+        id: check
+        run: |
+          SOURCE="${{ steps.ref.outputs.branch }}"
+
+          MERGE_BASE=$(git merge-base origin/main origin/$SOURCE 2>/dev/null || echo "")
+
+          if [ -z "$MERGE_BASE" ]; then
+            echo "needs_backport=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          COMMITS=$(git log --oneline ${MERGE_BASE}..origin/$SOURCE -- . ':!stores/' 2>/dev/null | \
+            grep -v "\[stores-to-root\]" | grep -v "\[root-to-stores\]" | grep -v "chore(release)" || true)
+
+          if [ -n "$COMMITS" ]; then
+            echo "needs_backport=true" >> $GITHUB_OUTPUT
+            echo "Commits to sync to main:"
+            echo "$COMMITS"
+          else
+            echo "needs_backport=false" >> $GITHUB_OUTPUT
+            echo "No new commits to sync."
+          fi
+
+      - name: Merge into main and push
+        if: steps.check.outputs.needs_backport == 'true'
+        run: |
+          SOURCE="${{ steps.ref.outputs.branch }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin
+          git checkout main
+          git merge origin/$SOURCE --no-ff -m "Merge $SOURCE into main [hotfix-backport]"
+          git push origin main
+
+          echo "Synced $SOURCE → main"

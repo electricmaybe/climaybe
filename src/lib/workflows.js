@@ -47,6 +47,9 @@ function getKnownWorkflowFiles() {
   return files;
 }
 
+/** Deprecated workflow filenames to remove when scaffolding (renamed or replaced). */
+const DEPRECATED_WORKFLOW_FILES = ['hotfix-backport.yml'];
+
 /**
  * Remove previously scaffolded climaybe workflows from target.
  */
@@ -56,7 +59,7 @@ function cleanWorkflows(cwd = process.cwd()) {
 
   const known = getKnownWorkflowFiles();
   for (const file of readdirSync(dest)) {
-    if (known.has(file)) {
+    if (known.has(file) || DEPRECATED_WORKFLOW_FILES.includes(file)) {
       rmSync(join(dest, file));
     }
   }

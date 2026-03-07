@@ -1,6 +1,6 @@
 {
   "name": "climaybe",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Shopify CI/CD CLI — scaffolds workflows, branch strategy, and store config for single-store and multi-store theme repos",
   "type": "module",
   "bin": {
@@ -23,6 +23,12 @@
   ],
   "author": "Electric Maybe",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/electricmaybe/climaybe.git"
+  },
+  "bugs": "https://github.com/electricmaybe/climaybe/issues",
+  "homepage": "https://github.com/electricmaybe/climaybe#readme",
   "dependencies": {
     "commander": "^13.1.0",
     "picocolors": "^1.1.1",

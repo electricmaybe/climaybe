@@ -52,8 +52,12 @@ jobs:
           EXPLICIT_VERSION="${{ inputs.version }}"
 
           if [ -n "$EXPLICIT_VERSION" ]; then
-            # Use explicit version, ensure it starts with v
+            # Use explicit version; ensure v prefix and always three-part (e.g. v3.2.0)
             NEW_VERSION="${EXPLICIT_VERSION#v}"
+            PARTS=$(echo "$NEW_VERSION" | tr '.' '\n' | wc -l)
+            if [ "$PARTS" -eq "2" ]; then
+              NEW_VERSION="${NEW_VERSION}.0"
+            fi
             NEW_VERSION="v${NEW_VERSION}"
           else
             # Get latest tag

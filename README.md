@@ -119,6 +119,8 @@ staging → main → staging-<store> → live-<store>
 - `staging-<store>` — per-store staging with store-specific JSON data
 - `live-<store>` — per-store production
 
+Direct pushes to `staging-<store>` or `live-<store>` are automatically synced back to `main` (no PR; multistore-hotfix-to-main merges the branch into main).
+
 ## Workflows
 
 ### Shared (both modes)
@@ -133,18 +135,18 @@ staging → main → staging-<store> → live-<store>
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
 | `release-pr-check.yml` | PR from `staging` to `main` | Generates changelog, creates pre-release patch tag, posts PR comment |
-| `post-merge-tag.yml` | Push to `main` (merged PR) | Staging→main: minor bump from PR title. live-*→main (backport): patch bump |
+| `post-merge-tag.yml` | Push to `main` (merged PR) | Staging→main: minor bump (e.g. v3.2.0). Hotfix sync: patch bump (e.g. v3.2.1) |
 | `nightly-hotfix.yml` | Cron 02:00 US Eastern | Tags untagged hotfix commits with patch version |
 
 ### Multi-store (additional)
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `main-to-staging-stores.yml` | Push to `main` | Opens PRs to each `staging-<alias>` branch |
+| `main-to-staging-stores.yml` (main-to-staging-&lt;store&gt;) | Push to `main` | Opens PRs from main to each `staging-<alias>` branch |
 | `stores-to-root.yml` | Push to `staging-*` | Copies `stores/<alias>/` JSONs to repo root |
 | `pr-to-live.yml` | After stores-to-root | Opens PR from `staging-<alias>` to `live-<alias>` |
 | `root-to-stores.yml` | Push to `live-*` (hotfix) | Syncs root JSONs back to `stores/<alias>/` |
-| `hotfix-backport.yml` | Push to `live-*` or after root-to-stores | Creates backport PR to `main` (so hotfixes are always ported back) |
+| `multistore-hotfix-to-main.yml` | Push to `staging-*` or `live-*` (and after root-to-stores) | Automatically merges store branch into main (no PR); everything is synced back to main |
 
 ### Optional preview + cleanup package
 
@@ -172,10 +174,11 @@ Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`).
 
 ## Versioning
 
-- **Release merge** (`staging` → `main`): Minor bump (e.g., `v3.1.x` → `v3.2.0`)
-- **Hotfix backport merge** (`live-<store>` → `main`): Patch bump runs immediately on merge (e.g., `v3.2.0` → `v3.2.1`)
+- **Version format**: Always three-part (e.g. `v3.2.0`). No two-part tags.
+- **Release merge** (`staging` → `main`): Minor bump (e.g. `v3.1.12` → `v3.2.0`)
+- **Hotfix sync** (`staging-<store>` or `live-<store>` → main via multistore-hotfix-to-main): Patch bump runs immediately (e.g. `v3.2.0` → `v3.2.1`)
 - **Other hotfixes** (direct commit to `main`): Patch bump via nightly workflow or manual run
-- **PR title convention**: `Release v3.2` — the workflow extracts the version from this
+- **PR title convention**: `Release v3.2` or `Release v3.2.0` — the workflow normalizes to three-part
 
 All version bumps update `config/settings_schema.json` automatically.
 
@@ -192,7 +195,7 @@ All version bumps update `config/settings_schema.json` automatically.
 
 ## Recursive Trigger Prevention
 
-- Hotfix backport commits contain `[hotfix-backport]` in the message
+- Hotfix sync merge commits (multistore-hotfix-to-main) contain `[hotfix-backport]` in the message
 - Store sync commits contain `[stores-to-root]` or `[root-to-stores]`
 - Version bump commits contain `chore(release): bump version`
 - All workflows check for these flags and skip accordingly

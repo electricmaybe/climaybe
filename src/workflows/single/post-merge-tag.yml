@@ -1,7 +1,7 @@
 # climaybe — Post-Merge Tag (Single-store & Multi-store)
-# After a staging → main PR is merged: detects target version from PR title, minor bump.
-# After a live-<store> → main (hotfix backport) PR is merged: patch bump.
-# PR title convention for release: "Release v3.2" or "Release v3.2.0"
+# After a staging → main PR is merged: detects target version from PR title, minor bump (e.g. v3.2.0).
+# After staging-<store> or live-<store> is synced to main (multistore-hotfix-to-main): patch bump (e.g. v3.2.1).
+# Version format is always three-part: v3.2.0. PR title convention for release: "Release v3.2" or "Release v3.2.0"
 
 name: Post-Merge Tag
 
@@ -35,6 +35,14 @@ jobs:
             echo "Skipping post-merge tag: version bump commit."
             echo "is_release=false" >> $GITHUB_OUTPUT
             echo "is_hotfix_backport=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Automatic hotfix sync (multistore-hotfix-to-main merge commit)
+          if echo "$COMMIT_MSG" | grep -q "\[hotfix-backport\]"; then
+            echo "is_release=false" >> $GITHUB_OUTPUT
+            echo "is_hotfix_backport=true" >> $GITHUB_OUTPUT
+            echo "Detected hotfix backport merge, will trigger patch bump."
             exit 0
           fi
 
