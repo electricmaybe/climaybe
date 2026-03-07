@@ -1,7 +1,7 @@
-# climaybe — Post-Merge Tag (Single-store)
-# After a staging → main PR is merged, detects the target version from the PR title
-# and bumps the minor version accordingly.
-# PR title convention: "Release v3.2" or "Release v3.2.0"
+# climaybe — Post-Merge Tag (Single-store & Multi-store)
+# After a staging → main PR is merged: detects target version from PR title, minor bump.
+# After a live-<store> → main (hotfix backport) PR is merged: patch bump.
+# PR title convention for release: "Release v3.2" or "Release v3.2.0"
 
 name: Post-Merge Tag
 
@@ -20,8 +20,9 @@ jobs:
     outputs:
       is_release: ${{ steps.check.outputs.is_release }}
       version: ${{ steps.check.outputs.version }}
+      is_hotfix_backport: ${{ steps.check.outputs.is_hotfix_backport }}
     steps:
-      - name: Check if this push is from a merged staging PR
+      - name: Check if this push is from a merged staging PR or hotfix backport
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -29,21 +30,15 @@ jobs:
           # Check the commit message for merge indicator
           COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
 
-          # Skip hotfix backports
-          if echo "$COMMIT_MSG" | grep -q "\[hotfix-backport\]"; then
-            echo "Skipping post-merge tag: hotfix backport commit."
-            echo "is_release=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # Skip version bump commits from this workflow
+          # Skip version bump commits from this workflow (avoid loop)
           if echo "$COMMIT_MSG" | grep -q "chore(release): bump version"; then
             echo "Skipping post-merge tag: version bump commit."
             echo "is_release=false" >> $GITHUB_OUTPUT
+            echo "is_hotfix_backport=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Look for merged PR that targeted main from staging
+          # Look for merged PR that targeted main
           PR_NUMBER=$(echo "$COMMIT_MSG" | grep -oP '#\K\d+' | head -1 || true)
 
           if [ -n "$PR_NUMBER" ]; then
@@ -53,29 +48,36 @@ jobs:
               HEAD_REF=$(echo "$PR_DATA" | jq -r '.head.ref')
               TITLE=$(echo "$PR_DATA" | jq -r '.title')
 
+              # Staging → main: release (minor bump)
               if [ "$HEAD_REF" = "staging" ]; then
-                # Extract version from PR title: "Release v3.2" or "Release v3.2.0"
                 VERSION=$(echo "$TITLE" | grep -oP 'v\d+\.\d+(\.\d+)?' || true)
-
                 if [ -n "$VERSION" ]; then
-                  # Ensure it has 3 parts
                   PARTS=$(echo "$VERSION" | tr '.' '\n' | wc -l)
                   if [ "$PARTS" -eq "2" ]; then
                     VERSION="${VERSION}.0"
                   fi
-
                   echo "is_release=true" >> $GITHUB_OUTPUT
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "is_hotfix_backport=false" >> $GITHUB_OUTPUT
                   echo "Detected release version: $VERSION"
                   exit 0
                 fi
                 echo "Skipping post-merge tag: staging PR title missing release version."
               fi
+
+              # live-<store> → main: hotfix backport (patch bump)
+              if [[ "$HEAD_REF" == live-* ]]; then
+                echo "is_release=false" >> $GITHUB_OUTPUT
+                echo "is_hotfix_backport=true" >> $GITHUB_OUTPUT
+                echo "Detected hotfix backport from $HEAD_REF, will trigger patch bump."
+                exit 0
+              fi
             fi
           fi
 
-          echo "Skipping post-merge tag: push is not a merged staging release PR."
+          echo "Skipping post-merge tag: push is not a merged staging release or hotfix backport PR."
           echo "is_release=false" >> $GITHUB_OUTPUT
+          echo "is_hotfix_backport=false" >> $GITHUB_OUTPUT
 
   # Generate changelog for the release
   changelog:
@@ -88,7 +90,7 @@ jobs:
     secrets:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-  # Apply version bump
+  # Apply version bump (minor for release)
   bump:
     needs: [detect, changelog]
     if: needs.detect.outputs.is_release == 'true'
@@ -97,4 +99,43 @@ jobs:
       bump_type: minor
       version: ${{ needs.detect.outputs.version }}
       changelog: ${{ needs.changelog.outputs.changelog }}
+    secrets: inherit
+
+  # Resolve last tag for hotfix changelog (base_ref)
+  hotfix-base:
+    needs: detect
+    if: needs.detect.outputs.is_hotfix_backport == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      last_tag: ${{ steps.tag.outputs.last_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get latest tag
+        id: tag
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
+          echo "Base ref for hotfix changelog: $LAST_TAG"
+
+  # Generate changelog for hotfix (since last tag)
+  changelog-hotfix:
+    needs: [detect, hotfix-base]
+    if: needs.detect.outputs.is_hotfix_backport == 'true'
+    uses: ./.github/workflows/ai-changelog.yml
+    with:
+      base_ref: ${{ needs.hotfix-base.outputs.last_tag }}
+      head_ref: HEAD
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+  # Apply patch version bump after hotfix backport merge
+  bump-hotfix:
+    needs: [detect, hotfix-base, changelog-hotfix]
+    if: needs.detect.outputs.is_hotfix_backport == 'true'
+    uses: ./.github/workflows/version-bump.yml
+    with:
+      bump_type: patch
+      changelog: ${{ needs.changelog-hotfix.outputs.changelog }}
     secrets: inherit

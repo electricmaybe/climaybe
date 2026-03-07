@@ -133,7 +133,7 @@ staging → main → staging-<store> → live-<store>
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
 | `release-pr-check.yml` | PR from `staging` to `main` | Generates changelog, creates pre-release patch tag, posts PR comment |
-| `post-merge-tag.yml` | Push to `main` (merged PR) | Detects release version from PR title, bumps minor version |
+| `post-merge-tag.yml` | Push to `main` (merged PR) | Staging→main: minor bump from PR title. live-*→main (backport): patch bump |
 | `nightly-hotfix.yml` | Cron 02:00 US Eastern | Tags untagged hotfix commits with patch version |
 
 ### Multi-store (additional)
@@ -173,7 +173,8 @@ Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`).
 ## Versioning
 
 - **Release merge** (`staging` → `main`): Minor bump (e.g., `v3.1.x` → `v3.2.0`)
-- **Hotfix** (direct commit to `main` or `live-*`): Patch bump (e.g., `v3.2.0` → `v3.2.1`)
+- **Hotfix backport merge** (`live-<store>` → `main`): Patch bump runs immediately on merge (e.g., `v3.2.0` → `v3.2.1`)
+- **Other hotfixes** (direct commit to `main`): Patch bump via nightly workflow or manual run
 - **PR title convention**: `Release v3.2` — the workflow extracts the version from this
 
 All version bumps update `config/settings_schema.json` automatically.
