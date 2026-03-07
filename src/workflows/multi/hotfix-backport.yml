@@ -1,21 +1,30 @@
 # climaybe — Hotfix Backport (Multi-store)
-# After root-to-stores completes on a live-* branch,
-# creates a PR to main with [hotfix-backport] flag.
-# This ensures hotfixes on live stores are propagated back to the dev branch.
-# Triggers a patch version bump on main.
+# Creates a PR from live-<store> to main so direct hotfixes are ported back.
+# Triggers: (1) push to live-* so every hotfix push is considered; (2) after Root to Stores completes.
+# Merging the PR triggers a patch version bump on main (post-merge-tag).
 
 name: Hotfix Backport
 
 on:
+  push:
+    branches:
+      - 'live-*'
   workflow_run:
     workflows: ["Root to Stores"]
     types: [completed]
     branches:
       - 'live-*'
 
+# Prevent duplicate runs when both push and workflow_run fire for the same branch
+concurrency:
+  group: hotfix-backport-${{ github.event_name == 'push' && github.ref_name || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
 jobs:
   backport:
-    if: github.event.workflow_run.conclusion == 'success'
+    # On workflow_run, only run when Root to Stores succeeded (so stores/ is synced first when possible)
+    # On push, always run so backport PR is created even if root-to-stores skipped or failed
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -23,16 +32,25 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Resolve live branch ref
+        id: ref
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          else
+            echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ steps.ref.outputs.branch }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract store alias
         id: alias
         run: |
-          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          BRANCH="${{ steps.ref.outputs.branch }}"
           ALIAS="${BRANCH#live-}"
           echo "alias=$ALIAS" >> $GITHUB_OUTPUT
           echo "live_branch=$BRANCH" >> $GITHUB_OUTPUT
@@ -94,7 +112,6 @@ jobs:
             echo "PR creation failed or no diff between branches."
           fi
 
-  # Patch version bump after backport merge
-  # This is handled by the nightly-hotfix workflow or can be triggered manually.
-  # The [hotfix-backport] flag in the commit message ensures main-to-staging-stores
-  # does NOT push this back to stores.
+  # Patch version bump after backport merge: post-merge-tag.yml runs on merge and bumps patch.
+  # The PR is from live-<store> to main; main-to-staging-stores skips [hotfix-backport] and
+  # version-bump commits, so this does not re-push to staging stores.

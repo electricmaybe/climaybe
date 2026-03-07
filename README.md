@@ -144,7 +144,7 @@ staging → main → staging-<store> → live-<store>
 | `stores-to-root.yml` | Push to `staging-*` | Copies `stores/<alias>/` JSONs to repo root |
 | `pr-to-live.yml` | After stores-to-root | Opens PR from `staging-<alias>` to `live-<alias>` |
 | `root-to-stores.yml` | Push to `live-*` (hotfix) | Syncs root JSONs back to `stores/<alias>/` |
-| `hotfix-backport.yml` | After root-to-stores | Creates backport PR to `main` |
+| `hotfix-backport.yml` | Push to `live-*` or after root-to-stores | Creates backport PR to `main` (so hotfixes are always ported back) |
 
 ### Optional preview + cleanup package
 
