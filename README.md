@@ -4,15 +4,21 @@ Shopify CI/CD CLI — scaffolds GitHub Actions workflows, branch strategy, and s
 
 ## Install
 
+Install in your theme repo (project-only, no global install):
+
 ```bash
-npm install -g climaybe
+cd your-shopify-theme-repo
+npm install -D climaybe
 ```
+
+Run commands with `npx climaybe` (or add scripts to your `package.json`).
 
 ## Quick Start
 
 ```bash
 cd your-shopify-theme-repo
-climaybe init
+npm install -D climaybe
+npx climaybe init
 ```
 
 The interactive setup will ask for your store URL(s) and configure everything automatically.
@@ -38,7 +44,7 @@ Interactive setup that configures your repo for CI/CD.
 Add a new store to an existing setup.
 
 ```bash
-climaybe add-store
+npx climaybe add-store
 ```
 
 - Prompts for new store URL + alias
@@ -51,7 +57,7 @@ climaybe add-store
 Switch your local dev environment to a specific store (multi-store only).
 
 ```bash
-climaybe switch voldt-norway
+npx climaybe switch voldt-norway
 ```
 
 Copies `stores/<alias>/` JSON files to the repo root so you can preview that store locally.
@@ -61,17 +67,26 @@ Copies `stores/<alias>/` JSON files to the repo root so you can preview that sto
 Sync root JSON files back to a store directory (multi-store only).
 
 ```bash
-climaybe sync voldt-norway
+npx climaybe sync voldt-norway
 ```
 
 If no alias is given, syncs to the default store.
+
+### `climaybe ensure-branches`
+
+Create missing `staging` and per-store branches (`staging-<alias>`, `live-<alias>`) from your current branch (usually `main`). Use when the repo only has `main` (e.g. after a fresh clone) so the main → staging-&lt;store&gt; sync can run.
+
+```bash
+npx climaybe ensure-branches
+git push origin --all
+```
 
 ### `climaybe update-workflows`
 
 Refresh GitHub Actions workflows from the latest bundled templates.
 
 ```bash
-climaybe update-workflows
+npx climaybe update-workflows
 ```
 
 Useful after updating the CLI to get the latest workflow improvements.

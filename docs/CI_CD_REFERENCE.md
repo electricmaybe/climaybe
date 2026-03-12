@@ -51,6 +51,32 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 **Not synced (branch history only):**  
 `config/settings_schema.json`, `locales/*.json`.
 
+## Branch setup
+
+- **main** is the default branch (created by Git when you init or by the host when you create a repo).
+- **staging** and per-store branches are created by `climaybe init` or `climaybe ensure-branches`.
+- If the repo only has `main` (e.g. after clone), run `climaybe ensure-branches` then `git push origin --all` so **main-to-staging-stores** can open PRs to each `staging-<alias>`.
+
+## Custom steps and optional paths
+
+If you add a step that uses `git checkout` with a pathspec (e.g. `locales/**/*.json`), Git fails when no files match: `pathspec 'locales/**/*.json' did not match any file(s) known to git`. To avoid that, only run the checkout when the path exists, or use a shell loop so the command is a no-op when there are no files:
+
+```bash
+# Safe: only run when directory exists
+if [ -d "locales" ]; then
+  git checkout main -- locales/
+fi
+```
+
+Or with a glob that might match nothing:
+
+```bash
+# Safe: loop over existing files (no-op if none)
+find locales -name "*.json" 2>/dev/null | while read -r f; do
+  git checkout main -- "$f"
+done
+```
+
 ---
 
 ## Updating the external CI/CD doc
