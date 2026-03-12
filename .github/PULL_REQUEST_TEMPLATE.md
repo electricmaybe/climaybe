@@ -2,6 +2,8 @@
 
 <!-- What does this PR do? -->
 
+**PR title:** Use a [conventional commit](https://www.conventionalcommits.org/) so CI passes (e.g. `feat: add X`, `fix: resolve Y`). Target branch: **main**.
+
 ## Type of change
 
 - [ ] Bug fix (non-breaking change that fixes an issue)
