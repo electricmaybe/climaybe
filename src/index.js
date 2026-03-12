@@ -5,6 +5,8 @@ import { switchCommand } from './commands/switch.js';
 import { syncCommand } from './commands/sync.js';
 import { updateWorkflowsCommand } from './commands/update-workflows.js';
 import { ensureBranchesCommand } from './commands/ensure-branches.js';
+import { setupCommitlintCommand } from './commands/setup-commitlint.js';
+import { addCursorSkillCommand } from './commands/add-cursor-skill.js';
 
 /**
  * Create the CLI program (for testing and for run).
@@ -56,6 +58,16 @@ export function createProgram(version = '0.0.0', packageDir = '') {
     .command('ensure-branches')
     .description('Create missing staging and per-store branches from current HEAD (then push)')
     .action(ensureBranchesCommand);
+
+  program
+    .command('setup-commitlint')
+    .description('Set up only commitlint + Husky (conventional commits on git commit)')
+    .action(setupCommitlintCommand);
+
+  program
+    .command('add-cursor-skill')
+    .description('Add only the Cursor commit skill to this project (.cursor/skills/commit)')
+    .action(addCursorSkillCommand);
 
   return program;
 }

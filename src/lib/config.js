@@ -98,6 +98,22 @@ export function isBuildWorkflowsEnabled(cwd = process.cwd()) {
 }
 
 /**
+ * Whether commitlint + Husky was enabled at init.
+ */
+export function isCommitlintEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.commitlint === true;
+}
+
+/**
+ * Whether Cursor commit skill was added at init.
+ */
+export function isCursorSkillsEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.cursor_skills === true;
+}
+
+/**
  * Add a store entry to the config.
  * Returns the updated config.
  */

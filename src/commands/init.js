@@ -4,6 +4,8 @@ import {
   promptStoreLoop,
   promptPreviewWorkflows,
   promptBuildWorkflows,
+  promptCommitlint,
+  promptCursorSkills,
   promptConfigureCISecrets,
   promptUpdateExistingSecrets,
   promptSecretValue,
@@ -13,6 +15,7 @@ import { readConfig, writeConfig } from '../lib/config.js';
 import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches, getSuggestedTagForRelease } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
+import { scaffoldCommitlint, scaffoldCursorCommitSkill } from '../lib/commit-tooling.js';
 import {
   isGhAvailable,
   hasGitHubRemote,
@@ -38,6 +41,8 @@ async function runInitFlow() {
   const mode = stores.length > 1 ? 'multi' : 'single';
   const enablePreviewWorkflows = await promptPreviewWorkflows();
   const enableBuildWorkflows = await promptBuildWorkflows();
+  const enableCommitlint = await promptCommitlint();
+  const enableCursorSkills = await promptCursorSkills();
 
   console.log(pc.dim(`\n  Mode: ${mode}-store (${stores.length} store(s))`));
 
@@ -47,6 +52,8 @@ async function runInitFlow() {
     default_store: stores[0].domain,
     preview_workflows: enablePreviewWorkflows,
     build_workflows: enableBuildWorkflows,
+    commitlint: enableCommitlint,
+    cursor_skills: enableCursorSkills,
     stores: {},
   };
 
@@ -80,6 +87,20 @@ async function runInitFlow() {
     includeBuild: enableBuildWorkflows,
   });
 
+  // 7. Optional commitlint + Husky and Cursor commit skill
+  if (enableCommitlint) {
+    console.log(pc.dim('  Setting up commitlint + Husky...'));
+    if (scaffoldCommitlint()) {
+      console.log(pc.green('  commitlint + Husky installed (conventional commits enforced on git commit).'));
+    } else {
+      console.log(pc.yellow('  commitlint setup failed or skipped (run npm install manually).'));
+    }
+  }
+  if (enableCursorSkills) {
+    scaffoldCursorCommitSkill();
+    console.log(pc.green('  Cursor commit skill added to .cursor/skills/commit/SKILL.md'));
+  }
+
   // Done
   console.log(pc.bold(pc.green('\n  Setup complete!\n')));
 
@@ -95,6 +116,8 @@ async function runInitFlow() {
   }
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  commitlint + Husky: ${enableCommitlint ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Cursor commit skill: ${enableCursorSkills ? 'added' : 'skipped'}`));
 
   const suggestedTag = getSuggestedTagForRelease();
   const tagLabel = suggestedTag === 'v1.0.0' ? 'Tag your first release' : 'Tag your next release';

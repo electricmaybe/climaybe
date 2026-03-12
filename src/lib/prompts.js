@@ -149,6 +149,34 @@ export async function promptBuildWorkflows() {
 }
 
 /**
+ * Ask whether to set up commitlint + Husky (conventional commits enforced on git commit).
+ */
+export async function promptCommitlint() {
+  const { enableCommitlint } = await prompts({
+    type: 'confirm',
+    name: 'enableCommitlint',
+    message: 'Enable commitlint + Husky? (enforce conventional commits on git commit)',
+    initial: true,
+  });
+
+  return !!enableCommitlint;
+}
+
+/**
+ * Ask whether to add Cursor commit skill to the project (.cursor/skills/commit).
+ */
+export async function promptCursorSkills() {
+  const { enableCursorSkills } = await prompts({
+    type: 'confirm',
+    name: 'enableCursorSkills',
+    message: 'Add Cursor commit skill to this project? (AI-assisted conventional commits)',
+    initial: true,
+  });
+
+  return !!enableCursorSkills;
+}
+
+/**
  * Prompt for a single new store (used by add-store command).
  * Takes existing aliases to prevent duplicates.
  */

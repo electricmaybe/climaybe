@@ -11,6 +11,8 @@ import {
   getMode,
   isPreviewWorkflowsEnabled,
   isBuildWorkflowsEnabled,
+  isCommitlintEnabled,
+  isCursorSkillsEnabled,
   addStoreToConfig,
 } from '../../src/lib/config.js';
 
@@ -200,6 +202,50 @@ describe('config', () => {
       try {
         writeConfig({ stores: {}, build_workflows: true }, dir);
         assert.strictEqual(isBuildWorkflowsEnabled(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('isCommitlintEnabled', () => {
+    it('returns false when not set or false', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {} }, dir);
+        assert.strictEqual(isCommitlintEnabled(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns true when commitlint is true', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {}, commitlint: true }, dir);
+        assert.strictEqual(isCommitlintEnabled(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('isCursorSkillsEnabled', () => {
+    it('returns false when not set or false', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {} }, dir);
+        assert.strictEqual(isCursorSkillsEnabled(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns true when cursor_skills is true', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {}, cursor_skills: true }, dir);
+        assert.strictEqual(isCursorSkillsEnabled(dir), true);
       } finally {
         teardown();
       }
