@@ -250,6 +250,15 @@ Preview workflows also support the same scoped secret pattern and will use:
 └── .github/workflows/
 ```
 
+## Releases and versioning
+
+- **Branch:** Single default branch `main`. Feature branches open as PRs into `main`.
+- **Versioning:** [SemVer](https://semver.org/). Versions are **bumped automatically** when PRs are merged to `main` using [conventional commits](https://www.conventionalcommits.org/): `fix:` → patch, `feat:` → minor, `BREAKING CHANGE` or `feat!:` → major.
+- **Flow:** Merge to `main` → [Release version](.github/workflows/release-version.yml) runs semantic-release (bumps `package.json`, pushes tag) → tag push triggers [Release](.github/workflows/release.yml) (tests + publish to npm). Requires `NPM_TOKEN` secret for npm publish.
+- **CI:** Every PR and push to `main` runs tests on Node 20 and 22 ([CI workflow](.github/workflows/ci.yml)).
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch, PR, and conventional-commit details.
+
 ## License
 
 MIT — Electric Maybe
