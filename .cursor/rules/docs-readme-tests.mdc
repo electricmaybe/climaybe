@@ -1,0 +1,18 @@
+---
+description: Keep docs, README, and tests in sync when making changes
+alwaysApply: true
+---
+
+# Docs, README, and tests
+
+When you change behavior, workflows, or public API:
+
+1. **Docs** – Update if the change affects the CI/CD spec or user-facing behavior:
+   - **docs/CI_CD_REFERENCE.md** – Workflow names, versioning rules, hotfix flow, local dev, file sync, or the "Updating the external CI/CD doc" checklist.
+   - **WORKFLOW_UPDATES.md** – Only if adding a notable workflow change worth recording in the changelog (optional).
+
+2. **README** – Update if the change affects install, commands, config, branch strategy, workflows table, versioning summary, secrets, or directory structure. Keep README scannable; link to docs/CI_CD_REFERENCE.md for full detail.
+
+3. **Tests** – Add or update tests when changing commands, libs, or workflow behavior so that new or modified behavior is covered.
+
+Apply these updates in the same change set (same PR/commit) when possible so docs and code stay aligned.

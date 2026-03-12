@@ -182,6 +182,8 @@ Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`).
 
 All version bumps update `config/settings_schema.json` automatically.
 
+**Full specification:** For detailed versioning rules, local dev flow, hotfix behavior, and alignment with the external CI/CD doc, see **[CI/CD Reference](docs/CI_CD_REFERENCE.md)**.
+
 ## File Sync Rules (Multi-store)
 
 **Synced between root and `stores/<alias>/`:**
@@ -202,30 +204,24 @@ All version bumps update `config/settings_schema.json` automatically.
 
 ## GitHub Secrets
 
-Add the following secret to your GitHub repository:
+Add the following secrets to your GitHub repository (or use **GitLab CI/CD variables** if you use GitLab). You can configure them during `climaybe init` via the GitHub or GitLab CLI.
 
 | Secret | Required | Description |
 |--------|----------|-------------|
 | `GEMINI_API_KEY` | Yes | Google Gemini API key for changelog generation |
-| `SHOPIFY_STORE_URL` | Optional* | Required only when optional preview workflows are enabled |
-| `SHOPIFY_CLI_THEME_TOKEN` | Optional* | Required only when optional preview workflows are enabled |
-| `SHOP_STORE` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
+| `SHOPIFY_STORE_URL` | Optional* | Store URL (e.g. `your-store.myshopify.com`) for preview and/or Lighthouse |
+| `SHOPIFY_CLI_THEME_TOKEN` | Optional* | Theme access token for preview workflows |
 | `SHOP_ACCESS_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
 | `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
 | `SHOP_PASSWORD` | Optional | Used by Lighthouse action when your store requires password auth |
 
-For multi-store deploy PR links, you can optionally define store-scoped secrets:
+**Multi-store:** For branches like `staging-<store>` and `live-<store>`, use **per-store** secrets so each store uses its own URL and token:
 
 - `SHOPIFY_STORE_URL_<ALIAS>`
 - `SHOPIFY_CLI_THEME_TOKEN_<ALIAS>`
 
-`<ALIAS>` must be uppercase with hyphens converted to underscores.  
-Example: alias `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`.
-
-Preview workflows also support the same scoped secret pattern and will use:
-
-1. `SHOPIFY_*_<ALIAS>`
-2. fallback to `SHOPIFY_*` (default)
+`<ALIAS>` must be uppercase with hyphens converted to underscores (e.g. alias `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`).  
+Workflows resolve the store from the branch and use `SHOPIFY_*_<ALIAS>` when set, otherwise fall back to `SHOPIFY_STORE_URL` / `SHOPIFY_CLI_THEME_TOKEN`.
 
 ## Directory Structure (Multi-store)
 
@@ -249,6 +245,15 @@ Preview workflows also support the same scoped secret pattern and will use:
 ├── package.json
 └── .github/workflows/
 ```
+
+## Releases and versioning
+
+- **Branch:** Single default branch `main`. Feature branches open as PRs into `main`.
+- **Versioning:** [SemVer](https://semver.org/). Versions are **bumped automatically** when PRs are merged to `main` using [conventional commits](https://www.conventionalcommits.org/): `fix:` → patch, `feat:` → minor, `BREAKING CHANGE` or `feat!:` → major.
+- **Flow:** Merge to `main` → [Release version](.github/workflows/release-version.yml) runs semantic-release (bumps `package.json`, pushes tag) → tag push triggers [Release](.github/workflows/release.yml) (tests + publish to npm). Requires `NPM_TOKEN` secret for npm publish.
+- **CI:** Every PR and push to `main` runs tests on Node 20 and 22 ([CI workflow](.github/workflows/ci.yml)).
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch, PR, and conventional-commit details.
 
 ## License
 

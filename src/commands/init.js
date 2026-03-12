@@ -1,22 +1,34 @@
+import prompts from 'prompts';
 import pc from 'picocolors';
-import { promptStoreLoop, promptPreviewWorkflows, promptBuildWorkflows } from '../lib/prompts.js';
+import {
+  promptStoreLoop,
+  promptPreviewWorkflows,
+  promptBuildWorkflows,
+  promptConfigureCISecrets,
+  promptUpdateExistingSecrets,
+  promptSecretValue,
+} from '../lib/prompts.js';
 import { readConfig, writeConfig } from '../lib/config.js';
 import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
+import {
+  isGhAvailable,
+  hasGitHubRemote,
+  isGlabAvailable,
+  hasGitLabRemote,
+  listGitHubSecrets,
+  listGitLabVariables,
+  getSecretsToPrompt,
+  setSecret,
+  setGitLabVariable,
+} from '../lib/github-secrets.js';
 
-export async function initCommand() {
-  console.log(pc.bold('\n  climaybe — Shopify CI/CD Setup\n'));
-
-  // Guard: check if already initialized
-  const existing = readConfig();
-  if (existing?.stores && Object.keys(existing.stores).length > 0) {
-    console.log(pc.yellow('  This repo already has a climaybe config.'));
-    console.log(pc.dim('  Use "climaybe add-store" to add more stores.'));
-    console.log(pc.dim('  Use "climaybe update-workflows" to refresh workflows.\n'));
-    return;
-  }
-
+/**
+ * Run the full init flow: prompts, config write, git, branches, workflows.
+ * Used by both init (when not already inited or user confirms reinit) and reinit.
+ */
+async function runInitFlow() {
   // 1. Collect stores from user
   const stores = await promptStoreLoop();
   const mode = stores.length > 1 ? 'multi' : 'single';
@@ -81,7 +93,101 @@ export async function initCommand() {
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
 
   console.log(pc.dim('\n  Next steps:'));
-  console.log(pc.dim('    1. Add GEMINI_API_KEY to your GitHub repo secrets'));
-  console.log(pc.dim('    2. Push to GitHub and start using the branching workflow'));
+  console.log(pc.dim('    1. Add GEMINI_API_KEY to your CI secrets (or configure below)'));
+  console.log(pc.dim('    2. Push to GitHub/GitLab and start using the branching workflow'));
   console.log(pc.dim('    3. Tag your first release: git tag v1.0.0\n'));
+
+  const ciHost = await promptConfigureCISecrets();
+  if (ciHost === 'skip') return;
+
+  const secretsToPrompt = getSecretsToPrompt({
+    enablePreviewWorkflows,
+    enableBuildWorkflows,
+    mode,
+    stores,
+  });
+  const total = secretsToPrompt.length;
+  const setter =
+    ciHost === 'github'
+      ? { check: isGhAvailable, checkRemote: hasGitHubRemote, set: setSecret, name: 'GitHub' }
+      : { check: isGlabAvailable, checkRemote: hasGitLabRemote, set: setGitLabVariable, name: 'GitLab' };
+
+  if (!setter.check()) {
+    const installUrl = ciHost === 'github' ? 'https://cli.github.com/' : 'https://gitlab.com/gitlab-org/cli';
+    console.log(pc.yellow(`  ${setter.name} CLI is not installed or not logged in.`));
+    console.log(pc.dim(`  Install: ${installUrl} — then run ${ciHost === 'github' ? 'gh' : 'glab'} auth login`));
+    console.log(
+      pc.dim(
+        ciHost === 'github'
+          ? '  You can add secrets later in the repo: Settings → Secrets and variables → Actions.\n'
+          : '  You can add variables later in the repo: Settings → CI/CD → Variables.\n'
+      )
+    );
+    return;
+  }
+  if (!setter.checkRemote()) {
+    console.log(pc.yellow('  This repo has no ' + setter.name + ' remote (origin).'));
+    console.log(pc.dim('  Add a remote and push first, then add secrets/variables in the repo Settings.\n'));
+    return;
+  }
+
+  const existingNames =
+    ciHost === 'github' ? listGitHubSecrets() : listGitLabVariables();
+  const namesWeWillPrompt = new Set(secretsToPrompt.map((s) => s.name));
+  const alreadySet = existingNames.filter((n) => namesWeWillPrompt.has(n));
+  if (alreadySet.length > 0) {
+    const doUpdate = await promptUpdateExistingSecrets(alreadySet);
+    if (!doUpdate) {
+      console.log(pc.dim('\n  Skipping. Existing secrets left unchanged.\n'));
+      return;
+    }
+  }
+
+  console.log(pc.cyan(`\n  Configure ${total} ${setter.name} secret(s)/variable(s). Leave optional ones blank to skip.\n`));
+  let setCount = 0;
+  for (let i = 0; i < secretsToPrompt.length; i++) {
+    const secret = secretsToPrompt[i];
+    const value = await promptSecretValue(secret, i, total);
+    if (value) {
+      try {
+        await setter.set(secret.name, value);
+        console.log(pc.green(`  Set ${secret.name}.`));
+        setCount++;
+      } catch (err) {
+        console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
+      }
+    }
+  }
+  if (setCount > 0) {
+    console.log(pc.green(`\n  Done. ${setCount} secret(s) set for this repository.\n`));
+  }
+}
+
+export async function initCommand() {
+  console.log(pc.bold('\n  climaybe — Shopify CI/CD Setup\n'));
+
+  const existing = readConfig();
+  const alreadyInited = existing?.stores && Object.keys(existing.stores).length > 0;
+
+  if (alreadyInited) {
+    const { reinit } = await prompts({
+      type: 'confirm',
+      name: 'reinit',
+      message: 'This repo already has a climaybe config. Reinitialize? This will remove your current stores and workflow settings.',
+      initial: false,
+    });
+    if (!reinit) {
+      console.log(pc.dim('  Use "climaybe add-store" to add more stores.'));
+      console.log(pc.dim('  Use "climaybe update-workflows" to refresh workflows.'));
+      console.log(pc.dim('  Use "climaybe reinit" to reinitialize from scratch.\n'));
+      return;
+    }
+  }
+
+  await runInitFlow();
+}
+
+export async function reinitCommand() {
+  console.log(pc.bold('\n  climaybe — Reinitialize CI/CD Setup\n'));
+  await runInitFlow();
 }

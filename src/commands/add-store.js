@@ -1,9 +1,20 @@
 import pc from 'picocolors';
-import { promptNewStore } from '../lib/prompts.js';
+import { promptNewStore, promptConfigureCISecrets, promptUpdateExistingSecrets, promptSecretValue } from '../lib/prompts.js';
 import { readConfig, addStoreToConfig, getStoreAliases, getMode, isPreviewWorkflowsEnabled, isBuildWorkflowsEnabled } from '../lib/config.js';
 import { createStoreBranches } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
+import {
+  isGhAvailable,
+  hasGitHubRemote,
+  isGlabAvailable,
+  hasGitLabRemote,
+  listGitHubSecrets,
+  listGitLabVariables,
+  getSecretsToPromptForNewStore,
+  setSecret,
+  setGitLabVariable,
+} from '../lib/github-secrets.js';
 
 export async function addStoreCommand() {
   console.log(pc.bold('\n  climaybe — Add Store\n'));
@@ -54,4 +65,52 @@ export async function addStoreCommand() {
   console.log(pc.bold(pc.green('\n  Store added successfully!\n')));
   console.log(pc.dim(`  New branches: staging-${store.alias}, live-${store.alias}`));
   console.log(pc.dim(`  Store dir: stores/${store.alias}/\n`));
+
+  // If preview workflows are on, offer to set this store's CI secrets (multi-store uses per-store secrets)
+  if (includePreview) {
+    const ciHost = await promptConfigureCISecrets();
+    if (ciHost !== 'skip') {
+      const setter =
+        ciHost === 'github'
+          ? { check: isGhAvailable, checkRemote: hasGitHubRemote, set: setSecret, name: 'GitHub' }
+          : { check: isGlabAvailable, checkRemote: hasGitLabRemote, set: setGitLabVariable, name: 'GitLab' };
+
+      if (!setter.check()) {
+        console.log(pc.yellow(`  ${setter.name} CLI is not installed or not logged in. Add secrets manually in repo Settings.`));
+      } else if (!setter.checkRemote()) {
+        console.log(pc.yellow('  No ' + setter.name + ' remote (origin). Add secrets manually after pushing.'));
+      } else {
+        const secretsToPrompt = getSecretsToPromptForNewStore(store);
+        const existingNames = ciHost === 'github' ? listGitHubSecrets() : listGitLabVariables();
+        const namesWeWillPrompt = new Set(secretsToPrompt.map((s) => s.name));
+        const alreadySet = existingNames.filter((n) => namesWeWillPrompt.has(n));
+        if (alreadySet.length > 0) {
+          const doUpdate = await promptUpdateExistingSecrets(alreadySet);
+          if (!doUpdate) {
+            console.log(pc.dim('\n  Skipping. Existing secrets for this store left unchanged.\n'));
+            return;
+          }
+        }
+        const total = secretsToPrompt.length;
+        console.log(pc.cyan(`\n  Configure ${total} secret(s) for store "${store.alias}". Leave blank to skip.\n`));
+        let setCount = 0;
+        for (let i = 0; i < secretsToPrompt.length; i++) {
+          const secret = secretsToPrompt[i];
+          const value = await promptSecretValue(secret, i, total);
+          if (value) {
+            try {
+              await setter.set(secret.name, value);
+              console.log(pc.green(`  Set ${secret.name}.`));
+              setCount++;
+            } catch (err) {
+              console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
+            }
+          }
+        }
+        if (setCount > 0) {
+          console.log(pc.green(`\n  Done. ${setCount} secret(s) set for store "${store.alias}".\n`));
+        }
+      }
+    }
+  }
 }

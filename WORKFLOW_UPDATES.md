@@ -1,6 +1,10 @@
-# Workflow Updates (Current Branch)
+# Workflow Updates (Changelog)
 
-This document summarizes the CI workflow hardening changes applied in the current `climaybe` branch.
+> **Current specification:** For the full CI/CD workflow and versioning reference (and how to keep the external doc in sync), see **[docs/CI_CD_REFERENCE.md](docs/CI_CD_REFERENCE.md)**. This file is a historical changelog of workflow hardening changes.
+
+---
+
+This document summarizes past CI workflow hardening changes applied in `climaybe`.
 
 ## Updated files
 

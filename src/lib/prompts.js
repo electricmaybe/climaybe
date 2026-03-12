@@ -6,7 +6,7 @@ import pc from 'picocolors';
  * "voldt-staging.myshopify.com" → "voldt-staging"
  */
 export function extractAlias(domain) {
-  return domain.replace(/\.myshopify\.com$/i, '').trim();
+  return domain.trim().replace(/\.myshopify\.com$/i, '').trim();
 }
 
 /**
@@ -164,4 +164,64 @@ export async function promptNewStore(existingAliases = []) {
   }
 
   return store;
+}
+
+/**
+ * Ask which CI host to configure for secrets (after init). Returns 'github' | 'gitlab' | 'skip'.
+ */
+export async function promptConfigureCISecrets() {
+  const { host } = await prompts({
+    type: 'select',
+    name: 'host',
+    message: 'Configure CI secrets / variables now?',
+    choices: [
+      { title: 'GitHub (gh CLI)', value: 'github' },
+      { title: 'GitLab (glab CLI)', value: 'gitlab' },
+      { title: 'Skip', value: 'skip' },
+    ],
+    initial: 0,
+  });
+  return host ?? 'skip';
+}
+
+/**
+ * Ask whether to update existing CI secrets (when some are already set). Returns true to update, false to skip.
+ */
+export async function promptUpdateExistingSecrets(existingNames) {
+  const list = existingNames.length <= 5 ? existingNames.join(', ') : `${existingNames.slice(0, 3).join(', ')} and ${existingNames.length - 3} more`;
+  const { update } = await prompts({
+    type: 'confirm',
+    name: 'update',
+    message: `You already have ${existingNames.length} secret(s) set (${list}). Update them?`,
+    initial: false,
+  });
+  return !!update;
+}
+
+/**
+ * Prompt for a single secret value. Shows name, required/optional, description, and where to get it.
+ * Returns the value string or null if user skips (optional secrets only).
+ */
+export async function promptSecretValue(secret, index, total) {
+  const requiredLabel = secret.required ? pc.red('required') : pc.dim('optional');
+  const message = `[${index + 1}/${total}] ${secret.name} (${requiredLabel})`;
+
+  console.log(pc.cyan(`\n  ${secret.name}`));
+  console.log(pc.dim(`  ${secret.description}`));
+  console.log(pc.dim(`  Where to get: ${secret.whereToGet}`));
+
+  const { value } = await prompts({
+    type: 'password',
+    name: 'value',
+    message,
+    validate: (v) => {
+      if (secret.required && !(v && v.trim())) return 'This secret is required for your workflows.';
+      return true;
+    },
+  });
+
+  if (value === undefined) return null;
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (!trimmed && !secret.required) return null;
+  return trimmed || null;
 }

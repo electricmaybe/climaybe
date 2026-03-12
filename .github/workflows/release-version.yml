@@ -1,0 +1,38 @@
+# On merge to main: determine version from conventional commits, bump package.json, push tag.
+# Tag push triggers Release workflow → tests + npm publish.
+name: Release version
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    name: Bump version and tag
+    runs-on: ubuntu-latest
+    # Skip when the push is the version-bump commit from semantic-release (avoid loop)
+    if: "!contains(github.event.head_commit.message, 'chore(release):')"
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: node scripts/run-tests.js
+
+      - name: Release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,238 @@
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import {
+  readPkg,
+  readConfig,
+  writeConfig,
+  getStoreAliases,
+  getMode,
+  isPreviewWorkflowsEnabled,
+  isBuildWorkflowsEnabled,
+  addStoreToConfig,
+} from '../../src/lib/config.js';
+
+describe('config', () => {
+  let cwd;
+
+  function setup() {
+    cwd = mkdtempSync(join(tmpdir(), 'climaybe-config-'));
+    return cwd;
+  }
+
+  function teardown() {
+    if (cwd && existsSync(cwd)) rmSync(cwd, { recursive: true });
+  }
+
+  describe('readPkg', () => {
+    it('returns null when package.json does not exist', () => {
+      const dir = setup();
+      try {
+        assert.strictEqual(readPkg(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns parsed package.json when it exists', () => {
+      const dir = setup();
+      try {
+        const pkg = { name: 'my-theme', version: '1.0.0' };
+        writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg), 'utf-8');
+        assert.deepStrictEqual(readPkg(dir), pkg);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('readConfig', () => {
+    it('returns null when no package.json', () => {
+      const dir = setup();
+      try {
+        assert.strictEqual(readConfig(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns null when package.json has no config key', () => {
+      const dir = setup();
+      try {
+        writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'x' }), 'utf-8');
+        assert.strictEqual(readConfig(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns config object when present', () => {
+      const dir = setup();
+      try {
+        const config = { port: 9295, stores: { foo: 'foo.myshopify.com' } };
+        writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'x', config }), 'utf-8');
+        assert.deepStrictEqual(readConfig(dir), config);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('writeConfig', () => {
+    it('creates package.json with config when missing', () => {
+      const dir = setup();
+      try {
+        writeConfig({ port: 9295, stores: {} }, dir);
+        const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
+        assert.ok(pkg.config);
+        assert.strictEqual(pkg.config.port, 9295);
+        assert.deepStrictEqual(pkg.config.stores, {});
+      } finally {
+        teardown();
+      }
+    });
+
+    it('merges config into existing package.json', () => {
+      const dir = setup();
+      try {
+        writeFileSync(
+          join(dir, 'package.json'),
+          JSON.stringify({ name: 'theme', version: '1.0.0', config: { port: 9295 } }, null, 2),
+          'utf-8'
+        );
+        writeConfig({ stores: { a: 'a.myshopify.com' } }, dir);
+        const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
+        assert.strictEqual(pkg.config.port, 9295);
+        assert.deepStrictEqual(pkg.config.stores, { a: 'a.myshopify.com' });
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('getStoreAliases', () => {
+    it('returns empty array when no config or no stores', () => {
+      const dir = setup();
+      try {
+        assert.deepStrictEqual(getStoreAliases(dir), []);
+        writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'x', config: {} }), 'utf-8');
+        assert.deepStrictEqual(getStoreAliases(dir), []);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns keys of config.stores', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { foo: 'f.myshopify.com', bar: 'b.myshopify.com' } }, dir);
+        const aliases = getStoreAliases(dir);
+        assert.strictEqual(aliases.length, 2);
+        assert.ok(aliases.includes('foo'));
+        assert.ok(aliases.includes('bar'));
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('getMode', () => {
+    it('returns single when one store', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { foo: 'f.myshopify.com' } }, dir);
+        assert.strictEqual(getMode(dir), 'single');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns multi when multiple stores', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { foo: 'f.myshopify.com', bar: 'b.myshopify.com' } }, dir);
+        assert.strictEqual(getMode(dir), 'multi');
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('isPreviewWorkflowsEnabled', () => {
+    it('returns false when not set or false', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {} }, dir);
+        assert.strictEqual(isPreviewWorkflowsEnabled(dir), false);
+        writeConfig({ stores: {}, preview_workflows: false }, dir);
+        assert.strictEqual(isPreviewWorkflowsEnabled(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns true when preview_workflows is true', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {}, preview_workflows: true }, dir);
+        assert.strictEqual(isPreviewWorkflowsEnabled(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('isBuildWorkflowsEnabled', () => {
+    it('returns false when not set or false', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {} }, dir);
+        assert.strictEqual(isBuildWorkflowsEnabled(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns true when build_workflows is true', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {}, build_workflows: true }, dir);
+        assert.strictEqual(isBuildWorkflowsEnabled(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('addStoreToConfig', () => {
+    it('adds store and sets default_store when first', () => {
+      const dir = setup();
+      try {
+        writeConfig({ port: 9295, stores: {} }, dir);
+        const result = addStoreToConfig('myshop', 'myshop.myshopify.com', dir);
+        assert.strictEqual(result.stores.myshop, 'myshop.myshopify.com');
+        assert.strictEqual(result.default_store, 'myshop.myshopify.com');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('adds store without overwriting default_store when not first', () => {
+      const dir = setup();
+      try {
+        writeConfig({
+          port: 9295,
+          default_store: 'first.myshopify.com',
+          stores: { first: 'first.myshopify.com' },
+        }, dir);
+        const result = addStoreToConfig('second', 'second.myshopify.com', dir);
+        assert.strictEqual(result.default_store, 'first.myshopify.com');
+        assert.strictEqual(result.stores.second, 'second.myshopify.com');
+      } finally {
+        teardown();
+      }
+    });
+  });
+});
