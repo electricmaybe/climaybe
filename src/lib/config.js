@@ -14,6 +14,7 @@ function pkgPath(cwd = process.cwd()) {
 /**
  * Read the full package.json from a target repo.
  * Returns null if it doesn't exist.
+ * @public (used by tests)
  */
 export function readPkg(cwd = process.cwd()) {
   const p = pkgPath(cwd);

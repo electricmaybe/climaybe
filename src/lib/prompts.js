@@ -6,7 +6,7 @@ import pc from 'picocolors';
  * "voldt-staging.myshopify.com" → "voldt-staging"
  */
 export function extractAlias(domain) {
-  return domain.replace(/\.myshopify\.com$/i, '').trim();
+  return domain.trim().replace(/\.myshopify\.com$/i, '').trim();
 }
 
 /**

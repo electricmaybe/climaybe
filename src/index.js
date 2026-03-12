@@ -1,11 +1,14 @@
 import { Command } from 'commander';
-import { initCommand } from './commands/init.js';
+import { initCommand, reinitCommand } from './commands/init.js';
 import { addStoreCommand } from './commands/add-store.js';
 import { switchCommand } from './commands/switch.js';
 import { syncCommand } from './commands/sync.js';
 import { updateWorkflowsCommand } from './commands/update-workflows.js';
 
-export function run(argv) {
+/**
+ * Create the CLI program (for testing and for run).
+ */
+export function createProgram() {
   const program = new Command();
 
   program
@@ -17,6 +20,11 @@ export function run(argv) {
     .command('init')
     .description('Initialize CI/CD setup for a Shopify theme repo')
     .action(initCommand);
+
+  program
+    .command('reinit')
+    .description('Reinitialize CI/CD setup (removes existing config and re-scaffolds workflows)')
+    .action(reinitCommand);
 
   program
     .command('add-store')
@@ -40,5 +48,9 @@ export function run(argv) {
     .description('Refresh GitHub Actions workflows from latest bundled templates')
     .action(updateWorkflowsCommand);
 
-  program.parse(argv);
+  return program;
+}
+
+export function run(argv) {
+  createProgram().parse(argv);
 }

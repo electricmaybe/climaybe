@@ -4,6 +4,11 @@ import pc from 'picocolors';
 const exec = (cmd, cwd = process.cwd()) =>
   execSync(cmd, { cwd, encoding: 'utf-8', stdio: 'pipe' }).trim();
 
+function isExpectedGitError(err, patterns) {
+  const text = [err.message, err.stderr].filter(Boolean).join(' ');
+  return patterns.some((p) => text.includes(p));
+}
+
 /**
  * Check if current directory is a git repo.
  */
@@ -11,7 +16,10 @@ export function isGitRepo(cwd = process.cwd()) {
   try {
     exec('git rev-parse --is-inside-work-tree', cwd);
     return true;
-  } catch {
+  } catch (err) {
+    if (!isExpectedGitError(err, ['not a git repository'])) {
+      console.error(err);
+    }
     return false;
   }
 }
@@ -30,7 +38,10 @@ export function branchExists(name, cwd = process.cwd()) {
   try {
     exec(`git rev-parse --verify ${name}`, cwd);
     return true;
-  } catch {
+  } catch (err) {
+    if (!isExpectedGitError(err, ['Needed a single revision'])) {
+      console.error(err);
+    }
     return false;
   }
 }
@@ -71,7 +82,14 @@ export function ensureStagingBranch(cwd = process.cwd()) {
 export function ensureInitialCommit(cwd = process.cwd()) {
   try {
     exec('git rev-parse HEAD', cwd);
-  } catch {
+  } catch (err) {
+    const expectedNoCommit = isExpectedGitError(err, [
+      'unknown revision',
+      'path not in the working tree',
+    ]);
+    if (!expectedNoCommit) {
+      console.error(err);
+    }
     // No commits yet — create an initial one
     exec('git add -A', cwd);
     exec('git commit -m "chore: initial commit" --allow-empty', cwd);
