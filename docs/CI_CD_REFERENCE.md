@@ -10,7 +10,9 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
   - On PR open/sync: **release-pr-check** finds latest tag on main (e.g. `v3.1.12`), generates AI changelog from that tag to PR head, and creates a **pre-release patch tag** (e.g. `v3.1.13`) on main to lock “last v3.1.x” before merge.
   - On merge: **post-merge-tag** does **minor** bump from latest tag (e.g. `v3.1.13` → `v3.2.0`). Changelog from last tag to HEAD.
 - **Non-staging to main** (hotfix backports, direct commits): **Patch** bump only. Not at commit time; **nightly workflow** at 02:00 US Eastern collects commits since latest tag, generates AI changelog, and creates one patch tag.
-- All version bumps update `config/settings_schema.json` automatically.
+- **Where version bump runs**: Only on **main**. It is triggered by **post-merge-tag** (after a staging → main merge) or **nightly-hotfix** (cron on main). Branches `staging`, `staging-<alias>`, and `live-<alias>` do **not** run version bump themselves.
+- **Main → staging-<alias>**: After any push to main (except pure store-sync commits), **main-to-staging-stores** merges main into each `staging-<alias>` so store branches stay in sync: **version bumps** (new version in schema + package.json), **hotfixes** (changes from live or staging-<alias> that were merged to main), and normal staging→main releases. Only commits that are purely store-sync (`[stores-to-root]`, `[root-to-stores]`) are skipped to avoid loops.
+- **What gets updated**: Every version bump updates `config/settings_schema.json` (`theme_info.theme_version`). If `package.json` exists, its `version` field is updated to match (e.g. `3.2.0`).
 
 ## Local dev (multi-store)
 
@@ -23,14 +25,14 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - Direct pushes to **`staging-<store>`** or **`live-<store>`** are synced back to `main` automatically by **multistore-hotfix-to-main**.
 - **No PR**: The workflow merges the store branch into `main` and pushes. Merge commit message contains `[hotfix-backport]`.
 - **live-***: Same as staging-*: **root-to-stores** detects source (main vs elsewhere). From main → stores→root; from elsewhere → root→stores, then **multistore-hotfix-to-main** merges to main (skips when push was merge from main).
-- **main-to-staging-stores** does not run on `[hotfix-backport]`, version-bump, or store-sync commits (`[stores-to-root]`, `[root-to-stores]`), so hotfix syncs never re-trigger release to stores.
+- **main-to-staging-stores** runs on every push to main except pure store-sync commits (`[stores-to-root]`, `[root-to-stores]`). So version bumps and hotfix backports (live or staging-<alias> → main) are merged back into each `staging-<alias>`, keeping staging in sync with main.
 - **Root JSON files** (config/settings_data.json, templates/*.json, sections/*.json) are **ignored** between main and staging-&lt;alias&gt;: when main is synced to a store branch, the workflow merges main then restores root from `stores/<alias>/`, so main’s root JSONs never overwrite store-specific data.
 
 ## Workflow names and roles
 
 | Concept | File | Trigger | What it does |
 |--------|------|---------|--------------|
-| main-to-staging-<store> | `main-to-staging-stores.yml` | Push to `main` | Merges main into each `staging-<alias>` (local merge + push). Root JSONs ignored (restored from `stores/<alias>/`). Skips on `[hotfix-backport]`, version-bump, store-sync commits. |
+| main-to-staging-<store> | `main-to-staging-stores.yml` | Push to `main` | Merges main into each `staging-<alias>` (local merge + push). Root JSONs ignored (restored from `stores/<alias>/`). Skips only on pure store-sync commits; runs on version-bump and hotfix backports so staging-<alias> stay in sync with main. |
 | stores-to-root | `stores-to-root.yml` | Push to `staging-*` | **From main** (merge): copies `stores/<alias>/` → root. **From elsewhere** (Shopify, direct, feature): copies root → `stores/<alias>/`. |
 | pr-to-live | `pr-to-live.yml` | After stores-to-root | Opens PR from `staging-<alias>` to `live-<alias>`. |
 | root-to-stores | `root-to-stores.yml` | Push to `live-*` | **From main** (merge): copies `stores/<alias>/` → root. **From elsewhere**: copies root → `stores/<alias>/`. Same logic as stores-to-root on staging-*. |

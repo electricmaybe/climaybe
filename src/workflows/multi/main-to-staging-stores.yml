@@ -2,7 +2,9 @@
 # When main is pushed (e.g. after staging→main merge), syncs main to each staging-<alias>.
 # Root JSON files (config/settings_data.json, templates/*.json, sections/*.json) are ignored:
 # merge brings main in but we immediately restore root from stores/<alias>/ so store-specific data is kept.
-# Skips [hotfix-backport], version-bump, and store-sync commits so hotfix syncs do not re-trigger release to stores.
+# Runs on every push to main except pure store-sync commits ([stores-to-root], [root-to-stores]), so that:
+# - Version-bump commits: staging-<alias> get the new version.
+# - Hotfix backports (live or staging-<alias> → main): staging-<alias> get those changes too, so staging stays in sync with main.
 
 name: Main to Staging Stores
 
@@ -16,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Gate: skip hotfix backports and version bump commits
+  # Gate: skip only pure store-sync commits so we don't create loops. Hotfix and version-bump run so staging-<alias> stay in sync with main.
   gate:
     runs-on: ubuntu-latest
     outputs:
@@ -27,14 +29,8 @@ jobs:
         run: |
           COMMIT_MSG="${{ github.event.head_commit.message }}"
 
-          if echo "$COMMIT_MSG" | grep -q "\[hotfix-backport\]"; then
-            echo "Skipping — hotfix backport commit (do not re-release to stores)"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          elif echo "$COMMIT_MSG" | grep -q "chore(release): bump version"; then
-            echo "Skipping — version bump commit"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          elif echo "$COMMIT_MSG" | grep -qE "\[skip-store-sync\]|\[stores-to-root\]|\[root-to-stores\]"; then
-            echo "Skipping — store sync commit"
+          if echo "$COMMIT_MSG" | grep -qE "\[skip-store-sync\]|\[stores-to-root\]|\[root-to-stores\]"; then
+            echo "Skipping — store sync commit (avoid loop)"
             echo "should_run=false" >> $GITHUB_OUTPUT
           else
             echo "should_run=true" >> $GITHUB_OUTPUT

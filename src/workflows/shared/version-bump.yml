@@ -1,5 +1,6 @@
 # climaybe — Version Bump (Reusable Workflow)
-# Bumps version in settings_schema.json, creates a git tag, and pushes.
+# Bumps version in settings_schema.json and package.json (if present), creates a git tag, and pushes.
+# Only runs on main (called from post-merge-tag and nightly-hotfix). staging / staging-* / live-* do not run version bump.
 
 name: Version Bump
 
@@ -99,25 +100,37 @@ jobs:
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
 
-      - name: Update settings_schema.json
+      - name: Update settings_schema.json and package.json
+        env:
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
         run: |
-          NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+          export VERSION_PLAIN="${NEW_VERSION#v}"
           SCHEMA_FILE="config/settings_schema.json"
 
           if [ -f "$SCHEMA_FILE" ]; then
-            # Update the theme_info version in settings_schema.json
             node -e "
               const fs = require('fs');
+              const v = process.env.VERSION_PLAIN;
               const schema = JSON.parse(fs.readFileSync('$SCHEMA_FILE', 'utf-8'));
               const themeInfo = schema.find(s => s.name === 'theme_info');
-              if (themeInfo) {
-                themeInfo.theme_version = '${NEW_VERSION#v}';
-              }
+              if (themeInfo) themeInfo.theme_version = v;
               fs.writeFileSync('$SCHEMA_FILE', JSON.stringify(schema, null, 2) + '\n');
             "
             echo "Updated $SCHEMA_FILE to ${NEW_VERSION}"
           else
             echo "No $SCHEMA_FILE found, skipping schema update."
+          fi
+
+          if [ -f "package.json" ]; then
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+              pkg.version = process.env.VERSION_PLAIN;
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+            echo "Updated package.json version to ${VERSION_PLAIN}"
+          else
+            echo "No package.json found, skipping."
           fi
 
       - name: Commit and tag
