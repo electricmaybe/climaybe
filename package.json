@@ -1,6 +1,6 @@
 {
   "name": "climaybe",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Shopify CI/CD CLI — scaffolds workflows, branch strategy, and store config for single-store and multi-store theme repos",
   "type": "module",
   "bin": {
