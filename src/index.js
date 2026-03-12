@@ -4,6 +4,7 @@ import { addStoreCommand } from './commands/add-store.js';
 import { switchCommand } from './commands/switch.js';
 import { syncCommand } from './commands/sync.js';
 import { updateWorkflowsCommand } from './commands/update-workflows.js';
+import { ensureBranchesCommand } from './commands/ensure-branches.js';
 
 /**
  * Create the CLI program (for testing and for run).
@@ -50,6 +51,11 @@ export function createProgram(version = '0.0.0', packageDir = '') {
     .command('update-workflows')
     .description('Refresh GitHub Actions workflows from latest bundled templates')
     .action(updateWorkflowsCommand);
+
+  program
+    .command('ensure-branches')
+    .description('Create missing staging and per-store branches from current HEAD (then push)')
+    .action(ensureBranchesCommand);
 
   return program;
 }

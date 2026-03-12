@@ -16,7 +16,7 @@ describe('CLI', () => {
     assert.ok(reinitCmd);
   });
 
-  it('registers add-store, switch, sync, update-workflows', () => {
+  it('registers add-store, switch, sync, ensure-branches, update-workflows', () => {
     const program = createProgram();
     const names = program.commands.map((c) => c.name());
     assert.ok(names.includes('init'));
@@ -24,6 +24,7 @@ describe('CLI', () => {
     assert.ok(names.includes('add-store'));
     assert.ok(names.includes('switch'));
     assert.ok(names.includes('sync'));
+    assert.ok(names.includes('ensure-branches'));
     assert.ok(names.includes('update-workflows'));
   });
 });
