@@ -2,6 +2,13 @@
 
 Shopify CI/CD CLI — scaffolds GitHub Actions workflows, branch strategy, and store config for single-store and multi-store theme repositories.
 
+**Commit linting and AI-assisted commits are available as optional setup steps:**
+
+- **Conventional commit linting:** During `climaybe init`, you can choose to automatically install and configure [commitlint](https://commitlint.js.org/) and [Husky](https://typicode.github.io/husky) to enforce [Conventional Commits](https://www.conventionalcommits.org/) in your theme repository.
+- **Cursor AI commit skill:** You can also opt-in to installing the [Cursor AI commit skill](https://cursor.so/) (`.cursor/skills/commit/SKILL.md`) for AI-assisted, conventional commit message support in your project.
+
+Both options streamline commit message quality and team workflows but are fully optional during setup.
+
 ## Install
 
 Install in your theme repo (project-only, no global install):
