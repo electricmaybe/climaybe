@@ -19,6 +19,12 @@ function exec(cmd, cwd) {
   return execSync(cmd, { cwd, encoding: 'utf-8', stdio: 'pipe' }).trim();
 }
 
+/** Set local git identity so commits work in CI (no global user.name/user.email). */
+function setGitIdentity(cwd) {
+  exec('git config user.email "test@test.com"', cwd);
+  exec('git config user.name "Test"', cwd);
+}
+
 describe('git', () => {
   let cwd;
 
@@ -57,6 +63,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         writeFileSync(join(dir, 'f'), 'x', 'utf-8');
         exec('git add f', dir);
         exec('git commit -m "first"', dir);
@@ -73,6 +80,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         writeFileSync(join(dir, 'f'), 'x', 'utf-8');
         exec('git add f', dir);
         exec('git commit -m "first"', dir);
@@ -86,6 +94,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         writeFileSync(join(dir, 'f'), 'x', 'utf-8');
         exec('git add f', dir);
         exec('git commit -m "first"', dir);
@@ -102,6 +111,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         writeFileSync(join(dir, 'f'), 'x', 'utf-8');
         exec('git add f', dir);
         exec('git commit -m "first"', dir);
@@ -117,6 +127,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         writeFileSync(join(dir, 'f'), 'x', 'utf-8');
         exec('git add f', dir);
         exec('git commit -m "first"', dir);
@@ -134,6 +145,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         writeFileSync(join(dir, 'f'), 'x', 'utf-8');
         exec('git add f', dir);
         exec('git commit -m "first"', dir);
@@ -151,6 +163,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         writeFileSync(join(dir, 'f'), 'x', 'utf-8');
         exec('git add f', dir);
         exec('git commit -m "first"', dir);
@@ -167,6 +180,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         ensureInitialCommit(dir);
         exec('git rev-parse HEAD', dir);
         assert.ok(true);
@@ -179,6 +193,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         writeFileSync(join(dir, 'f'), 'x', 'utf-8');
         exec('git add f', dir);
         exec('git commit -m "first"', dir);
@@ -205,6 +220,7 @@ describe('git', () => {
       const dir = setup();
       try {
         exec('git init', dir);
+        setGitIdentity(dir);
         ensureGitRepo(dir);
         assert.strictEqual(isGitRepo(dir), true);
       } finally {
