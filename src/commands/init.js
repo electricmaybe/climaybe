@@ -1,10 +1,28 @@
 import prompts from 'prompts';
 import pc from 'picocolors';
-import { promptStoreLoop, promptPreviewWorkflows, promptBuildWorkflows } from '../lib/prompts.js';
+import {
+  promptStoreLoop,
+  promptPreviewWorkflows,
+  promptBuildWorkflows,
+  promptConfigureCISecrets,
+  promptUpdateExistingSecrets,
+  promptSecretValue,
+} from '../lib/prompts.js';
 import { readConfig, writeConfig } from '../lib/config.js';
 import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
+import {
+  isGhAvailable,
+  hasGitHubRemote,
+  isGlabAvailable,
+  hasGitLabRemote,
+  listGitHubSecrets,
+  listGitLabVariables,
+  getSecretsToPrompt,
+  setSecret,
+  setGitLabVariable,
+} from '../lib/github-secrets.js';
 
 /**
  * Run the full init flow: prompts, config write, git, branches, workflows.
@@ -75,9 +93,74 @@ async function runInitFlow() {
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
 
   console.log(pc.dim('\n  Next steps:'));
-  console.log(pc.dim('    1. Add GEMINI_API_KEY to your GitHub repo secrets'));
-  console.log(pc.dim('    2. Push to GitHub and start using the branching workflow'));
+  console.log(pc.dim('    1. Add GEMINI_API_KEY to your CI secrets (or configure below)'));
+  console.log(pc.dim('    2. Push to GitHub/GitLab and start using the branching workflow'));
   console.log(pc.dim('    3. Tag your first release: git tag v1.0.0\n'));
+
+  const ciHost = await promptConfigureCISecrets();
+  if (ciHost === 'skip') return;
+
+  const secretsToPrompt = getSecretsToPrompt({
+    enablePreviewWorkflows,
+    enableBuildWorkflows,
+    mode,
+    stores,
+  });
+  const total = secretsToPrompt.length;
+  const setter =
+    ciHost === 'github'
+      ? { check: isGhAvailable, checkRemote: hasGitHubRemote, set: setSecret, name: 'GitHub' }
+      : { check: isGlabAvailable, checkRemote: hasGitLabRemote, set: setGitLabVariable, name: 'GitLab' };
+
+  if (!setter.check()) {
+    const installUrl = ciHost === 'github' ? 'https://cli.github.com/' : 'https://gitlab.com/gitlab-org/cli';
+    console.log(pc.yellow(`  ${setter.name} CLI is not installed or not logged in.`));
+    console.log(pc.dim(`  Install: ${installUrl} — then run ${ciHost === 'github' ? 'gh' : 'glab'} auth login`));
+    console.log(
+      pc.dim(
+        ciHost === 'github'
+          ? '  You can add secrets later in the repo: Settings → Secrets and variables → Actions.\n'
+          : '  You can add variables later in the repo: Settings → CI/CD → Variables.\n'
+      )
+    );
+    return;
+  }
+  if (!setter.checkRemote()) {
+    console.log(pc.yellow('  This repo has no ' + setter.name + ' remote (origin).'));
+    console.log(pc.dim('  Add a remote and push first, then add secrets/variables in the repo Settings.\n'));
+    return;
+  }
+
+  const existingNames =
+    ciHost === 'github' ? listGitHubSecrets() : listGitLabVariables();
+  const namesWeWillPrompt = new Set(secretsToPrompt.map((s) => s.name));
+  const alreadySet = existingNames.filter((n) => namesWeWillPrompt.has(n));
+  if (alreadySet.length > 0) {
+    const doUpdate = await promptUpdateExistingSecrets(alreadySet);
+    if (!doUpdate) {
+      console.log(pc.dim('\n  Skipping. Existing secrets left unchanged.\n'));
+      return;
+    }
+  }
+
+  console.log(pc.cyan(`\n  Configure ${total} ${setter.name} secret(s)/variable(s). Leave optional ones blank to skip.\n`));
+  let setCount = 0;
+  for (let i = 0; i < secretsToPrompt.length; i++) {
+    const secret = secretsToPrompt[i];
+    const value = await promptSecretValue(secret, i, total);
+    if (value) {
+      try {
+        await setter.set(secret.name, value);
+        console.log(pc.green(`  Set ${secret.name}.`));
+        setCount++;
+      } catch (err) {
+        console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
+      }
+    }
+  }
+  if (setCount > 0) {
+    console.log(pc.green(`\n  Done. ${setCount} secret(s) set for this repository.\n`));
+  }
 }
 
 export async function initCommand() {
