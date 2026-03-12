@@ -23,12 +23,15 @@ if (testFiles.length === 0) {
   process.exit(1);
 }
 
-// Run test files serially on Node 20+ to avoid process.cwd() races between
-// command tests that chdir into temp dirs. (--test-concurrency added in Node 20.)
-const nodeMajor = parseInt(process.version.slice(1).split('.')[0], 10);
-const args = ['--test', ...(nodeMajor >= 20 ? ['--test-concurrency=1'] : []), ...testFiles];
-const result = spawnSync(process.execPath, args, {
-  stdio: 'inherit',
-  cwd: process.cwd(),
-});
-process.exit(result.status ?? 1);
+// Run each test file in its own process, one after another. Command tests
+// chdir() into temp dirs and use process.cwd(); parallel file execution
+// caused cwd races and flaky failures in CI.
+let failed = 0;
+for (const file of testFiles) {
+  const result = spawnSync(process.execPath, ['--test', file], {
+    stdio: 'inherit',
+    cwd: process.cwd(),
+  });
+  if (result.status !== 0) failed = result.status ?? 1;
+}
+process.exit(failed);
