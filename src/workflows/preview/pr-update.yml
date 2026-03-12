@@ -87,11 +87,13 @@ jobs:
           echo "Shopify credentials are configured for alias: ${{ steps.resolve.outputs.alias }}"
 
   cleanup-themes:
-    needs: extract-pr-number
+    needs: [extract-pr-number, validate-environment]
     uses: ./.github/workflows/reusable-cleanup-themes.yml
     with:
       pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
-    secrets: inherit
+    secrets:
+      SHOPIFY_STORE_URL: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
 
   share-theme:
     needs: [validate-environment, extract-pr-number, cleanup-themes]

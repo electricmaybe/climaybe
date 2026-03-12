@@ -33,8 +33,11 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
-            echo "Missing Shopify secrets."
-            exit 1
+            echo "Missing Shopify secrets; skipping theme cleanup (no themes deleted)."
+            echo "deleted_count=0" >> $GITHUB_OUTPUT
+            echo "deleted_themes<<DELETED_EOF" >> $GITHUB_OUTPUT
+            echo "DELETED_EOF" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
           THEME_LIST=$(shopify theme list \

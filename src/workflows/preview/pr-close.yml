@@ -12,12 +12,66 @@ jobs:
   extract-pr-number:
     uses: ./.github/workflows/reusable-extract-pr-number.yml
 
+  resolve-store:
+    runs-on: ubuntu-latest
+    outputs:
+      store_alias_secret: ${{ steps.resolve.outputs.alias_secret }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve default store alias
+        id: resolve
+        run: |
+          ALIAS=$(node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+            const stores = pkg?.config?.stores || {};
+            const defaultStoreRaw = pkg?.config?.default_store;
+            const normalize = (v) => String(v || '')
+              .toLowerCase()
+              .replace(/^https?:\\/\\//, '')
+              .replace(/\\/.*$/, '');
+            const defaultStore = normalize(defaultStoreRaw);
+            let alias = '';
+            if (defaultStore) {
+              for (const [k, d] of Object.entries(stores)) {
+                if (normalize(d) === defaultStore) {
+                  alias = k;
+                  break;
+                }
+              }
+            }
+            if (!alias) {
+              alias = Object.keys(stores)[0] || '';
+            }
+            if (!alias && defaultStore) {
+              const subdomain = defaultStore.split('.')[0] || 'default';
+              alias = subdomain.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'default';
+            }
+            if (!alias) {
+              alias = 'default';
+            }
+            process.stdout.write(alias);
+          ")
+
+          if [ -z "$ALIAS" ]; then
+            echo "Could not resolve default store alias from package.json config."
+            exit 1
+          fi
+
+          ALIAS_SECRET=$(echo "$ALIAS" | tr '[:lower:]-' '[:upper:]_')
+          echo "alias=$ALIAS" >> $GITHUB_OUTPUT
+          echo "alias_secret=$ALIAS_SECRET" >> $GITHUB_OUTPUT
+
   cleanup-theme:
-    needs: extract-pr-number
+    needs: [extract-pr-number, resolve-store]
     uses: ./.github/workflows/reusable-cleanup-themes.yml
     with:
       pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
-    secrets: inherit
+    secrets:
+      SHOPIFY_STORE_URL: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', needs.resolve-store.outputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', needs.resolve-store.outputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
 
   comment-on-pr:
     needs: cleanup-theme
