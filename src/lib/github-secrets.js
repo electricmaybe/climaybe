@@ -1,5 +1,4 @@
-import { spawn } from 'node:child_process';
-import { execSync } from 'node:child_process';
+import { spawn, spawnSync, execSync } from 'node:child_process';
 import pc from 'picocolors';
 
 /**
@@ -81,11 +80,30 @@ export function hasGitHubRemote(cwd = process.cwd()) {
 }
 
 /**
+ * Get GitHub repo as "owner/repo" from origin remote. Returns null if not a GitHub URL or parse fails.
+ * Used to pass -R to gh when the repo has multiple remotes.
+ */
+export function getGitHubRepoSpec(cwd = process.cwd()) {
+  try {
+    const url = execSync('git remote get-url origin', { cwd, encoding: 'utf-8', stdio: 'pipe' }).trim();
+    // https://github.com/owner/repo[.git] or git@github.com:owner/repo[.git]
+    const m = url.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+    return m ? `${m[1]}/${m[2]}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * List repository secret names (GitHub). Returns [] on error or if none.
  */
 export function listGitHubSecrets(cwd = process.cwd()) {
   try {
-    const out = execSync('gh secret list --json name', { cwd, encoding: 'utf-8', stdio: 'pipe' }).trim();
+    const repo = getGitHubRepoSpec(cwd);
+    const args = ['secret', 'list', '--json', 'name'];
+    if (repo) args.push('-R', repo);
+    const result = spawnSync('gh', args, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    const out = (result.stdout || '').trim();
     const data = JSON.parse(out || '[]');
     return Array.isArray(data) ? data.map((s) => s.name).filter(Boolean) : [];
   } catch {
@@ -109,11 +127,16 @@ export function listGitLabVariables(cwd = process.cwd()) {
 
 /**
  * Set a repository secret via gh CLI. Value is passed via stdin to avoid argv exposure.
+ * Uses -R owner/repo from origin when available so gh works with multiple remotes.
  */
-export function setSecret(name, value) {
+export function setSecret(name, value, cwd = process.cwd()) {
   return new Promise((resolve, reject) => {
-    const child = spawn('gh', ['secret', 'set', name], {
+    const repo = getGitHubRepoSpec(cwd);
+    const args = ['secret', 'set', name];
+    if (repo) args.push('-R', repo);
+    const child = spawn('gh', args, {
       stdio: ['pipe', 'inherit', 'inherit'],
+      cwd,
     });
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`gh secret set exited with ${code}`))));
