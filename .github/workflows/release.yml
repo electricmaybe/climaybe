@@ -1,0 +1,46 @@
+# Release: on tag v* run tests and publish to npm.
+# Trigger: git tag v1.2.0 && git push origin v1.2.0
+# Requires: NPM_TOKEN secret (Automation token from npmjs.com, with publish rights).
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Test and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: node scripts/run-tests.js
+
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "v${PKG}" != "${TAG}" ]; then
+            echo "Tag ${TAG} does not match package.json version ${PKG}"
+            exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

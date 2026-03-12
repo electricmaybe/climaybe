@@ -1,0 +1,57 @@
+# CI: run tests and validate conventional commits on every PR and push to main.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: node scripts/run-tests.js
+
+  commitlint:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate commits (branch)
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to HEAD
+        if: github.event_name == 'pull_request'
+
+      - name: Validate PR title
+        run: |
+          echo "${{ github.event.pull_request.title }}" > /tmp/pr-title.txt
+          npx commitlint --edit /tmp/pr-title.txt
+        if: github.event_name == 'pull_request'

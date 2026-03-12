@@ -29,11 +29,12 @@ jobs:
             const fs = require('fs');
             const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
             const stores = pkg?.config?.stores || {};
+            const defaultStoreRaw = pkg?.config?.default_store;
             const normalize = (v) => String(v || '')
               .toLowerCase()
               .replace(/^https?:\\/\\//, '')
               .replace(/\\/.*$/, '');
-            const defaultStore = normalize(pkg?.config?.default_store);
+            const defaultStore = normalize(defaultStoreRaw);
             let alias = '';
             if (defaultStore) {
               for (const [k, d] of Object.entries(stores)) {
@@ -45,6 +46,13 @@ jobs:
             }
             if (!alias) {
               alias = Object.keys(stores)[0] || '';
+            }
+            if (!alias && defaultStore) {
+              const subdomain = defaultStore.split('.')[0] || 'default';
+              alias = subdomain.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'default';
+            }
+            if (!alias) {
+              alias = 'default';
             }
             process.stdout.write(alias);
           ")
