@@ -31,7 +31,8 @@
   "homepage": "https://github.com/electricmaybe/climaybe#readme",
   "scripts": {
     "test": "node scripts/run-tests.js 2>&1 | tee test.log",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prepublishOnly": "node -e \"require('fs').writeFileSync('bin/version.txt', require('./package.json').version)\""
   },
   "release": {
     "branches": [

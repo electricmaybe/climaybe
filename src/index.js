@@ -8,14 +8,16 @@ import { updateWorkflowsCommand } from './commands/update-workflows.js';
 /**
  * Create the CLI program (for testing and for run).
  * @param {string} [version] - Version string (from bin/cli.js when run as CLI; from package.json in tests).
+ * @param {string} [packageDir] - Package root dir (shown with --version so user can see which install is running).
  */
-export function createProgram(version = '0.0.0') {
+export function createProgram(version = '0.0.0', packageDir = '') {
   const program = new Command();
+  const versionDisplay = packageDir ? `${version}\n  from: ${packageDir}` : version;
 
   program
     .name('climaybe')
     .description('Shopify CI/CD CLI — scaffolds workflows, branch strategy, and store config')
-    .version(version);
+    .version(versionDisplay);
 
   program
     .command('init')
@@ -52,6 +54,6 @@ export function createProgram(version = '0.0.0') {
   return program;
 }
 
-export function run(argv, version) {
-  createProgram(version).parse(argv);
+export function run(argv, version, packageDir = '') {
+  createProgram(version, packageDir).parse(argv);
 }
