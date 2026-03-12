@@ -1,5 +1,6 @@
 # Release: on tag v* run tests and publish to npm.
-# Trigger: git tag v1.2.0 && git push origin v1.2.0
+# Tags must be created by the Release version workflow (semantic-release on main).
+# Do not create tags manually — tag and package.json can drift (e.g. tag v1.4.0, package 1.3.3).
 # Requires: NPM_TOKEN secret (Automation token from npmjs.com, with publish rights).
 name: Release
 
@@ -13,7 +14,7 @@ jobs:
     name: Test and publish
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v6
@@ -36,7 +37,8 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           PKG=$(node -p "require('./package.json').version")
           if [ "v${PKG}" != "${TAG}" ]; then
-            echo "Tag ${TAG} does not match package.json version ${PKG}"
+            echo "Tag ${TAG} does not match package.json version ${PKG}. Removing invalid tag."
+            git push origin --delete "${TAG}"
             exit 1
           fi
 

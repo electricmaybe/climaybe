@@ -36,7 +36,7 @@ No separate `develop` or release branches; releases are cut from `main` via tags
   - `BREAKING CHANGE:` in body, or `feat!:`, `fix!:` → **major** (e.g. 1.1.0 → 2.0.0)
 - **On merge to main:** The [Release version](.github/workflows/release-version.yml) workflow runs [semantic-release](https://semantic-release.gitbook.io/) on Node 22 (required by semantic-release@25). It analyzes new commits, bumps `package.json`, pushes a commit and a tag (e.g. `v1.2.0`). Pushing that tag triggers the [Release](.github/workflows/release.yml) workflow, which runs tests and publishes to npm.
 - **Running semantic-release locally:** Requires Node **22.14+** or **24.10+** (e.g. `nvm use 22` then `npx semantic-release`). The rest of the project supports Node 20+.
-- **Manual release:** You can still create a tag manually (e.g. `git tag v1.2.0 && git push origin v1.2.0`) after bumping `package.json`; the Release workflow will publish. Prefer merging with conventional commits so versioning stays automatic.
+- **Do not create tags manually.** Tags must only be created by the [Release version](.github/workflows/release-version.yml) workflow (semantic-release). Manual tags can desync the GitHub tag from `package.json` (e.g. tag `v1.4.0` while package is still `1.3.3`); the Release workflow will then fail, remove the invalid tag, and not publish. To release, merge to `main` with conventional commits, or run `npx semantic-release` locally (Node 22+) so the version bump and tag are created together.
 
 ## Code and tests
 
