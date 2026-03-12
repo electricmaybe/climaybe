@@ -1,7 +1,8 @@
-# climaybe — Nightly Hotfix Tagger (Single-store)
+# climaybe — Nightly Hotfix Tagger (Single-store & Multi-store)
 # Runs at 02:00 US Eastern (07:00 UTC) every night.
-# If there are untagged commits on main (not from staging merges),
-# generates a changelog and creates a patch version tag.
+# Collects commits since latest tag (excluding release bumps and store-sync noise),
+# generates AI changelog, and creates a patch version tag.
+# Hotfix / non-staging merges are tagged here only (not at commit time).
 
 name: Nightly Hotfix Tag
 
@@ -20,6 +21,8 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       has_changes: ${{ steps.check.outputs.has_changes }}
       last_tag: ${{ steps.check.outputs.last_tag }}
@@ -27,34 +30,60 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check for untagged commits
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check for untagged commits (or create initial tag from settings_schema.json)
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -z "$LATEST_TAG" ]; then
+            SCHEMA="config/settings_schema.json"
+            if [ -f "$SCHEMA" ]; then
+              LATEST_TAG=$(node -e "
+                const fs = require('fs');
+                const arr = JSON.parse(fs.readFileSync('$SCHEMA', 'utf-8'));
+                const info = arr.find(x => x.name === 'theme_info');
+                const v = (info && info.theme_version) ? String(info.theme_version).trim() : '';
+                if (!v) process.exit(1);
+                let parts = v.replace(/^v/i, '').split('.');
+                if (parts.length === 2) parts.push('0');
+                if (parts.length < 3) parts = parts.concat(Array(3 - parts.length).fill('0')).slice(0, 3);
+                console.log('v' + parts.slice(0, 3).join('.'));
+              " 2>/dev/null || true)
+            fi
+            if [ -n "$LATEST_TAG" ]; then
+              if ! git rev-parse -q --verify "refs/tags/$LATEST_TAG" >/dev/null; then
+                git tag -a "$LATEST_TAG" -m "Initial version from settings_schema.json"
+                git push origin "$LATEST_TAG"
+                echo "Created initial tag $LATEST_TAG from settings_schema.json"
+              fi
+            fi
+          fi
 
           if [ -z "$LATEST_TAG" ]; then
-            echo "No tags found, skipping."
+            echo "No tags and no settings_schema.json theme_version, skipping."
             echo "has_changes=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           echo "last_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
-          # Collect candidate commits since last tag.
-          # Exclude known workflow/system commits first, then exclude commits
-          # that are associated with PRs whose source branch is staging-*.
+          # Commits since last tag; exclude only version-bump and store-sync noise.
+          # Include [hotfix-backport] and commits with no PR (e.g. direct merges).
           CANDIDATES=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%H%x09%s" | \
             grep -v "chore(release): bump version" | \
-            grep -v "\[hotfix-backport\]" | \
             grep -v "\[skip-store-sync\]" | \
             grep -v "\[stores-to-root\]" | \
             grep -v "\[root-to-stores\]" || true)
 
           COMMITS=""
-          SKIPPED_UNKNOWN=0
           while IFS=$'\t' read -r SHA SUBJECT; do
             [ -z "$SHA" ] && continue
 
@@ -62,13 +91,8 @@ jobs:
               repos/${{ github.repository }}/commits/$SHA/pulls \
               --jq '.[0].head.ref // ""' 2>/dev/null || true)
 
-            if [ -z "$HEAD_REF" ]; then
-              SKIPPED_UNKNOWN=$((SKIPPED_UNKNOWN + 1))
-              echo "Skipping commit due to missing PR metadata: $SHA"
-              continue
-            fi
-
-            if [[ "$HEAD_REF" == staging-* ]]; then
+            # Skip only store-sync PRs (staging-* → main). Include staging and everything else.
+            if [[ -n "$HEAD_REF" && "$HEAD_REF" == staging-* ]]; then
               echo "Skipping store-backport commit from $HEAD_REF: $SHA"
               continue
             fi
@@ -76,16 +100,12 @@ jobs:
             COMMITS="${COMMITS}${SUBJECT}"$'\n'
           done <<< "$CANDIDATES"
 
-          if [ "$SKIPPED_UNKNOWN" -gt 0 ]; then
-            echo "Skipped $SKIPPED_UNKNOWN commit(s) due to missing PR metadata (fail-safe)."
-          fi
-
           if [ -n "$COMMITS" ]; then
             COMMIT_COUNT=$(echo "$COMMITS" | wc -l | tr -d ' ')
             echo "Found $COMMIT_COUNT untagged commit(s) since $LATEST_TAG"
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
-            echo "No untagged hotfix commits since $LATEST_TAG"
+            echo "No untagged commits since $LATEST_TAG"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 

@@ -11,6 +11,8 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
 - `src/workflows/shared/ai-changelog.yml`
 - `src/workflows/single/release-pr-check.yml`
 - `src/workflows/single/post-merge-tag.yml`
+- `src/workflows/single/nightly-hotfix.yml`
+- `src/workflows/shared/version-bump.yml`
 - `src/workflows/preview/*` (new optional package)
 - `src/workflows/build/*` (new optional package)
 
@@ -29,7 +31,18 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
   - `static-fallback`
 - Added safer `jq` extraction behavior so parse failures fall through to fallback logic instead of crashing the step.
 
-## 2) `release-pr-check.yml` improvements
+## 2) Initial version from `settings_schema.json`
+
+When the repo has **no git tags**, versioning workflows now use `theme_version` from `config/settings_schema.json` (the `theme_info` object):
+
+- **release-pr-check**: Reads schema on main; creates and pushes tag `v{theme_version}` (e.g. `v1.0.0`) so pre-release and changelog have a real base. PR comment then shows that tag instead of `v0.0.0`.
+- **post-merge-tag**: Same: if no tags, create and push initial tag from schema so changelog and version-bump have a base.
+- **version-bump** (reusable): If no tags, uses schema’s `theme_version` as the numeric base for the next bump (no push; caller ensures the tag exists or bump is from that base).
+- **nightly-hotfix**: If no tags, creates and pushes initial tag from schema; does not run patch bump on that same run (no untagged commits yet).
+
+Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is missing or has no `theme_info.theme_version`, fallback remains `v0.0.0`.
+
+## 3) `release-pr-check.yml` improvements
 
 - Fixed `github-script` interpolation risk by passing values via environment variables:
   - `PRE_RELEASE_TAG`
@@ -40,7 +53,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
 - Added duplicate pre-release tag protection:
   - If the computed tag already exists locally, reuse it instead of re-creating/re-pushing.
 
-## 3) `post-merge-tag.yml` observability improvements
+## 4) `post-merge-tag.yml` observability improvements
 
 - Added explicit skip-reason logs for easier debugging, including:
   - hotfix backport commit skip
@@ -48,7 +61,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
   - staging PR title missing a release version
   - push that is not a merged staging release PR
 
-## 4) Optional preview + cleanup workflows package
+## 5) Optional preview + cleanup workflows package
 
 - Added `init` prompt: `Enable preview + cleanup workflows?`
 - Persisted selection in `package.json` config via `preview_workflows` flag.
@@ -68,7 +81,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
   - PR comment waits for rename completion.
   - PR numbering is standardized via padded/unpadded outputs to avoid cleanup name collisions.
 
-## 5) Optional build + Lighthouse workflows package
+## 6) Optional build + Lighthouse workflows package
 
 - Added `init` prompt: `Enable build + Lighthouse workflows?`
 - Persisted selection in `package.json` config via `build_workflows` flag.
@@ -79,14 +92,14 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
   - `create-release.yml`
 - Lighthouse job remains conditionally active via secret checks to avoid hard failures on repos that do not use Lighthouse credentials.
 
-## 6) Preview theme upload fix
+## 7) Preview theme upload fix
 
 - Updated `src/workflows/preview/reusable-share-theme.yml`:
   - Added `actions/checkout@v4` before `shopify theme share`.
   - Added repository root validation (`layout/theme.liquid`) to fail fast on misconfigured runs.
 - This prevents empty/404 preview themes caused by sharing from an empty runner workspace.
 
-## 7) Multi-store downstream trigger hardening
+## 8) Multi-store downstream trigger hardening
 
 - Updated `src/workflows/multi/stores-to-root.yml`:
   - Added `workflow_dispatch` trigger support.
@@ -103,7 +116,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
 - Kept `PR to Live` sequencing through `Stores to Root` completion to avoid opening deploy PRs before root sync commits land.
 - This avoids missing chains while preserving correct run order (`stores-to-root` first, `pr-to-live` second).
 
-## 8) Version bump exclusion hardening for store backports
+## 9) Version bump exclusion hardening for store backports
 
 - Updated `src/workflows/single/nightly-hotfix.yml` commit filtering to exclude:
   - `[skip-store-sync]`
@@ -113,7 +126,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
 - Added fail-safe behavior: commits with missing PR metadata are skipped from bump candidates and logged.
 - This prevents `staging-<store> -> main` sync/backport activity from being treated as hotfix input even when merge message formats differ.
 
-## 9) Deploy PR body links for store branches
+## 10) Deploy PR body links for store branches
 
 - Updated `src/workflows/multi/pr-to-live.yml` to resolve the store domain from `package.json` (`config.stores[alias]`).
 - Hardened store domain parsing to strip protocol/path segments before URL generation.
@@ -127,7 +140,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
   - includes staging-theme-specific `Customize URL` and `Preview URL`
   - no generic fallback: if branch-specific staging theme is not found, PR body includes a clear warning instead of live/admin links
 
-## 10) Store URL normalization hardening
+## 11) Store URL normalization hardening
 
 - Updated `src/lib/prompts.js` `normalizeDomain()` to sanitize user input by stripping:
   - `http://` / `https://`
@@ -136,7 +149,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
 - Added strict Shopify domain validation (`<subdomain>.myshopify.com`) at prompt-time.
 - This prevents malformed values like `*.myshopify.com/.myshopify.com` from entering `package.json` config.
 
-## 11) Version tag collision guard
+## 12) Version tag collision guard
 
 - Updated `src/workflows/shared/version-bump.yml` to avoid duplicate tag failures.
 - Workflow now:
@@ -144,7 +157,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
   - creates a new tag only when missing
   - pushes `HEAD` and only pushes tag when a new tag is created
 
-## 12) Preview secret fallback hardening
+## 13) Preview secret fallback hardening
 
 - Updated preview workflows to support scoped secrets without requiring defaults:
   - `pr-update.yml` resolves default alias from `package.json` and validates scoped/default credential fallback.

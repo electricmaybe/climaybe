@@ -34,10 +34,13 @@ Interactive setup that configures your repo for CI/CD.
 3. Asks if you want to add more stores
 4. Asks whether to enable optional **preview + cleanup** workflows
 5. Asks whether to enable optional **build + Lighthouse** workflows
-6. Based on store count, sets up **single-store** or **multi-store** mode
-7. Writes `package.json` config
-8. Scaffolds GitHub Actions workflows
-9. Creates git branches and store directories (multi-store)
+6. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
+7. Asks whether to add **Cursor commit skill** to the project (`.cursor/skills/commit/SKILL.md`) for AI-assisted conventional commits
+8. Based on store count, sets up **single-store** or **multi-store** mode
+9. Writes `package.json` config
+10. Scaffolds GitHub Actions workflows
+11. Creates git branches and store directories (multi-store)
+12. Optionally installs commitlint, Husky, and the Cursor skill
 
 ### `climaybe add-store`
 
@@ -91,6 +94,22 @@ npx climaybe update-workflows
 
 Useful after updating the CLI to get the latest workflow improvements.
 
+### `climaybe setup-commitlint`
+
+Set up **only** commitlint + Husky (conventional commits enforced on `git commit`). Use this if you skipped it at init or want to add it later.
+
+```bash
+npx climaybe setup-commitlint
+```
+
+### `climaybe add-cursor-skill`
+
+Add **only** the Cursor commit skill to this project (`.cursor/skills/commit/SKILL.md`). Use this if you skipped it at init or want to add it later.
+
+```bash
+npx climaybe add-cursor-skill
+```
+
 ## Configuration
 
 The CLI writes config into the `config` field of your `package.json`:
@@ -102,6 +121,8 @@ The CLI writes config into the `config` field of your `package.json`:
     "default_store": "voldt-staging.myshopify.com",
     "preview_workflows": true,
     "build_workflows": true,
+    "commitlint": true,
+    "cursor_skills": true,
     "stores": {
       "voldt-staging": "voldt-staging.myshopify.com",
       "voldt-norway": "voldt-norway.myshopify.com"
@@ -149,19 +170,19 @@ Direct pushes to `staging-<store>` or `live-<store>` are automatically synced ba
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `release-pr-check.yml` | PR from `staging` to `main` | Generates changelog, creates pre-release patch tag, posts PR comment |
-| `post-merge-tag.yml` | Push to `main` (merged PR) | Staging→main: minor bump (e.g. v3.2.0). Hotfix sync: patch bump (e.g. v3.2.1) |
-| `nightly-hotfix.yml` | Cron 02:00 US Eastern | Tags untagged hotfix commits with patch version |
+| `release-pr-check.yml` | PR from `staging` to `main` | Finds latest tag on main, AI changelog to PR head, creates pre-release patch tag (e.g. v3.1.13) to lock state; posts changelog comment |
+| `post-merge-tag.yml` | Push to `main` (merged PR) | Staging→main only: minor bump from latest tag (e.g. v3.1.13 → v3.2.0). No version in PR title |
+| `nightly-hotfix.yml` | Cron 02:00 US Eastern | Collects commits since latest tag (incl. hotfix backports), AI changelog, patch bump and tag |
 
 ### Multi-store (additional)
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `main-to-staging-stores.yml` (main-to-staging-&lt;store&gt;) | Push to `main` | Opens PRs from main to each `staging-<alias>` branch |
-| `stores-to-root.yml` | Push to `staging-*` | Copies `stores/<alias>/` JSONs to repo root |
+| `main-to-staging-stores.yml` (main-to-staging-&lt;store&gt;) | Push to `main` | Merges main into each `staging-<alias>`; root JSONs ignored (restored from stores/). Skips on hotfix/version/sync commits |
+| `stores-to-root.yml` | Push to `staging-*` | From main merge: stores→root. From elsewhere (e.g. Shopify): root→stores |
 | `pr-to-live.yml` | After stores-to-root | Opens PR from `staging-<alias>` to `live-<alias>` |
-| `root-to-stores.yml` | Push to `live-*` (hotfix) | Syncs root JSONs back to `stores/<alias>/` |
-| `multistore-hotfix-to-main.yml` | Push to `staging-*` or `live-*` (and after root-to-stores) | Automatically merges store branch into main (no PR); everything is synced back to main |
+| `root-to-stores.yml` | Push to `live-*` | From main merge: stores→root. From elsewhere: root→stores (same as stores-to-root on staging-*) |
+| `multistore-hotfix-to-main.yml` | Push to `staging-*` or `live-*` (and after root-to-stores) | Merges store branch into main (no PR). Skips when push is a merge from main (avoids loop) |
 
 ### Optional preview + cleanup package
 
@@ -189,13 +210,11 @@ Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`).
 
 ## Versioning
 
-- **Version format**: Always three-part (e.g. `v3.2.0`). No two-part tags.
-- **Release merge** (`staging` → `main`): Minor bump (e.g. `v3.1.12` → `v3.2.0`)
-- **Hotfix sync** (`staging-<store>` or `live-<store>` → main via multistore-hotfix-to-main): Patch bump runs immediately (e.g. `v3.2.0` → `v3.2.1`)
-- **Other hotfixes** (direct commit to `main`): Patch bump via nightly workflow or manual run
-- **PR title convention**: `Release v3.2` or `Release v3.2.0` — the workflow normalizes to three-part
-
-All version bumps update `config/settings_schema.json` automatically.
+- **Version format**: Always three-part (e.g. `v3.2.0`). No version in code or PR title; the system infers from tags.
+- **No tags yet?** The system uses `theme_version` from `config/settings_schema.json` (`theme_info`), creates that tag on main (e.g. `v1.0.0`), and continues from there.
+- **Staging → main**: On PR, a pre-release patch tag (e.g. v3.1.13) locks the current minor line; on merge, **minor** bump (e.g. v3.1.13 → v3.2.0).
+- **Non-staging to main** (hotfix backports, direct commits): **Patch** bump only, via **nightly workflow** at 02:00 US Eastern (not at commit time).
+- All version bumps update `config/settings_schema.json` automatically.
 
 **Full specification:** For detailed versioning rules, local dev flow, hotfix behavior, and alignment with the external CI/CD doc, see **[CI/CD Reference](docs/CI_CD_REFERENCE.md)**.
 

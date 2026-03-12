@@ -1,7 +1,8 @@
 # climaybe — Release PR Check (Single-store)
-# Runs when a PR is opened from staging → main.
-# Generates an AI changelog, creates a pre-release patch tag to lock the current state,
-# and posts the changelog as a PR comment.
+# Runs when a PR is opened from staging → main (status check).
+# Finds latest tag on main (e.g. v3.1.12), generates changelog from that tag to PR head,
+# creates a pre-release patch tag (e.g. v3.1.13) on main to lock "last v3.1.x" before merge.
+# No version in code or PR title; after merge, post-merge-tag does minor bump (v3.1.13 → v3.2.0).
 
 name: Release PR Check
 
@@ -55,7 +56,32 @@ jobs:
       - name: Create pre-release patch tag
         id: tag
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -z "$LATEST_TAG" ]; then
+            # No tags: use theme_version from config/settings_schema.json and push as initial tag
+            SCHEMA="config/settings_schema.json"
+            if [ -f "$SCHEMA" ]; then
+              LATEST_TAG=$(node -e "
+                const fs = require('fs');
+                const arr = JSON.parse(fs.readFileSync('$SCHEMA', 'utf-8'));
+                const info = arr.find(x => x.name === 'theme_info');
+                const v = (info && info.theme_version) ? String(info.theme_version).trim() : '';
+                if (!v) process.exit(1);
+                let parts = v.replace(/^v/i, '').split('.');
+                if (parts.length === 2) parts.push('0');
+                if (parts.length < 3) parts = parts.concat(Array(3 - parts.length).fill('0')).slice(0, 3);
+                console.log('v' + parts.slice(0, 3).join('.'));
+              " 2>/dev/null || true)
+            fi
+            if [ -z "$LATEST_TAG" ]; then
+              LATEST_TAG="v0.0.0"
+            fi
+            if ! git rev-parse -q --verify "refs/tags/$LATEST_TAG" >/dev/null; then
+              git tag -a "$LATEST_TAG" -m "Initial version from settings_schema.json"
+              git push origin "$LATEST_TAG"
+              echo "Created initial tag $LATEST_TAG from settings_schema.json"
+            fi
+          fi
           echo "last_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
 
           # Check if there are commits since the last tag
