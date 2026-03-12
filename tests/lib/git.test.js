@@ -13,6 +13,8 @@ import {
   ensureStagingBranch,
   ensureInitialCommit,
   ensureGitRepo,
+  getLatestTagVersion,
+  getSuggestedTagForRelease,
 } from '../../src/lib/git.js';
 
 function exec(cmd, cwd) {
@@ -223,6 +225,79 @@ describe('git', () => {
         setGitIdentity(dir);
         ensureGitRepo(dir);
         assert.strictEqual(isGitRepo(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('getLatestTagVersion', () => {
+    it('returns null in non-git directory', () => {
+      const dir = setup();
+      try {
+        assert.strictEqual(getLatestTagVersion(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns null when repo has no v* tags', () => {
+      const dir = setup();
+      try {
+        exec('git init', dir);
+        setGitIdentity(dir);
+        writeFileSync(join(dir, 'f'), 'x', 'utf-8');
+        exec('git add f', dir);
+        exec('git commit -m "first"', dir);
+        assert.strictEqual(getLatestTagVersion(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns latest version from v* tags (semver sorted)', () => {
+      const dir = setup();
+      try {
+        exec('git init', dir);
+        setGitIdentity(dir);
+        writeFileSync(join(dir, 'f'), 'x', 'utf-8');
+        exec('git add f', dir);
+        exec('git commit -m "first"', dir);
+        exec('git tag v1.0.0', dir);
+        exec('git tag v2.3.1', dir);
+        exec('git tag v1.2.0', dir);
+        assert.strictEqual(getLatestTagVersion(dir), '2.3.1');
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('getSuggestedTagForRelease', () => {
+    it('returns v1.0.0 when no tags', () => {
+      const dir = setup();
+      try {
+        exec('git init', dir);
+        setGitIdentity(dir);
+        writeFileSync(join(dir, 'f'), 'x', 'utf-8');
+        exec('git add f', dir);
+        exec('git commit -m "first"', dir);
+        assert.strictEqual(getSuggestedTagForRelease(dir), 'v1.0.0');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns next patch when latest tag exists', () => {
+      const dir = setup();
+      try {
+        exec('git init', dir);
+        setGitIdentity(dir);
+        writeFileSync(join(dir, 'f'), 'x', 'utf-8');
+        exec('git add f', dir);
+        exec('git commit -m "first"', dir);
+        exec('git tag v2.3.1', dir);
+        assert.strictEqual(getSuggestedTagForRelease(dir), 'v2.3.2');
       } finally {
         teardown();
       }
