@@ -10,43 +10,43 @@ jobs:
   build:
     uses: ./.github/workflows/reusable-build.yml
 
-  lighthouse-ci:
+  lighthouse-gate:
     runs-on: ubuntu-latest
     needs: [build]
+    outputs:
+      run_lighthouse: ${{ steps.check.outputs.run_lighthouse }}
     env:
       SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
       SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
       LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
     steps:
-      - name: Check conditions and log skip reason
+      - name: Check if Lighthouse CI should run
+        id: check
         run: |
           SKIP_REASONS=()
-
           if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.ref }}" != "refs/heads/staging" ]; then
             SKIP_REASONS+=("Not on main or staging branch (current: ${{ github.ref }})")
           fi
-
           if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOP_ACCESS_TOKEN" ] || [ -z "$LHCI_GITHUB_APP_TOKEN" ]; then
             SKIP_REASONS+=("Missing required secrets: SHOPIFY_STORE_URL, SHOP_ACCESS_TOKEN, or LHCI_GITHUB_APP_TOKEN")
           fi
-
           if [ ${#SKIP_REASONS[@]} -gt 0 ]; then
-            echo "Lighthouse CI skipped"
-            echo "Reasons:"
-            for reason in "${SKIP_REASONS[@]}"; do
-              echo "  - $reason"
-            done
-            exit 0
+            echo "run_lighthouse=false" >> $GITHUB_OUTPUT
+            echo "Lighthouse CI skipped:"
+            for reason in "${SKIP_REASONS[@]}"; do echo "  - $reason"; done
+          else
+            echo "run_lighthouse=true" >> $GITHUB_OUTPUT
           fi
 
-          echo "All conditions met, proceeding with Lighthouse CI"
-
+  lighthouse-ci:
+    runs-on: ubuntu-latest
+    needs: [build, lighthouse-gate]
+    if: needs.lighthouse-gate.outputs.run_lighthouse == 'true'
+    steps:
       - name: Checkout code
-        if: env.SHOPIFY_STORE_URL != '' && env.SHOP_ACCESS_TOKEN != '' && env.LHCI_GITHUB_APP_TOKEN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
         uses: actions/checkout@v4
 
       - name: Lighthouse
-        if: env.SHOPIFY_STORE_URL != '' && env.SHOP_ACCESS_TOKEN != '' && env.LHCI_GITHUB_APP_TOKEN != '' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
         uses: shopify/lighthouse-ci-action@v1
         with:
           store: ${{ secrets.SHOPIFY_STORE_URL }}

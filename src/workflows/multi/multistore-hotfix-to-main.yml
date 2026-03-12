@@ -1,8 +1,7 @@
 # climaybe — Multistore Hotfix to Main
-# Automatically syncs direct hotfixes from staging-<store> or live-<store> back to main.
+# Syncs hotfixes from staging-<store> or live-<store> back to main.
+# Only when the push is NOT from main (main→staging merge would create a loop).
 # Triggers: push to staging-* or live-*; also after Root to Stores completes (live-*).
-# Merges the store branch into main with [hotfix-backport] so post-merge-tag runs patch bump.
-# main-to-staging-stores skips [hotfix-backport] commits so hotfixes are not re-pushed to stores.
 
 name: Multistore Hotfix to Main
 
@@ -49,8 +48,20 @@ jobs:
         run: |
           SOURCE="${{ steps.ref.outputs.branch }}"
 
-          MERGE_BASE=$(git merge-base origin/main origin/$SOURCE 2>/dev/null || echo "")
+          # Do not backport when this push was a merge FROM main (staging-* or live-*; would loop)
+          if [[ "$SOURCE" == staging-* || "$SOURCE" == live-* ]]; then
+            MAIN_SHA=$(git rev-parse origin/main 2>/dev/null || echo "")
+            if [ -n "$MAIN_SHA" ]; then
+              SECOND_PARENT=$(git rev-parse origin/$SOURCE^2 2>/dev/null || echo "")
+              if [ "$SECOND_PARENT" = "$MAIN_SHA" ]; then
+                echo "needs_backport=false" >> $GITHUB_OUTPUT
+                echo "Push is merge from main into $SOURCE; skipping to avoid loop."
+                exit 0
+              fi
+            fi
+          fi
 
+          MERGE_BASE=$(git merge-base origin/main origin/$SOURCE 2>/dev/null || echo "")
           if [ -z "$MERGE_BASE" ]; then
             echo "needs_backport=false" >> $GITHUB_OUTPUT
             exit 0
