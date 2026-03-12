@@ -209,19 +209,15 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 | Secret | Required | Description |
 |--------|----------|-------------|
 | `GEMINI_API_KEY` | Yes | Google Gemini API key for changelog generation |
-| `SHOPIFY_STORE_URL` | Optional* | Store URL (e.g. `your-store.myshopify.com`) for preview and/or Lighthouse |
-| `SHOPIFY_CLI_THEME_TOKEN` | Optional* | Theme access token for preview workflows |
+| `SHOPIFY_STORE_URL` | Set from config | Store URL is set automatically from the store domain(s) you add during init (no prompt). |
+| `SHOPIFY_CLI_THEME_TOKEN` | Yes* | Theme access token for preview workflows (required when preview is enabled). |
 | `SHOP_ACCESS_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
 | `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
 | `SHOP_PASSWORD` | Optional | Used by Lighthouse action when your store requires password auth |
 
-**Multi-store:** For branches like `staging-<store>` and `live-<store>`, use **per-store** secrets so each store uses its own URL and token:
+**Store URL:** During `climaybe init` (or `add-store`), store URL secret(s) are set from your configured store domain(s); you are only prompted for the theme token.
 
-- `SHOPIFY_STORE_URL_<ALIAS>`
-- `SHOPIFY_CLI_THEME_TOKEN_<ALIAS>`
-
-`<ALIAS>` must be uppercase with hyphens converted to underscores (e.g. alias `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`).  
-Workflows resolve the store from the branch and use `SHOPIFY_*_<ALIAS>` when set, otherwise fall back to `SHOPIFY_STORE_URL` / `SHOPIFY_CLI_THEME_TOKEN`.
+**Multi-store:** Per-store secrets `SHOPIFY_STORE_URL_<ALIAS>` and `SHOPIFY_CLI_THEME_TOKEN_<ALIAS>` — the URL is set from config; you must provide the theme token per store. `<ALIAS>` is uppercase with hyphens as underscores (e.g. `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`).
 
 ## Directory Structure (Multi-store)
 

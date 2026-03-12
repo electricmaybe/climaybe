@@ -11,6 +11,7 @@ import {
   hasGitLabRemote,
   listGitHubSecrets,
   listGitLabVariables,
+  getStoreUrlSecretForNewStore,
   getSecretsToPromptForNewStore,
   setSecret,
   setGitLabVariable,
@@ -80,6 +81,16 @@ export async function addStoreCommand() {
       } else if (!setter.checkRemote()) {
         console.log(pc.yellow('  No ' + setter.name + ' remote (origin). Add secrets manually after pushing.'));
       } else {
+        let setCount = 0;
+        const { name: urlName, value: urlValue } = getStoreUrlSecretForNewStore(store);
+        try {
+          await setter.set(urlName, urlValue);
+          console.log(pc.green(`  Set ${urlName} (from store config).`));
+          setCount++;
+        } catch (err) {
+          console.log(pc.red(`  Failed to set ${urlName}: ${err.message}`));
+        }
+
         const secretsToPrompt = getSecretsToPromptForNewStore(store);
         const existingNames = ciHost === 'github' ? listGitHubSecrets() : listGitLabVariables();
         const namesWeWillPrompt = new Set(secretsToPrompt.map((s) => s.name));
@@ -87,13 +98,14 @@ export async function addStoreCommand() {
         if (alreadySet.length > 0) {
           const doUpdate = await promptUpdateExistingSecrets(alreadySet);
           if (!doUpdate) {
-            console.log(pc.dim('\n  Skipping. Existing secrets for this store left unchanged.\n'));
+            if (setCount > 0) {
+              console.log(pc.green(`\n  Done. ${setCount} secret(s) set for store "${store.alias}".\n`));
+            }
             return;
           }
         }
         const total = secretsToPrompt.length;
-        console.log(pc.cyan(`\n  Configure ${total} secret(s) for store "${store.alias}". Leave blank to skip.\n`));
-        let setCount = 0;
+        console.log(pc.cyan(`\n  Configure ${total} secret(s) for store "${store.alias}" (theme token required).\n`));
         for (let i = 0; i < secretsToPrompt.length; i++) {
           const secret = secretsToPrompt[i];
           const value = await promptSecretValue(secret, i, total);
