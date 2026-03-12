@@ -25,7 +25,7 @@ export const SECRET_DEFINITIONS = [
   },
   {
     name: 'SHOPIFY_CLI_THEME_TOKEN',
-    required: false,
+    required: true,
     condition: 'preview',
     description: 'Theme access token so CI can push preview themes to your store',
     whereToGet:
@@ -175,14 +175,40 @@ export function aliasToSecretSuffix(alias) {
 }
 
 /**
- * Get secrets to prompt for based on init choices and store list.
- * For multi-store + preview we return per-store SHOPIFY_STORE_URL_<ALIAS> and SHOPIFY_CLI_THEME_TOKEN_<ALIAS>
- * instead of a single SHOPIFY_STORE_URL / SHOPIFY_CLI_THEME_TOKEN so each branch (staging-<store>, live-<store>) uses the right store.
+ * Store URL secrets are set from config (store domains added during init), not prompted.
+ * Returns [{ name, value }] for SHOPIFY_STORE_URL and/or SHOPIFY_STORE_URL_<ALIAS>.
+ */
+export function getStoreUrlSecretsFromConfig({ enablePreviewWorkflows, enableBuildWorkflows, mode = 'single', stores = [] }) {
+  if (stores.length === 0) return [];
+  const isMulti = mode === 'multi' && stores.length > 1;
+  const out = [];
+
+  if (isMulti && enablePreviewWorkflows) {
+    for (const store of stores) {
+      out.push({ name: `SHOPIFY_STORE_URL_${aliasToSecretSuffix(store.alias)}`, value: store.domain });
+    }
+  }
+  if (!isMulti && (enablePreviewWorkflows || enableBuildWorkflows)) {
+    out.push({ name: 'SHOPIFY_STORE_URL', value: stores[0].domain });
+  }
+  if (isMulti && enableBuildWorkflows) {
+    const defaultDomain = stores[0]?.domain;
+    if (defaultDomain && !out.some((s) => s.name === 'SHOPIFY_STORE_URL')) {
+      out.push({ name: 'SHOPIFY_STORE_URL', value: defaultDomain });
+    }
+  }
+  return out;
+}
+
+/**
+ * Get secrets we need to prompt for (excludes store URLs; those are set from config).
+ * Theme token(s) are required when preview is enabled.
  */
 export function getSecretsToPrompt({ enablePreviewWorkflows, enableBuildWorkflows, mode = 'single', stores = [] }) {
   const isMulti = mode === 'multi' && stores.length > 1;
 
   const base = SECRET_DEFINITIONS.filter((s) => {
+    if (s.name === 'SHOPIFY_STORE_URL') return false; // set from config
     if (s.condition === 'always') return true;
     if (s.condition === 'preview_or_build') return enablePreviewWorkflows || enableBuildWorkflows;
     if (s.condition === 'preview' && enablePreviewWorkflows) return true;
@@ -190,69 +216,45 @@ export function getSecretsToPrompt({ enablePreviewWorkflows, enableBuildWorkflow
     return false;
   });
 
-  // Remove generic SHOPIFY_STORE_URL / SHOPIFY_CLI_THEME_TOKEN when multi-store + preview; we'll add per-store entries
   const dropPreviewGeneric =
     isMulti && enablePreviewWorkflows
-      ? (s) => s.name !== 'SHOPIFY_STORE_URL' && s.name !== 'SHOPIFY_CLI_THEME_TOKEN'
+      ? (s) => s.name !== 'SHOPIFY_CLI_THEME_TOKEN'
       : () => true;
 
   let list = base.filter(dropPreviewGeneric);
 
-  // Multi-store + preview: add per-store URL and token so staging-<store> / live-<store> use the right store
   if (isMulti && enablePreviewWorkflows) {
-    const perStore = [];
     for (const store of stores) {
       const suffix = aliasToSecretSuffix(store.alias);
-      perStore.push(
-        {
-          name: `SHOPIFY_STORE_URL_${suffix}`,
-          required: false,
-          description: `Store ${store.alias}: Shopify store URL (staging/live use this for ${store.alias})`,
-          whereToGet:
-            'Shopify Admin → Settings → Domains for this store, or use the .myshopify.com URL.',
-        },
-        {
-          name: `SHOPIFY_CLI_THEME_TOKEN_${suffix}`,
-          required: false,
-          description: `Store ${store.alias}: Theme access token for CI (staging/live use this for ${store.alias})`,
-          whereToGet:
-            'Shopify Partners or Admin → Apps → Develop apps → your app → Theme access for this store.',
-        }
-      );
+      list.push({
+        name: `SHOPIFY_CLI_THEME_TOKEN_${suffix}`,
+        required: true,
+        description: `Store ${store.alias}: Theme access token for CI (staging/live use this for ${store.alias})`,
+        whereToGet:
+          'Shopify Partners or Admin → Apps → Develop apps → your app → Theme access for this store.',
+      });
     }
-    list = list.concat(perStore);
-  }
-
-  // When multi-store + build, we still need one SHOPIFY_STORE_URL for Lighthouse on main/staging (default store)
-  if (isMulti && enableBuildWorkflows && !list.some((s) => s.name === 'SHOPIFY_STORE_URL')) {
-    list.push({
-      name: 'SHOPIFY_STORE_URL',
-      required: false,
-      description: 'Default store URL for Lighthouse on main/staging (e.g. your-store.myshopify.com)',
-      whereToGet: 'Your theme’s store URL in Shopify Admin → Settings → Domains.',
-    });
   }
 
   return list;
 }
 
 /**
- * Per-store secret definitions for a single store (used when adding a store).
- * Returns [SHOPIFY_STORE_URL_<ALIAS>, SHOPIFY_CLI_THEME_TOKEN_<ALIAS>].
+ * Store URL for a new store (set from store.domain, no prompt).
+ */
+export function getStoreUrlSecretForNewStore(store) {
+  return { name: `SHOPIFY_STORE_URL_${aliasToSecretSuffix(store.alias)}`, value: store.domain };
+}
+
+/**
+ * Per-store secret to prompt for when adding a store (theme token only; URL is set from store.domain).
  */
 export function getSecretsToPromptForNewStore(store) {
   const suffix = aliasToSecretSuffix(store.alias);
   return [
     {
-      name: `SHOPIFY_STORE_URL_${suffix}`,
-      required: false,
-      description: `Store ${store.alias}: Shopify store URL (staging/live use this for ${store.alias})`,
-      whereToGet:
-        'Shopify Admin → Settings → Domains for this store, or use the .myshopify.com URL.',
-    },
-    {
       name: `SHOPIFY_CLI_THEME_TOKEN_${suffix}`,
-      required: false,
+      required: true,
       description: `Store ${store.alias}: Theme access token for CI (staging/live use this for ${store.alias})`,
       whereToGet:
         'Shopify Partners or Admin → Apps → Develop apps → your app → Theme access for this store.',

@@ -19,6 +19,7 @@ import {
   hasGitLabRemote,
   listGitHubSecrets,
   listGitLabVariables,
+  getStoreUrlSecretsFromConfig,
   getSecretsToPrompt,
   setSecret,
   setGitLabVariable,
@@ -143,8 +144,26 @@ async function runInitFlow() {
     }
   }
 
-  console.log(pc.cyan(`\n  Configure ${total} ${setter.name} secret(s)/variable(s). Leave optional ones blank to skip.\n`));
   let setCount = 0;
+
+  // Set store URL(s) from config (domains already added during init) — no prompt
+  const storeUrlSecrets = getStoreUrlSecretsFromConfig({
+    enablePreviewWorkflows,
+    enableBuildWorkflows,
+    mode,
+    stores,
+  });
+  for (const { name, value } of storeUrlSecrets) {
+    try {
+      await setter.set(name, value);
+      console.log(pc.green(`  Set ${name} (from store config).`));
+      setCount++;
+    } catch (err) {
+      console.log(pc.red(`  Failed to set ${name}: ${err.message}`));
+    }
+  }
+
+  console.log(pc.cyan(`\n  Configure ${total} ${setter.name} secret(s)/variable(s). Leave optional ones blank to skip.\n`));
   for (let i = 0; i < secretsToPrompt.length; i++) {
     const secret = secretsToPrompt[i];
     const value = await promptSecretValue(secret, i, total);
