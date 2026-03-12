@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { getLatestTagVersion } from './git.js';
 
 const PKG = 'package.json';
 
@@ -45,9 +46,16 @@ export function readConfig(cwd = process.cwd()) {
 export function writeConfig(config, cwd = process.cwd()) {
   let pkg = readPkg(cwd);
   if (!pkg) {
+    let version = '1.0.0';
+    try {
+      const fromTags = getLatestTagVersion(cwd);
+      if (fromTags) version = fromTags;
+    } catch {
+      // not a git repo or no tags
+    }
     pkg = {
       name: 'shopify-theme',
-      version: '1.0.0',
+      version,
       private: true,
       config: {},
     };

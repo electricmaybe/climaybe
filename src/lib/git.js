@@ -106,3 +106,31 @@ export function ensureGitRepo(cwd = process.cwd()) {
     console.log(pc.green('  Initialized git repository.'));
   }
 }
+
+/**
+ * Get the latest tag version (e.g. "1.2.3") from v* tags, or null if none.
+ * Sorts by version so v2.0.0 > v1.9.9.
+ */
+export function getLatestTagVersion(cwd = process.cwd()) {
+  try {
+    const out = exec('git tag -l "v*" --sort=-v:refname', cwd);
+    const first = out.split(/\n/)[0]?.trim();
+    if (!first || !first.startsWith('v')) return null;
+    const match = first.replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)(?:-|$)/);
+    return match ? `${match[1]}.${match[2]}.${match[3]}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Suggested tag for next release: v1.0.0 if no tags, else next patch (e.g. v1.2.3 → v1.2.4).
+ */
+export function getSuggestedTagForRelease(cwd = process.cwd()) {
+  const latest = getLatestTagVersion(cwd);
+  if (!latest) return 'v1.0.0';
+  const parts = latest.split('.').map(Number);
+  if (parts.length < 3) return 'v1.0.0';
+  parts[2] += 1;
+  return `v${parts[0]}.${parts[1]}.${parts[2]}`;
+}

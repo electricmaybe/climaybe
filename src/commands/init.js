@@ -7,9 +7,10 @@ import {
   promptConfigureCISecrets,
   promptUpdateExistingSecrets,
   promptSecretValue,
+  promptTestThemeToken,
 } from '../lib/prompts.js';
 import { readConfig, writeConfig } from '../lib/config.js';
-import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches } from '../lib/git.js';
+import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches, getSuggestedTagForRelease } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
 import {
@@ -21,6 +22,8 @@ import {
   listGitLabVariables,
   getStoreUrlSecretsFromConfig,
   getSecretsToPrompt,
+  getStoreUrlForThemeTokenSecret,
+  validateThemeAccessToken,
   setSecret,
   setGitLabVariable,
 } from '../lib/github-secrets.js';
@@ -93,10 +96,12 @@ async function runInitFlow() {
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
 
+  const suggestedTag = getSuggestedTagForRelease();
+  const tagLabel = suggestedTag === 'v1.0.0' ? 'Tag your first release' : 'Tag your next release';
   console.log(pc.dim('\n  Next steps:'));
   console.log(pc.dim('    1. Add GEMINI_API_KEY to your CI secrets (or configure below)'));
   console.log(pc.dim('    2. Push to GitHub/GitLab and start using the branching workflow'));
-  console.log(pc.dim('    3. Tag your first release: git tag v1.0.0\n'));
+  console.log(pc.dim(`    3. ${tagLabel}: git tag ${suggestedTag}\n`));
 
   const ciHost = await promptConfigureCISecrets();
   if (ciHost === 'skip') return;
@@ -167,14 +172,31 @@ async function runInitFlow() {
   for (let i = 0; i < secretsToPrompt.length; i++) {
     const secret = secretsToPrompt[i];
     const value = await promptSecretValue(secret, i, total);
-    if (value) {
-      try {
-        await setter.set(secret.name, value);
-        console.log(pc.green(`  Set ${secret.name}.`));
-        setCount++;
-      } catch (err) {
-        console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
+    if (!value) continue;
+
+    const isThemeToken =
+      secret.name === 'SHOPIFY_THEME_ACCESS_TOKEN' || secret.name.startsWith('SHOPIFY_THEME_ACCESS_TOKEN_');
+    const storeUrl = isThemeToken ? getStoreUrlForThemeTokenSecret(secret.name, stores) : null;
+
+    if (storeUrl) {
+      const doTest = await promptTestThemeToken();
+      if (doTest) {
+        const result = await validateThemeAccessToken(storeUrl, value);
+        if (!result.ok) {
+          console.log(pc.red(`  Token test failed: ${result.error}`));
+          console.log(pc.dim('  Secret not set. You can add it later in repo Settings → Secrets.'));
+          continue;
+        }
+        console.log(pc.green('  Token validated against store.'));
       }
+    }
+
+    try {
+      await setter.set(secret.name, value);
+      console.log(pc.green(`  Set ${secret.name}.`));
+      setCount++;
+    } catch (err) {
+      console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
     }
   }
   if (setCount > 0) {

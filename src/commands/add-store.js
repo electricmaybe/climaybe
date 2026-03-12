@@ -1,5 +1,5 @@
 import pc from 'picocolors';
-import { promptNewStore, promptConfigureCISecrets, promptUpdateExistingSecrets, promptSecretValue } from '../lib/prompts.js';
+import { promptNewStore, promptConfigureCISecrets, promptUpdateExistingSecrets, promptSecretValue, promptTestThemeToken } from '../lib/prompts.js';
 import { readConfig, addStoreToConfig, getStoreAliases, getMode, isPreviewWorkflowsEnabled, isBuildWorkflowsEnabled } from '../lib/config.js';
 import { createStoreBranches } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
@@ -13,6 +13,7 @@ import {
   listGitLabVariables,
   getStoreUrlSecretForNewStore,
   getSecretsToPromptForNewStore,
+  validateThemeAccessToken,
   setSecret,
   setGitLabVariable,
 } from '../lib/github-secrets.js';
@@ -109,14 +110,28 @@ export async function addStoreCommand() {
         for (let i = 0; i < secretsToPrompt.length; i++) {
           const secret = secretsToPrompt[i];
           const value = await promptSecretValue(secret, i, total);
-          if (value) {
-            try {
-              await setter.set(secret.name, value);
-              console.log(pc.green(`  Set ${secret.name}.`));
-              setCount++;
-            } catch (err) {
-              console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
+          if (!value) continue;
+
+          const isThemeToken = secret.name === 'SHOPIFY_THEME_ACCESS_TOKEN' || secret.name.startsWith('SHOPIFY_THEME_ACCESS_TOKEN_');
+          if (isThemeToken && store.domain) {
+            const doTest = await promptTestThemeToken();
+            if (doTest) {
+              const result = await validateThemeAccessToken(store.domain, value);
+              if (!result.ok) {
+                console.log(pc.red(`  Token test failed: ${result.error}`));
+                console.log(pc.dim('  Secret not set. You can add it later in repo Settings → Secrets.'));
+                continue;
+              }
+              console.log(pc.green('  Token validated against store.'));
             }
+          }
+
+          try {
+            await setter.set(secret.name, value);
+            console.log(pc.green(`  Set ${secret.name}.`));
+            setCount++;
+          } catch (err) {
+            console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
           }
         }
         if (setCount > 0) {

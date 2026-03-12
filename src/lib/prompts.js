@@ -225,3 +225,16 @@ export async function promptSecretValue(secret, index, total) {
   if (!trimmed && !secret.required) return null;
   return trimmed || null;
 }
+
+/**
+ * Ask whether to test the theme token against the store now. Returns true to test, false to skip.
+ */
+export async function promptTestThemeToken() {
+  const { test } = await prompts({
+    type: 'confirm',
+    name: 'test',
+    message: 'Test this token against the store now?',
+    initial: true,
+  });
+  return !!test;
+}
