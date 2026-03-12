@@ -186,13 +186,13 @@ export async function initCommand() {
   console.log(pc.bold('\n  climaybe — Shopify CI/CD Setup\n'));
 
   const existing = readConfig();
-  const alreadyInited = existing?.stores && Object.keys(existing.stores).length > 0;
+  const hasConfig = existing != null && typeof existing === 'object';
 
-  if (alreadyInited) {
+  if (hasConfig) {
     const { reinit } = await prompts({
       type: 'confirm',
       name: 'reinit',
-      message: 'This repo already has a climaybe config. Reinitialize? This will remove your current stores and workflow settings.',
+      message: 'This repo already has a climaybe config. Clear everything and reinitialize from scratch?',
       initial: false,
     });
     if (!reinit) {
