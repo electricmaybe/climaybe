@@ -1,6 +1,3 @@
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { initCommand, reinitCommand } from './commands/init.js';
 import { addStoreCommand } from './commands/add-store.js';
@@ -8,14 +5,11 @@ import { switchCommand } from './commands/switch.js';
 import { syncCommand } from './commands/sync.js';
 import { updateWorkflowsCommand } from './commands/update-workflows.js';
 
-const require = createRequire(import.meta.url);
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const { version } = require(join(__dirname, '..', 'package.json'));
-
 /**
  * Create the CLI program (for testing and for run).
+ * @param {string} [version] - Version string (from bin/cli.js when run as CLI; from package.json in tests).
  */
-export function createProgram() {
+export function createProgram(version = '0.0.0') {
   const program = new Command();
 
   program
@@ -58,6 +52,6 @@ export function createProgram() {
   return program;
 }
 
-export function run(argv) {
-  createProgram().parse(argv);
+export function run(argv, version) {
+  createProgram(version).parse(argv);
 }
