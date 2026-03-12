@@ -140,12 +140,12 @@ async function runInitFlow() {
   const existingNames =
     ciHost === 'github' ? listGitHubSecrets() : listGitLabVariables();
   const namesWeWillPrompt = new Set(secretsToPrompt.map((s) => s.name));
-  const alreadySet = existingNames.filter((n) => namesWeWillPrompt.has(n));
-  if (alreadySet.length > 0) {
-    const doUpdate = await promptUpdateExistingSecrets(alreadySet);
-    if (!doUpdate) {
-      console.log(pc.dim('\n  Skipping. Existing secrets left unchanged.\n'));
-      return;
+  const alreadySet = new Set(existingNames.filter((n) => namesWeWillPrompt.has(n)));
+  let doUpdateExisting = true;
+  if (alreadySet.size > 0) {
+    doUpdateExisting = await promptUpdateExistingSecrets([...alreadySet]);
+    if (!doUpdateExisting) {
+      console.log(pc.dim('\n  Skipping only the secret(s) already set; will still prompt for the rest.\n'));
     }
   }
 
@@ -159,6 +159,7 @@ async function runInitFlow() {
     stores,
   });
   for (const { name, value } of storeUrlSecrets) {
+    if (alreadySet.has(name) && !doUpdateExisting) continue;
     try {
       await setter.set(name, value);
       console.log(pc.green(`  Set ${name} (from store config).`));
@@ -168,10 +169,12 @@ async function runInitFlow() {
     }
   }
 
-  console.log(pc.cyan(`\n  Configure ${total} ${setter.name} secret(s)/variable(s). Leave optional ones blank to skip.\n`));
-  for (let i = 0; i < secretsToPrompt.length; i++) {
-    const secret = secretsToPrompt[i];
-    const value = await promptSecretValue(secret, i, total);
+  const toPrompt = secretsToPrompt.filter((s) => !alreadySet.has(s.name) || doUpdateExisting);
+  const totalToPrompt = toPrompt.length;
+  console.log(pc.cyan(`\n  Configure ${totalToPrompt} ${setter.name} secret(s)/variable(s). Leave optional ones blank to skip.\n`));
+  for (let i = 0; i < toPrompt.length; i++) {
+    const secret = toPrompt[i];
+    const value = await promptSecretValue(secret, i, totalToPrompt);
     if (!value) continue;
 
     const isThemeToken =
