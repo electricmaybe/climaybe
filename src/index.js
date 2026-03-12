@@ -1,9 +1,16 @@
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { initCommand, reinitCommand } from './commands/init.js';
 import { addStoreCommand } from './commands/add-store.js';
 import { switchCommand } from './commands/switch.js';
 import { syncCommand } from './commands/sync.js';
 import { updateWorkflowsCommand } from './commands/update-workflows.js';
+
+const require = createRequire(import.meta.url);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const { version } = require(join(__dirname, '..', 'package.json'));
 
 /**
  * Create the CLI program (for testing and for run).
@@ -14,7 +21,7 @@ export function createProgram() {
   program
     .name('climaybe')
     .description('Shopify CI/CD CLI — scaffolds workflows, branch strategy, and store config')
-    .version('1.0.0');
+    .version(version);
 
   program
     .command('init')
