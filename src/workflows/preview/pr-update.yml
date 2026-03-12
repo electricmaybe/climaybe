@@ -7,7 +7,7 @@ name: PR Update
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, staging, develop]
+    branches: [main, staging, develop, 'staging-*', 'live-*']
 
 jobs:
   extract-pr-number:
@@ -22,40 +22,48 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Resolve default store alias
+      - name: Resolve store alias from base branch
         id: resolve
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          ALIAS=$(node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const stores = pkg?.config?.stores || {};
-            const defaultStoreRaw = pkg?.config?.default_store;
-            const normalize = (v) => String(v || '')
-              .toLowerCase()
-              .replace(/^https?:\\/\\//, '')
-              .replace(/\\/.*$/, '');
-            const defaultStore = normalize(defaultStoreRaw);
-            let alias = '';
-            if (defaultStore) {
-              for (const [k, d] of Object.entries(stores)) {
-                if (normalize(d) === defaultStore) {
-                  alias = k;
-                  break;
+          # On staging-<alias> or live-<alias> PRs, use that store; otherwise default store
+          if [[ -n "$BASE_REF" && ("$BASE_REF" == staging-* || "$BASE_REF" == live-*) ]]; then
+            ALIAS="${BASE_REF#staging-}"
+            ALIAS="${ALIAS#live-}"
+          else
+            ALIAS=$(node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+              const stores = pkg?.config?.stores || {};
+              const defaultStoreRaw = pkg?.config?.default_store;
+              const normalize = (v) => String(v || '')
+                .toLowerCase()
+                .replace(/^https?:\\/\\//, '')
+                .replace(/\\/.*$/, '');
+              const defaultStore = normalize(defaultStoreRaw);
+              let alias = '';
+              if (defaultStore) {
+                for (const [k, d] of Object.entries(stores)) {
+                  if (normalize(d) === defaultStore) {
+                    alias = k;
+                    break;
+                  }
                 }
               }
-            }
-            if (!alias) {
-              alias = Object.keys(stores)[0] || '';
-            }
-            if (!alias && defaultStore) {
-              const subdomain = defaultStore.split('.')[0] || 'default';
-              alias = subdomain.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'default';
-            }
-            if (!alias) {
-              alias = 'default';
-            }
-            process.stdout.write(alias);
-          ")
+              if (!alias) {
+                alias = Object.keys(stores)[0] || '';
+              }
+              if (!alias && defaultStore) {
+                const subdomain = defaultStore.split('.')[0] || 'default';
+                alias = subdomain.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'default';
+              }
+              if (!alias) {
+                alias = 'default';
+              }
+              process.stdout.write(alias);
+            ")
+          fi
 
           if [ -z "$ALIAS" ]; then
             echo "Could not resolve default store alias from package.json config."
@@ -91,9 +99,8 @@ jobs:
     uses: ./.github/workflows/reusable-cleanup-themes.yml
     with:
       pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
-    secrets:
-      SHOPIFY_STORE_URL: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
-      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+      store_alias_secret: ${{ needs.validate-environment.outputs.store_alias_secret }}
+    secrets: inherit
 
   share-theme:
     needs: [validate-environment, extract-pr-number, cleanup-themes]
@@ -101,9 +108,8 @@ jobs:
     with:
       pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
       store_alias: ${{ needs.validate-environment.outputs.store_alias }}
-    secrets:
-      SHOPIFY_STORE_URL: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
-      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+      store_alias_secret: ${{ needs.validate-environment.outputs.store_alias_secret }}
+    secrets: inherit
 
   rename-theme:
     needs: [share-theme, extract-pr-number, validate-environment]
@@ -113,9 +119,8 @@ jobs:
       theme_name: ${{ needs.share-theme.outputs.theme_name }}
       pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
       store_alias: ${{ needs.validate-environment.outputs.store_alias }}
-    secrets:
-      SHOPIFY_STORE_URL: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
-      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+      store_alias_secret: ${{ needs.validate-environment.outputs.store_alias_secret }}
+    secrets: inherit
 
   comment-on-pr:
     needs: [share-theme, rename-theme, extract-pr-number, validate-environment]
@@ -125,5 +130,5 @@ jobs:
       share_output: ${{ needs.share-theme.outputs.share_output }}
       pr_number: ${{ needs.extract-pr-number.outputs.pr_number_unpadded }}
       store_alias: ${{ needs.validate-environment.outputs.store_alias }}
-    secrets:
-      SHOPIFY_STORE_URL: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+      store_alias_secret: ${{ needs.validate-environment.outputs.store_alias_secret }}
+    secrets: inherit

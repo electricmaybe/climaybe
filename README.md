@@ -169,8 +169,8 @@ Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`).
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `pr-update.yml` | PR opened/synchronize/reopened | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs |
-| `pr-close.yml` | PR closed | Deletes matching preview themes and comments deleted count + names |
+| `pr-update.yml` | PR opened/synchronize/reopened (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs; uses default store for main/staging/develop, or the store for staging-&lt;alias&gt;/live-&lt;alias&gt; |
+| `pr-close.yml` | PR closed (same branch set) | Deletes matching preview themes and comments deleted count + names |
 | `reusable-share-theme.yml` | workflow_call | Shares Shopify draft theme and returns `theme_id` |
 | `reusable-rename-theme.yml` | workflow_call | Renames shared theme to include `PR<number>` (fails job on rename failure) |
 | `reusable-comment-on-pr.yml` | workflow_call | Posts preview comment including Customize URL |
@@ -232,7 +232,7 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 
 **Store URL:** During `climaybe init` (or `add-store`), store URL secret(s) are set from your configured store domain(s); you are only prompted for the theme token.
 
-**Multi-store:** Per-store secrets `SHOPIFY_STORE_URL_<ALIAS>` and `SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>` — the URL is set from config; you must provide the theme token per store. `<ALIAS>` is uppercase with hyphens as underscores (e.g. `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`). Preview and cleanup workflows use the **default store** (from `config.default_store` or first store in `config.stores`), so set either the plain `SHOPIFY_*` secrets or the `_<ALIAS>` pair for that default store.
+**Multi-store:** Per-store secrets `SHOPIFY_STORE_URL_<ALIAS>` and `SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>` — the URL is set from config; you must provide the theme token per store. `<ALIAS>` is uppercase with hyphens as underscores (e.g. `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`). Preview and cleanup: for PRs targeting **main**, **staging**, or **develop** the workflows use the **default store** (from `config.default_store` or first in `config.stores`); for PRs targeting **staging-&lt;alias&gt;** or **live-&lt;alias&gt;** they use that store’s credentials. Set either the plain `SHOPIFY_*` secrets or the `_<ALIAS>` pair for each store you use in preview.
 
 ## Directory Structure (Multi-store)
 

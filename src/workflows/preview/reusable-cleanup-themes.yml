@@ -7,6 +7,10 @@ on:
         required: true
         type: string
         description: "PR number to clean up themes for"
+      store_alias_secret:
+        required: false
+        type: string
+        description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_*_<this>; else uses SHOPIFY_STORE_URL / SHOPIFY_THEME_ACCESS_TOKEN."
     outputs:
       deleted_count:
         description: "Number of deleted themes"
@@ -28,8 +32,8 @@ jobs:
       - name: Cleanup PR preview themes
         id: cleanup
         env:
-          SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then

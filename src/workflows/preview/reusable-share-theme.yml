@@ -14,7 +14,7 @@ on:
       store_alias_secret:
         required: false
         type: string
-        description: "Upper snake-case alias for scoped secret lookup"
+        description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_*_<this>; else uses SHOPIFY_STORE_URL / SHOPIFY_THEME_ACCESS_TOKEN."
     outputs:
       theme_id:
         description: "Shared theme ID"
@@ -25,11 +25,6 @@ on:
       share_output:
         description: "Raw share command output"
         value: ${{ jobs.share.outputs.share_output }}
-    secrets:
-      SHOPIFY_STORE_URL:
-        required: false
-      SHOPIFY_THEME_ACCESS_TOKEN:
-        required: false
 
 jobs:
   share:
@@ -55,8 +50,8 @@ jobs:
       - name: Share theme
         id: share
         env:
-          SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
         run: |
           if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
             echo "Missing Shopify secrets."

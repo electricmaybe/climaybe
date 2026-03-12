@@ -18,9 +18,7 @@ on:
       store_alias_secret:
         required: false
         type: string
-    secrets:
-      SHOPIFY_STORE_URL:
-        required: false
+        description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_STORE_URL_<this>; else uses SHOPIFY_STORE_URL."
 
 jobs:
   comment:
@@ -29,7 +27,7 @@ jobs:
       - name: Post preview comment
         uses: actions/github-script@v7
         env:
-          SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
           THEME_ID: ${{ inputs.theme_id }}
           SHARE_OUTPUT: ${{ inputs.share_output }}
           PR_NUMBER: ${{ inputs.pr_number }}
