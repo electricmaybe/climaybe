@@ -26,7 +26,7 @@ on:
     secrets:
       SHOPIFY_STORE_URL:
         required: false
-      SHOPIFY_CLI_THEME_TOKEN:
+      SHOPIFY_THEME_ACCESS_TOKEN:
         required: false
 
 jobs:
@@ -39,7 +39,7 @@ jobs:
       - name: Rename theme
         env:
           SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
           THEME_ID: ${{ inputs.theme_id }}
           THEME_NAME: ${{ inputs.theme_name }}
           PR_NUMBER: ${{ inputs.pr_number }}
@@ -48,7 +48,7 @@ jobs:
             echo "Missing theme_id/theme_name."
             exit 1
           fi
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_CLI_THEME_TOKEN" ]; then
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
             echo "Missing Shopify store URL/token for rename."
             exit 1
           fi
@@ -58,7 +58,7 @@ jobs:
 
           if shopify theme rename \
             --store "$SHOPIFY_STORE_URL" \
-            --password "$SHOPIFY_CLI_THEME_TOKEN" \
+            --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
             --theme "$THEME_ID" \
             --name "$NEW_THEME_NAME" 2>&1; then
             echo "Rename succeeded with password auth."

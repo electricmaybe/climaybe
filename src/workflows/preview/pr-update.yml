@@ -69,19 +69,19 @@ jobs:
       - name: Validate Shopify credentials
         env:
           SHOPIFY_STORE_URL_SCOPED: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', steps.resolve.outputs.alias_secret)] }}
-          SHOPIFY_CLI_THEME_TOKEN_SCOPED: ${{ secrets[format('SHOPIFY_CLI_THEME_TOKEN_{0}', steps.resolve.outputs.alias_secret)] }}
+          SHOPIFY_THEME_ACCESS_TOKEN_SCOPED: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', steps.resolve.outputs.alias_secret)] }}
           SHOPIFY_STORE_URL_DEFAULT: ${{ secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_CLI_THEME_TOKEN_DEFAULT: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+          SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
         run: |
           SHOPIFY_STORE_URL="${SHOPIFY_STORE_URL_SCOPED:-$SHOPIFY_STORE_URL_DEFAULT}"
-          SHOPIFY_CLI_THEME_TOKEN="${SHOPIFY_CLI_THEME_TOKEN_SCOPED:-$SHOPIFY_CLI_THEME_TOKEN_DEFAULT}"
+          SHOPIFY_THEME_ACCESS_TOKEN="${SHOPIFY_THEME_ACCESS_TOKEN_SCOPED:-$SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT}"
 
           if [ -z "$SHOPIFY_STORE_URL" ]; then
             echo "No store URL secret found. Expected SHOPIFY_STORE_URL_${{ steps.resolve.outputs.alias_secret }} or SHOPIFY_STORE_URL."
             exit 1
           fi
-          if [ -z "$SHOPIFY_CLI_THEME_TOKEN" ]; then
-            echo "No theme token secret found. Expected SHOPIFY_CLI_THEME_TOKEN_${{ steps.resolve.outputs.alias_secret }} or SHOPIFY_CLI_THEME_TOKEN."
+          if [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
+            echo "No theme token secret found. Expected SHOPIFY_THEME_ACCESS_TOKEN_${{ steps.resolve.outputs.alias_secret }} or SHOPIFY_THEME_ACCESS_TOKEN."
             exit 1
           fi
           echo "Shopify credentials are configured for alias: ${{ steps.resolve.outputs.alias }}"
@@ -94,7 +94,7 @@ jobs:
       store_alias: ${{ needs.validate-environment.outputs.store_alias }}
     secrets:
       SHOPIFY_STORE_URL: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
-      SHOPIFY_CLI_THEME_TOKEN: ${{ secrets[format('SHOPIFY_CLI_THEME_TOKEN_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_CLI_THEME_TOKEN }}
+      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
 
   rename-theme:
     needs: [share-theme, extract-pr-number, validate-environment]
@@ -106,7 +106,7 @@ jobs:
       store_alias: ${{ needs.validate-environment.outputs.store_alias }}
     secrets:
       SHOPIFY_STORE_URL: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
-      SHOPIFY_CLI_THEME_TOKEN: ${{ secrets[format('SHOPIFY_CLI_THEME_TOKEN_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_CLI_THEME_TOKEN }}
+      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', needs.validate-environment.outputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
 
   comment-on-pr:
     needs: [share-theme, rename-theme, extract-pr-number, validate-environment]

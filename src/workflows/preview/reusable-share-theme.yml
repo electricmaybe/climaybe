@@ -28,7 +28,7 @@ on:
     secrets:
       SHOPIFY_STORE_URL:
         required: false
-      SHOPIFY_CLI_THEME_TOKEN:
+      SHOPIFY_THEME_ACCESS_TOKEN:
         required: false
 
 jobs:
@@ -56,16 +56,16 @@ jobs:
         id: share
         env:
           SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
         run: |
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_CLI_THEME_TOKEN" ]; then
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
             echo "Missing Shopify secrets."
             exit 1
           fi
 
           OUTPUT=$(shopify theme share \
             --store "$SHOPIFY_STORE_URL" \
-            --password "$SHOPIFY_CLI_THEME_TOKEN" 2>&1)
+            --password "$SHOPIFY_THEME_ACCESS_TOKEN" 2>&1)
           STATUS=$?
 
           echo "$OUTPUT"

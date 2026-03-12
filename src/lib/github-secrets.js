@@ -23,12 +23,12 @@ export const SECRET_DEFINITIONS = [
       'Your theme’s store URL in Shopify Admin → Settings → Domains, or use the .myshopify.com URL.',
   },
   {
-    name: 'SHOPIFY_CLI_THEME_TOKEN',
+    name: 'SHOPIFY_THEME_ACCESS_TOKEN',
     required: true,
     condition: 'preview',
-    description: 'Theme access token so CI can push preview themes to your store',
+    description: 'Theme access token so CI can push preview themes (password from Shopify Theme Access app)',
     whereToGet:
-      'Shopify Partners: your app → Theme library access → Create theme access token. Or: Shopify Admin → Apps → Develop apps → your app → API credentials → Theme access.',
+      'Install the Theme Access app from Shopify: it gives you a password — that password is your theme access token.',
   },
   {
     name: 'SHOP_ACCESS_TOKEN',
@@ -198,6 +198,44 @@ export function aliasToSecretSuffix(alias) {
 }
 
 /**
+ * Get store domain for a theme token secret name (single or SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>).
+ * Returns store domain or null if not found.
+ */
+export function getStoreUrlForThemeTokenSecret(secretName, stores = []) {
+  if (!stores.length) return null;
+  if (secretName === 'SHOPIFY_THEME_ACCESS_TOKEN') return stores[0]?.domain ?? null;
+  if (!secretName.startsWith('SHOPIFY_THEME_ACCESS_TOKEN_')) return null;
+  const suffix = secretName.replace('SHOPIFY_THEME_ACCESS_TOKEN_', '');
+  const store = stores.find((s) => aliasToSecretSuffix(s.alias) === suffix);
+  return store?.domain ?? null;
+}
+
+/**
+ * Test theme access token against the store (read-only list). Never logs or persists the token.
+ * Returns { ok: true } or { ok: false, error: string }. Safe to call; token only sent to Shopify CLI.
+ */
+export function validateThemeAccessToken(storeUrl, token) {
+  if (!storeUrl || !token) return { ok: false, error: 'Missing store URL or token' };
+  return new Promise((resolve) => {
+    const child = spawn('shopify', ['theme', 'list', '--store', storeUrl, '--password', token], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+    let stderr = '';
+    child.stderr?.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('error', (err) => {
+      resolve({ ok: false, error: err.code === 'ENOENT' ? 'Shopify CLI not installed (npm install -g @shopify/cli @shopify/theme)' : err.message });
+    });
+    child.on('close', (code) => {
+      if (code === 0) resolve({ ok: true });
+      else resolve({ ok: false, error: stderr.trim() || `Exit code ${code}` });
+    });
+  });
+}
+
+/**
  * Store URL secrets are set from config (store domains added during init), not prompted.
  * Returns [{ name, value }] for SHOPIFY_STORE_URL and/or SHOPIFY_STORE_URL_<ALIAS>.
  */
@@ -225,7 +263,7 @@ export function getStoreUrlSecretsFromConfig({ enablePreviewWorkflows, enableBui
 
 /**
  * Get secrets we need to prompt for (excludes store URLs; those are set from config).
- * Theme token(s) are required when preview is enabled.
+ * Theme token(s) are required when preview is enabled. In multi-store, all Shopify tokens are per-store.
  */
 export function getSecretsToPrompt({ enablePreviewWorkflows, enableBuildWorkflows, mode = 'single', stores = [] }) {
   const isMulti = mode === 'multi' && stores.length > 1;
@@ -239,23 +277,46 @@ export function getSecretsToPrompt({ enablePreviewWorkflows, enableBuildWorkflow
     return false;
   });
 
-  const dropPreviewGeneric =
-    isMulti && enablePreviewWorkflows
-      ? (s) => s.name !== 'SHOPIFY_CLI_THEME_TOKEN'
+  // Multi-store: drop generic Shopify tokens; we prompt per-store below
+  const dropForMulti =
+    isMulti
+      ? (s) =>
+          s.name !== 'SHOPIFY_THEME_ACCESS_TOKEN' &&
+          s.name !== 'SHOP_ACCESS_TOKEN' &&
+          s.name !== 'SHOP_PASSWORD'
       : () => true;
 
-  let list = base.filter(dropPreviewGeneric);
+  let list = base.filter(dropForMulti);
 
-  if (isMulti && enablePreviewWorkflows) {
+  // Multi-store: prompt per store (theme token, then access token + password if build) so user configures one store at a time
+  if (isMulti) {
     for (const store of stores) {
       const suffix = aliasToSecretSuffix(store.alias);
-      list.push({
-        name: `SHOPIFY_CLI_THEME_TOKEN_${suffix}`,
-        required: true,
-        description: `Store ${store.alias}: Theme access token for CI (staging/live use this for ${store.alias})`,
-        whereToGet:
-          'Shopify Partners or Admin → Apps → Develop apps → your app → Theme access for this store.',
-      });
+      if (enablePreviewWorkflows) {
+        list.push({
+          name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
+          required: true,
+          description: `Store ${store.alias}: Theme access token (password from Theme Access app)`,
+          whereToGet: 'Theme Access app in Shopify — the password it gives is the token for this store.',
+        });
+      }
+      if (enableBuildWorkflows) {
+        list.push(
+          {
+            name: `SHOP_ACCESS_TOKEN_${suffix}`,
+            required: false,
+            description: `Store ${store.alias}: API access token for Lighthouse`,
+            whereToGet:
+              'Shopify Admin → Develop apps → your app → API credentials (Admin/storefront access).',
+          },
+          {
+            name: `SHOP_PASSWORD_${suffix}`,
+            required: false,
+            description: `Store ${store.alias}: Storefront password if protected (optional)`,
+            whereToGet: 'Storefront password in Shopify Admin for this store.',
+          }
+        );
+      }
     }
   }
 
@@ -270,17 +331,28 @@ export function getStoreUrlSecretForNewStore(store) {
 }
 
 /**
- * Per-store secret to prompt for when adding a store (theme token only; URL is set from store.domain).
+ * Per-store secrets to prompt for when adding a store (URL is set from store.domain).
  */
 export function getSecretsToPromptForNewStore(store) {
   const suffix = aliasToSecretSuffix(store.alias);
   return [
     {
-      name: `SHOPIFY_CLI_THEME_TOKEN_${suffix}`,
+      name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
       required: true,
-      description: `Store ${store.alias}: Theme access token for CI (staging/live use this for ${store.alias})`,
-      whereToGet:
-        'Shopify Partners or Admin → Apps → Develop apps → your app → Theme access for this store.',
+      description: `Store ${store.alias}: Theme access token (password from Theme Access app)`,
+      whereToGet: 'Theme Access app in Shopify — the password it gives is the token for this store.',
+    },
+    {
+      name: `SHOP_ACCESS_TOKEN_${suffix}`,
+      required: false,
+      description: `Store ${store.alias}: API access token for Lighthouse (if using build workflows)`,
+      whereToGet: 'Shopify Admin → Develop apps → your app → API credentials.',
+    },
+    {
+      name: `SHOP_PASSWORD_${suffix}`,
+      required: false,
+      description: `Store ${store.alias}: Storefront password if protected (optional)`,
+      whereToGet: 'Storefront password in Shopify Admin for this store.',
     },
   ];
 }

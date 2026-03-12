@@ -119,7 +119,7 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
 - Hardened store domain parsing to strip protocol/path segments before URL generation.
 - Added support for store-scoped secrets in `pr-to-live.yml`:
   - `SHOPIFY_STORE_URL_<ALIAS>`
-  - `SHOPIFY_CLI_THEME_TOKEN_<ALIAS>`
+  - `SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>`
   - Alias transformation: uppercase + hyphen to underscore.
 - PR body for `staging-<alias> -> live-<alias>` now targets staging/non-live themes:
   - resolves a non-main theme ID via `shopify theme list --json` when possible

@@ -22,7 +22,7 @@ jobs:
       pull-requests: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -72,8 +72,8 @@ jobs:
 
       - name: Create PR to live branch
         env:
-          SHOPIFY_CLI_THEME_TOKEN_SCOPED: ${{ secrets[format('SHOPIFY_CLI_THEME_TOKEN_{0}', steps.alias.outputs.alias_secret)] }}
-          SHOPIFY_CLI_THEME_TOKEN_DEFAULT: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+          SHOPIFY_THEME_ACCESS_TOKEN_SCOPED: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', steps.alias.outputs.alias_secret)] }}
+          SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
         run: |
           STAGING="${{ steps.alias.outputs.staging_branch }}"
           LIVE="${{ steps.alias.outputs.live_branch }}"
@@ -81,7 +81,7 @@ jobs:
           DOMAIN="${{ steps.store.outputs.domain }}"
           STAGING_THEME_ID=""
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          SHOPIFY_TOKEN="${SHOPIFY_CLI_THEME_TOKEN_SCOPED:-$SHOPIFY_CLI_THEME_TOKEN_DEFAULT}"
+          SHOPIFY_TOKEN="${SHOPIFY_THEME_ACCESS_TOKEN_SCOPED:-$SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT}"
 
           # Check if live branch exists
           if ! git ls-remote --heads origin "$LIVE" | grep -q "$LIVE"; then

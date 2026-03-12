@@ -29,17 +29,17 @@ jobs:
         id: cleanup
         env:
           SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
         run: |
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_CLI_THEME_TOKEN" ]; then
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
             echo "Missing Shopify secrets."
             exit 1
           fi
 
           THEME_LIST=$(shopify theme list \
             --store "$SHOPIFY_STORE_URL" \
-            --password "$SHOPIFY_CLI_THEME_TOKEN" \
+            --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
             --json 2>/dev/null || echo "[]")
 
           DELETED_COUNT=0
@@ -52,7 +52,7 @@ jobs:
             if printf "%s" "$THEME_NAME" | grep -q "PR${PR_NUMBER}"; then
               if shopify theme delete \
                 --store "$SHOPIFY_STORE_URL" \
-                --password "$SHOPIFY_CLI_THEME_TOKEN" \
+                --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
                 --force \
                 --theme "$THEME_ID" 2>/dev/null; then
                 DELETED_COUNT=$((DELETED_COUNT + 1))
