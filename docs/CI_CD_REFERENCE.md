@@ -11,7 +11,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
   - On merge: **post-merge-tag** does **minor** bump from latest tag (e.g. `v3.1.13` → `v3.2.0`). Changelog from last tag to HEAD.
 - **Non-staging to main** (hotfix backports, direct commits): **Patch** bump only. Not at commit time; **nightly workflow** at 02:00 US Eastern collects commits since latest tag, generates AI changelog, and creates one patch tag.
 - **Where version bump runs**: Only on **main**. It is triggered by **post-merge-tag** (after a staging → main merge) or **nightly-hotfix** (cron on main). Branches `staging`, `staging-<alias>`, and `live-<alias>` do **not** run version bump themselves.
-- **Main → staging-<alias>**: After any push to main (except pure store-sync commits), **main-to-staging-stores** merges main into each `staging-<alias>` so store branches stay in sync: **version bumps** (new version in schema + package.json), **hotfixes** (changes from live or staging-<alias> that were merged to main), and normal staging→main releases. Only commits that are purely store-sync (`[stores-to-root]`, `[root-to-stores]`) are skipped to avoid loops.
+- **Main → staging-<alias>**: After any push to main (except pure store-sync commits), **main-to-staging-stores** merges main into each `staging-<alias>` so store branches stay in sync: **version bumps**, **hotfixes**, and normal staging→main releases. When the push is a **hotfix-backport** from one store (e.g. live-norway or staging-norway), that store’s staging branch is skipped (no need to merge back to the same branch); the other stores’ staging branches still get the merge. Only purely store-sync commits are skipped to avoid loops.
 - **What gets updated**: Every version bump updates `config/settings_schema.json` (`theme_info.theme_version`). If `package.json` exists, its `version` field is updated to match (e.g. `3.2.0`).
 
 ## Local dev (multi-store)
@@ -25,14 +25,14 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - Direct pushes to **`staging-<store>`** or **`live-<store>`** are synced back to `main` automatically by **multistore-hotfix-to-main**.
 - **No PR**: The workflow merges the store branch into `main` and pushes. Merge commit message contains `[hotfix-backport]`.
 - **live-***: Same as staging-*: **root-to-stores** detects source (main vs elsewhere). From main → stores→root; from elsewhere → root→stores, then **multistore-hotfix-to-main** merges to main (skips when push was merge from main).
-- **main-to-staging-stores** runs on every push to main except pure store-sync commits (`[stores-to-root]`, `[root-to-stores]`). So version bumps and hotfix backports (live or staging-<alias> → main) are merged back into each `staging-<alias>`, keeping staging in sync with main.
+- **main-to-staging-stores** runs on every push to main except pure store-sync commits. Version bumps and normal releases are merged into all `staging-<alias>`. For hotfix-backports, the merge commit message is parsed to get the source branch (e.g. live-norway); main is merged into every *other* staging-<alias> (e.g. staging-trigger, staging-denmark) but not into the source store’s staging branch (staging-norway), since that branch already has the hotfix.
 - **Root JSON files** (config/settings_data.json, templates/*.json, sections/*.json) are **ignored** between main and staging-&lt;alias&gt;: when main is synced to a store branch, the workflow merges main then restores root from `stores/<alias>/`, so main’s root JSONs never overwrite store-specific data.
 
 ## Workflow names and roles
 
 | Concept | File | Trigger | What it does |
 |--------|------|---------|--------------|
-| main-to-staging-<store> | `main-to-staging-stores.yml` | Push to `main` | Merges main into each `staging-<alias>` (local merge + push). Root JSONs ignored (restored from `stores/<alias>/`). Skips only on pure store-sync commits; runs on version-bump and hotfix backports so staging-<alias> stay in sync with main. |
+| main-to-staging-<store> | `main-to-staging-stores.yml` | Push to `main` | Merges main into each `staging-<alias>` (local merge + push). Root JSONs ignored (restored from `stores/<alias>/`). Skips only on pure store-sync. For hotfix-backport, skips the store that sent the hotfix; other stores get the merge. |
 | stores-to-root | `stores-to-root.yml` | Push to `staging-*` | **From main** (merge): copies `stores/<alias>/` → root. **From elsewhere** (Shopify, direct, feature): copies root → `stores/<alias>/`. |
 | pr-to-live | `pr-to-live.yml` | After stores-to-root | Opens PR from `staging-<alias>` to `live-<alias>`. |
 | root-to-stores | `root-to-stores.yml` | Push to `live-*` | **From main** (merge): copies `stores/<alias>/` → root. **From elsewhere**: copies root → `stores/<alias>/`. Same logic as stores-to-root on staging-*. |
