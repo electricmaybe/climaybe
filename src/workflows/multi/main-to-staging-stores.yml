@@ -5,11 +5,18 @@
 # Runs on every push to main except pure store-sync commits ([stores-to-root], [root-to-stores]), so that:
 # - Version-bump commits: staging-<alias> get the new version.
 # - Hotfix backports (live or staging-<alias> → main): other staging-<alias> get those changes; the store that sent the hotfix is skipped (no need to merge back to the same branch).
+#
+# Also runs when Post-Merge Tag or Nightly Hotfix Tag complete: version-bump pushes with GITHUB_TOKEN,
+# which does not trigger push-based workflows, so we explicitly run sync after those workflows finish.
 
 name: Main to Staging Stores
 
 on:
   push:
+    branches: [main]
+  workflow_run:
+    workflows: ['Post-Merge Tag', 'Nightly Hotfix Tag']
+    types: [completed]
     branches: [main]
 
 # Prevent concurrent store pushes
@@ -19,8 +26,11 @@ concurrency:
 
 jobs:
   # Gate: skip only pure store-sync commits. When hotfix-backport, extract source branch alias so we skip merging back into that same store.
+  # When triggered by workflow_run (version-bump finished), run sync if the workflow succeeded.
   gate:
     runs-on: ubuntu-latest
+    # workflow_run: only sync when Post-Merge or Nightly Hotfix completed successfully (version-bump pushed)
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       hotfix_source_alias: ${{ steps.check.outputs.hotfix_source_alias }}
@@ -28,6 +38,13 @@ jobs:
       - name: Check commit message and hotfix source
         id: check
         run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "Triggered by workflow_run (version-bump finished); syncing main to staging."
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "hotfix_source_alias=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           COMMIT_MSG="${{ github.event.head_commit.message }}"
 
           if echo "$COMMIT_MSG" | grep -qE "\[skip-store-sync\]|\[stores-to-root\]|\[root-to-stores\]"; then
@@ -94,6 +111,7 @@ jobs:
 
       - name: Sync main to staging-${{ matrix.store }} (root JSONs ignored)
         run: |
+          git fetch origin main
           BRANCH="staging-${{ matrix.store }}"
           ALIAS="${{ matrix.store }}"
           STORE_DIR="stores/${ALIAS}"
