@@ -8,6 +8,13 @@ on:
 
 jobs:
   build:
+    # Skip pure store-sync + hotfix-backport commits; those are infrastructure-only
+    # syncs from staging/live stores back to main and should not trigger heavy theme
+    # review / build pipelines.
+    if: >
+      !contains(github.event.head_commit.message, '[hotfix-backport]')
+      && !contains(github.event.head_commit.message, '[stores-to-root]')
+      && !contains(github.event.head_commit.message, '[root-to-stores]')
     uses: ./.github/workflows/reusable-build.yml
 
   lighthouse-gate:
