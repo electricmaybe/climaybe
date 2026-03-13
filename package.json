@@ -42,15 +42,10 @@
       [
         "@semantic-release/commit-analyzer",
         {
+          "preset": "conventionalcommits",
           "releaseRules": [
-            {
-              "type": "ci",
-              "release": "patch"
-            },
-            {
-              "type": "chore",
-              "release": "patch"
-            }
+            { "type": "ci", "release": "patch" },
+            { "type": "chore", "release": "patch" }
           ]
         }
       ],
