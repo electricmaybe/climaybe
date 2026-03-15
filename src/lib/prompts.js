@@ -128,7 +128,7 @@ export async function promptPreviewWorkflows() {
     type: 'confirm',
     name: 'enablePreviewWorkflows',
     message: 'Enable preview + cleanup workflows?',
-    initial: false,
+    initial: true,
   });
 
   return !!enablePreviewWorkflows;
@@ -142,7 +142,7 @@ export async function promptBuildWorkflows() {
     type: 'confirm',
     name: 'enableBuildWorkflows',
     message: 'Enable build + Lighthouse workflows?',
-    initial: false,
+    initial: true,
   });
 
   return !!enableBuildWorkflows;
