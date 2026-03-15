@@ -12,6 +12,8 @@ const COMMITLINT_DEPS = {
 const COMMITLINT_CONFIG = `/** @type {import('@commitlint/types').UserConfig} */
 module.exports = {
   extends: ['@commitlint/config-conventional'],
+  defaultIgnores: true,
+  ignores: [(commit) => /^Merge\\s/i.test((commit || '').split('\\n')[0] || '')],
   rules: {
     'type-enum': [
       2,
