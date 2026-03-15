@@ -18,6 +18,7 @@ module.exports = {
       'always',
       ['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'build', 'ci', 'chore'],
     ],
+    'subject-empty': [0],
     'header-max-length': [2, 'always', 100],
     'body-max-line-length': [2, 'always', 200],
   },
@@ -34,19 +35,19 @@ description: Groups working-tree changes into logical commits and commits them u
 
 # Commit (group + conventional)
 
-Group changes by purpose, then commit each group with a valid conventional message so commitlint and semantic-release stay happy.
+Group changes by purpose, then commit each group. A conventional message is optional; when the user provides or wants one, use the format below so commitlint and semantic-release stay happy.
 
 ## Workflow
 
 1. **Inspect** — Get full picture of changes (git status, git diff).
 2. **Group** — Partition by type: feat, fix, docs, style, refactor, perf, test, build, ci, chore.
-3. **Commit each group** — type(scope): subject, imperative, lowercase, no period, ≤100 chars.
-4. **Validate** — commit-msg hook will reject invalid messages.
+3. **Commit each group** — If the user wants a message: type(scope): subject, imperative, lowercase, no period, ≤100 chars. If they don't, commit without message or with a minimal one (e.g. chore: wip).
+4. **Validate** — commit-msg hook may reject invalid messages when a message is used.
 
-## Message rules (commitlint)
+## Message rules (commitlint, when a message is used)
 
 - **Types:** feat, fix, docs, style, refactor, perf, test, build, ci, chore.
-- **Header:** type(scope): subject — subject max 100 chars. Body lines max 200.
+- **Header:** type(scope): subject — subject optional; max 100 chars when present. Body lines max 200.
 - **Imperative, present tense:** "add feature" not "added feature".
 
 ## Examples
