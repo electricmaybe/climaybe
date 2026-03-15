@@ -25,7 +25,9 @@ module.exports = {
 };
 `;
 
-const HUSKY_COMMIT_MSG = `npx --no-install commitlint --edit "$1"
+const HUSKY_COMMIT_MSG = `# Ensure npx is on PATH when Git/IDE run with a minimal env (e.g. Cursor, VS Code)
+export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+npx --no-install commitlint --edit "$1"
 `;
 
 const CURSOR_COMMIT_SKILL = `---
