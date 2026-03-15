@@ -39,8 +39,8 @@ Interactive setup that configures your repo for CI/CD.
 1. Prompts for your store URL (e.g., `voldt-staging.myshopify.com`)
 2. Extracts subdomain as alias, lets you override
 3. Asks if you want to add more stores
-4. Asks whether to enable optional **preview + cleanup** workflows
-5. Asks whether to enable optional **build + Lighthouse** workflows
+4. Asks whether to enable optional **preview + cleanup** workflows (default: yes)
+5. Asks whether to enable optional **build + Lighthouse** workflows (default: yes)
 6. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
 7. Asks whether to add **Cursor commit skill** to the project (`.cursor/skills/commit/SKILL.md`) for AI-assisted conventional commits
 8. Based on store count, sets up **single-store** or **multi-store** mode
@@ -193,7 +193,7 @@ Direct pushes to `staging-<store>` or `live-<store>` are automatically synced ba
 
 ### Optional preview + cleanup package
 
-Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`).
+Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`; default: yes).
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
@@ -207,7 +207,7 @@ Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`).
 
 ### Optional build + Lighthouse package
 
-Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`).
+Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`; default: yes).
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|

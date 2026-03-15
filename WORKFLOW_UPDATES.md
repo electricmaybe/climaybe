@@ -168,6 +168,12 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
   - Reusable preview workflows now consume mapped `workflow_call` secrets directly, avoiding runtime dynamic secret lookup gaps.
   - Fixed job dependency graph so `rename-theme` and `comment-on-pr` can safely access resolved alias outputs from `validate-environment`.
 
+## 14) Init prompt defaults: preview and build workflows
+
+- `Enable preview + cleanup workflows?` now defaults to **yes** (was no).
+- `Enable build + Lighthouse workflows?` now defaults to **yes** (was no).
+- Users can still press `n` to opt out; hitting Enter accepts the default and enables both packages.
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.
