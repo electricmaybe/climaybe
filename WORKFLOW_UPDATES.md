@@ -19,8 +19,8 @@ This document summarizes past CI workflow hardening changes applied in `climaybe
 ## 1) `ai-changelog.yml` improvements
 
 - Switched commit payload handling to multiline plain text output (instead of JSON-encoded string output).
-- Fixed shell parsing safety by passing commit content through `COMMITS_RAW` env and assigning `COMMITS="$COMMITS_RAW"` in script.
-- Replaced `jq --argjson commits ...` with `jq --arg commits ...` to avoid invalid JSON parse failures.
+- Writes commits to workspace file `commits-for-ai.txt` and uses `jq --rawfile commits ...` so large histories avoid env size limits and raw log lines are never passed to `jq --argjson` (which requires valid JSON and fails on plain `git log` text).
+- Step output `has_commits` (`true` / `false`) gates the AI step instead of a multiline `commits` output blob.
 - Added provider fallback chain stability:
   - Gemini (when `GEMINI_API_KEY` is available)
   - GitHub Models fallback

@@ -30,7 +30,7 @@ jobs:
       contents: read
       models: read
     outputs:
-      changelog: ${{ steps.ai.outputs.changelog }}
+      changelog: ${{ steps.ai.outputs.changelog || steps.no_commits.outputs.changelog }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,25 +43,21 @@ jobs:
           COMMITS=$(git log --pretty=format:"%h %s" ${{ inputs.base_ref }}..${{ inputs.head_ref }} 2>/dev/null || echo "")
           if [ -z "$COMMITS" ]; then
             echo "No commits found between ${{ inputs.base_ref }} and ${{ inputs.head_ref }}"
-            echo "commits=" >> $GITHUB_OUTPUT
+            echo "has_commits=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          # Keep commits as multiline plain text
-          {
-            echo "commits<<COMMITS_EOF"
-            echo "$COMMITS"
-            echo "COMMITS_EOF"
-          } >> $GITHUB_OUTPUT
+          # File avoids huge env vars and shell escaping; jq reads via --rawfile (never use --argjson for raw log text).
+          printf '%s\n' "$COMMITS" > commits-for-ai.txt
+          echo "has_commits=true" >> $GITHUB_OUTPUT
 
       - name: Generate changelog (Gemini -> GitHub Models fallback)
         id: ai
-        if: steps.commits.outputs.commits != ''
+        if: steps.commits.outputs.has_commits == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMITS_RAW: ${{ steps.commits.outputs.commits }}
         run: |
-          COMMITS="$COMMITS_RAW"
+          COMMITS=$(cat commits-for-ai.txt)
           PROVIDER="fallback"
 
           PROMPT=$(cat <<'PROMPT_EOF'
@@ -86,7 +82,7 @@ jobs:
           if [ -n "$GEMINI_API_KEY" ]; then
             PAYLOAD=$(jq -n \
               --arg prompt "$PROMPT" \
-              --arg commits "$COMMITS" \
+              --rawfile commits commits-for-ai.txt \
               '{
                 "contents": [{
                   "parts": [{"text": ($prompt + "\n" + $commits)}]
@@ -112,7 +108,7 @@ jobs:
           if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "null" ]; then
             GH_PAYLOAD=$(jq -n \
               --arg prompt "$PROMPT" \
-              --arg commits "$COMMITS" \
+              --rawfile commits commits-for-ai.txt \
               '{
                 "model": "gpt-4o-mini",
                 "messages": [
@@ -157,7 +153,8 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Fallback if no commits
-        if: steps.commits.outputs.commits == ''
+        id: no_commits
+        if: steps.commits.outputs.has_commits != 'true'
         run: |
           {
             echo "changelog<<CHANGELOG_EOF"
