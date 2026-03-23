@@ -1,7 +1,7 @@
 {
   "name": "climaybe",
-  "version": "1.8.2",
-  "description": "Shopify CI/CD CLI — scaffolds workflows, branch strategy, and store config for single-store and multi-store theme repos",
+  "version": "2.0.0",
+  "description": "Shopify CLI — theme CI/CD (workflows, branches, stores) and app repo helpers; also: commitlint and Cursor rules/skills",
   "type": "module",
   "bin": {
     "climaybe": "bin/cli.js"
