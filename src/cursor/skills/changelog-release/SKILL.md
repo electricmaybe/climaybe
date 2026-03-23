@@ -18,7 +18,7 @@ Use the same type labels and emoji for changelog sections so the output matches 
 
 ## Workflow
 
-1. **Determine range** — Since last tag (e.g. `git describe --tags --abbrev=0` then `git log TAG..HEAD`), or since a branch/commit the user specifies. If unclear, default to "since last tag".
+1. **Determine range** — Since last tag: use the **highest semver** among tags merged into `HEAD` (merged-into + `sort -V`), then `git log TAG..HEAD`. Do not rely on `git describe` alone after branch merges—it can return a **lower** version that is graph-closer on the merged branch. Or use a branch/commit the user specifies. If unclear, default to "since last tag".
 2. **Get commits** — Run `git log --oneline [range]` (or with `--pretty=format:...` for message + body). Parse commit messages.
 3. **Group by type** — Map each commit to a type from commit-rules.mdc (fix, feat, refactor, style, remove, wip, docs, ai, chore, upgrade). Ignore merge commits. Put "unknown" or "other" for non-matching messages.
 4. **Format** — Output markdown:

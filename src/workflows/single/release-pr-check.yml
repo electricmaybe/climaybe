@@ -56,7 +56,10 @@ jobs:
       - name: Create pre-release patch tag
         id: tag
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          LATEST_TAG=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          fi
           if [ -z "$LATEST_TAG" ]; then
             # No tags: use theme_version from config/settings_schema.json and push as initial tag
             SCHEMA="config/settings_schema.json"

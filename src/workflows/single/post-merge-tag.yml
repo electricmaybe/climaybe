@@ -77,7 +77,10 @@ jobs:
       - name: Get latest tag (or create from settings_schema.json)
         id: tag
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          LAST_TAG=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ -z "$LAST_TAG" ]; then
+            LAST_TAG=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          fi
           if [ -z "$LAST_TAG" ]; then
             SCHEMA="config/settings_schema.json"
             if [ -f "$SCHEMA" ]; then

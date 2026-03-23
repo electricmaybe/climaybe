@@ -5,6 +5,8 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 ## Versioning
 
 - **Format**: Always three-part (e.g. `v3.2.0`). No version is written in code or PR title; the system infers from tags.
+- **“Latest” tag**: The workflows take the **highest** `vMAJOR.MINOR.PATCH` tag among tags **merged into** the checked-out ref (`git tag --merged` + version sort), not `git describe`. After a staging→main merge, `git describe` can incorrectly pick an older tag that is graph-closer on the staging side than the real latest release on main.
+- **Monotonic releases**: The reusable **version-bump** job fails if the computed tag is not **strictly greater** (semver) than the highest merged release tag, so a bad base or explicit version cannot move the line backward or sideways.
 - **When there are no git tags**: The system reads `theme_version` from `config/settings_schema.json` (inside the `theme_info` object), creates that version as a tag on main (e.g. `v1.0.0`), and uses it as the base for pre-release and bump logic. So you can set the starting version in the theme’s schema and the first run will tag it.
 - **Staging → main (release)**:
   - On PR open/sync: **release-pr-check** finds latest tag on main (e.g. `v3.1.12`), generates AI changelog from that tag to PR head, and creates a **pre-release patch tag** (e.g. `v3.1.13`) on main to lock “last v3.1.x” before merge.

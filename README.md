@@ -225,6 +225,7 @@ Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`; defa
 - **Non-staging to main** (hotfix backports, direct commits): **Patch** bump only, via **nightly workflow** at 02:00 US Eastern (not at commit time).
 - **Version bump runs only on main** (post-merge-tag and nightly-hotfix). Main-to-staging-stores merges main into each `staging-<alias>` on every push (version bumps and hotfixes). When the push is a hotfix from one store (e.g. live-norway), that store’s staging branch is skipped; other stores’ staging branches still get the merge.
 - Version bumps update `config/settings_schema.json` and, when present, `package.json` `version`.
+- **Safety**: The version-bump workflow fails if the new tag would not be **strictly higher** than the latest merged release tag (semver), so the release line cannot step backward.
 
 **Full specification:** For detailed versioning rules, local dev flow, hotfix behavior, and alignment with the external CI/CD doc, see **[CI/CD Reference](docs/CI_CD_REFERENCE.md)**.
 

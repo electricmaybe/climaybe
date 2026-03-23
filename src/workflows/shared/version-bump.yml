@@ -61,9 +61,15 @@ jobs:
             fi
             NEW_VERSION="v${NEW_VERSION}"
           else
-            # Get latest tag (or theme_version from settings_schema.json when no tags)
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+            # Highest semver among tags reachable from HEAD — not `git describe`, which picks
+            # the graph-nearest tag and can choose an old tag on the merged branch after staging→main.
+            LATEST_TAG=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            # Legacy tags without patch (v1.0) if no strict triple match
             if [ -z "$LATEST_TAG" ]; then
+              LATEST_TAG=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            fi
+            if [ -z "$LATEST_TAG" ]; then
+              # No semver tags: theme_version from settings_schema.json, else v0.0.0
               SCHEMA="config/settings_schema.json"
               if [ -f "$SCHEMA" ]; then
                 LATEST_TAG=$(node -e "
@@ -99,6 +105,26 @@ jobs:
 
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
+
+      - name: Refuse non-increasing version
+        env:
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+        run: |
+          git fetch --tags origin
+          MAX_EXISTING=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ -z "$MAX_EXISTING" ]; then
+            MAX_EXISTING=$(git tag --merged HEAD | grep -E '^v[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          fi
+          if [ -z "$MAX_EXISTING" ]; then
+            echo "No merged semver tags; skipping monotonic check."
+            exit 0
+          fi
+          HI=$(printf '%s\n' "$MAX_EXISTING" "$NEW_VERSION" | sort -V | tail -1)
+          if [ "$HI" != "$NEW_VERSION" ] || [ "$NEW_VERSION" = "$MAX_EXISTING" ]; then
+            echo "::error::Refusing to release ${NEW_VERSION}: latest merged tag is ${MAX_EXISTING}; new tag must be strictly higher (semver)."
+            exit 1
+          fi
+          echo "OK: ${NEW_VERSION} > ${MAX_EXISTING}"
 
       - name: Update settings_schema.json and package.json
         env:

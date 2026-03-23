@@ -6,6 +6,12 @@
 
 This document summarizes past CI workflow hardening changes applied in `climaybe`.
 
+## Latest tag = max semver merged into HEAD (not `git describe`)
+
+`post-merge-tag`, `version-bump`, `nightly-hotfix`, and `release-pr-check` now resolve the base tag as the **highest** `vMAJOR.MINOR.PATCH` among `git tag --merged HEAD` (with `sort -V`), instead of `git describe --tags --abbrev=0`. After a staging→main merge, `git describe` could pick an **older** tag that was fewer commits away on the staging parent than `v2.0.0` on main, producing an incorrect bump (e.g. toward `v1.0.1` instead of `v2.1.0`).
+
+**version-bump** also runs a **monotonic check** after computing the new tag: it `git fetch --tags origin`, finds the highest merged semver tag, and **fails the job** unless the new tag is strictly greater (so releases never go down or duplicate an existing merged tag line incorrectly).
+
 ## Updated files
 
 - `src/workflows/shared/ai-changelog.yml`
