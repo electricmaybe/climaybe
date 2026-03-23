@@ -47,6 +47,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update compiled assets (JavaScript and CSS)"
+            git commit -m "🔧 chore(assets): update compiled javascript and css"
             git push origin "$BRANCH_NAME"
           fi
