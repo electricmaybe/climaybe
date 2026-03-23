@@ -174,6 +174,11 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 - `Enable build + Lighthouse workflows?` now defaults to **yes** (was no).
 - Users can still press `n` to opt out; hitting Enter accepts the default and enables both packages.
 
+## 15) climaybe: npm publish in Release version only
+
+- **Release version** (`.github/workflows/release-version.yml`): semantic-release now publishes to npm in the same job as the version bump (`@semantic-release/npm` with default `npmPublish`, plus `publishConfig.provenance` / `access` in `package.json`). Uses `registry-url` and `id-token: write` for [Trusted Publisher](https://docs.npmjs.com/trusted-publishers) / provenance; installs `npm@^11.5.1` before `npm ci` because OIDC publish requires npm CLI ≥ 11.5.1.
+- **Release** (`.github/workflows/release.yml`): removed `npm publish` so a tag push does not attempt a second publish; workflow still runs tests and verifies the tag matches `package.json`.
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.

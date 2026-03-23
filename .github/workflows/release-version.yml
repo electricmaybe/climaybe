@@ -1,5 +1,7 @@
-# On merge to main: determine version from conventional commits, bump package.json, push tag.
-# Tag push triggers Release workflow → tests + npm publish.
+# On merge to main: conventional commits → semantic-release bumps package.json, publishes to npm, pushes tag + commit.
+# Tag push still runs Release workflow (tests + tag/package version check only; publish happens here).
+# Trusted publishing (OIDC): register this filename on npm → Package → Settings → Trusted Publisher → GitHub Actions.
+# Requires npm CLI ≥ 11.5.1 on the runner (see "Ensure npm for trusted publishing" below).
 name: Release version
 
 on:
@@ -14,6 +16,7 @@ jobs:
     if: "!contains(github.event.head_commit.message, 'chore(release):')"
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -26,6 +29,11 @@ jobs:
           # semantic-release@25 requires Node ^22.14.0 or >= 24.10.0
           node-version: '22'
           cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      # https://docs.npmjs.com/trusted-publishers — OIDC publish needs npm ≥ 11.5.1 (Node’s bundled npm may be older).
+      - name: Ensure npm for trusted publishing
+        run: npm install -g npm@^11.5.1
 
       - name: Install dependencies
         run: npm ci

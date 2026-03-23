@@ -29,6 +29,10 @@
   },
   "bugs": "https://github.com/electricmaybe/climaybe/issues",
   "homepage": "https://github.com/electricmaybe/climaybe#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "test": "node scripts/run-tests.js 2>&1 | tee test.log",
     "prepare": "husky",
@@ -56,12 +60,7 @@
         }
       ],
       "@semantic-release/release-notes-generator",
-      [
-        "@semantic-release/npm",
-        {
-          "npmPublish": false
-        }
-      ],
+      "@semantic-release/npm",
       [
         "@semantic-release/git",
         {
