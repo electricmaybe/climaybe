@@ -1,38 +1,54 @@
 # climaybe
 
-Shopify CI/CD CLI — scaffolds GitHub Actions workflows, branch strategy, and store config for single-store and multi-store theme repositories.
+Shopify CLI for **theme CI/CD** (GitHub Actions, branches, multi-store config) and light **app repo** setup. Same install works in theme or app repositories.
 
-**Commit linting and AI-assisted commits are available as optional setup steps:**
+**Commit linting and Cursor bundle (optional in both flows):**
 
-- **Conventional commit linting:** During `climaybe init`, you can choose to automatically install and configure [commitlint](https://commitlint.js.org/) and [Husky](https://typicode.github.io/husky) to enforce [Conventional Commits](https://www.conventionalcommits.org/) in your theme repository.
-- **Cursor rules + skills:** You can opt in to installing Electric Maybe’s bundled [Cursor](https://cursor.com/) project rules and agent skills under `.cursor/rules/` and `.cursor/skills/` (Liquid, JS, a11y, commits, changelog, Linear, etc.).
+- **Conventional commit linting:** During `climaybe theme init` or `climaybe app init`, you can install [commitlint](https://commitlint.js.org/) and [Husky](https://typicode.github.io/husky) for [Conventional Commits](https://www.conventionalcommits.org/).
+- **Cursor rules + skills:** Opt in to Electric Maybe’s bundled [Cursor](https://cursor.com/) rules and skills under `.cursor/rules/` and `.cursor/skills/` (themes, JS, a11y, commits, changelog, Linear, etc.).
 
-Both options streamline commit message quality and team workflows but are fully optional during setup.
+## Command layout (Shopify CLI–style)
+
+- **`climaybe theme <command>`** — canonical commands for theme repos (workflows, stores, branches).
+- **Same commands at the top level** — `climaybe init` is the same as `climaybe theme init` (backward compatible).
+- **`climaybe app init`** — app repos only: writes `project_type: "app"` in `package.json` config, optional commitlint + Cursor bundle. Does **not** install theme GitHub Actions or store/branch setup.
+- **`climaybe setup-commitlint`** and **`climaybe add-cursor`** — always at the top level (stack-agnostic).
+
+Theme-only commands refuse to run when `package.json` → `config.project_type` is **`app`**.
 
 ## Install
 
-Install in your theme repo (project-only, no global install):
-
 ```bash
-cd your-shopify-theme-repo
+cd your-shopify-theme-repo   # or app repo
 npm install -D climaybe
 ```
 
 Run commands with `npx climaybe` (or add scripts to your `package.json`).
 
-## Quick Start
+## Quick Start (theme)
 
 ```bash
 cd your-shopify-theme-repo
 npm install -D climaybe
 npx climaybe init
+# equivalent: npx climaybe theme init
 ```
 
 The interactive setup will ask for your store URL(s) and configure everything automatically.
 
+## Quick Start (app)
+
+```bash
+cd your-shopify-app-repo
+npm install -D climaybe
+npx climaybe app init
+```
+
+Installs optional commitlint/Husky and Cursor rules/skills only. Use [Shopify CLI](https://shopify.dev/docs/api/shopify-cli) for app development and deployment.
+
 ## Commands
 
-### `climaybe init`
+### `climaybe init` / `climaybe theme init`
 
 Interactive setup that configures your repo for CI/CD.
 
@@ -49,7 +65,11 @@ Interactive setup that configures your repo for CI/CD.
 11. Creates git branches and store directories (multi-store)
 12. Optionally installs commitlint, Husky, and the Cursor bundle (rules + skills)
 
-### `climaybe add-store`
+### `climaybe app init`
+
+Interactive setup for a **Shopify app** repository: optional commitlint + Husky, optional Cursor bundle, and `project_type: "app"` in `package.json` `config`. No theme workflows, stores, or staging/live branches.
+
+### `climaybe add-store` / `climaybe theme add-store`
 
 Add a new store to an existing setup.
 
@@ -62,7 +82,7 @@ npx climaybe add-store
 - Creates `stores/<alias>/` directory structure
 - If store count goes from 1 to 2+, automatically migrates from single to multi-store mode
 
-### `climaybe switch <alias>`
+### `climaybe switch <alias>` / `climaybe theme switch`
 
 Switch your local dev environment to a specific store (multi-store only).
 
@@ -72,7 +92,7 @@ npx climaybe switch voldt-norway
 
 Copies `stores/<alias>/` JSON files to the repo root so you can preview that store locally.
 
-### `climaybe sync [alias]`
+### `climaybe sync [alias]` / `climaybe theme sync`
 
 Sync root JSON files back to a store directory (multi-store only).
 
@@ -82,7 +102,7 @@ npx climaybe sync voldt-norway
 
 If no alias is given, syncs to the default store.
 
-### `climaybe ensure-branches`
+### `climaybe ensure-branches` / `climaybe theme ensure-branches`
 
 Create missing `staging` and per-store branches (`staging-<alias>`, `live-<alias>`) from your current branch (usually `main`). Use when the repo only has `main` (e.g. after a fresh clone) so the main → staging-&lt;store&gt; sync can run.
 
@@ -91,7 +111,7 @@ npx climaybe ensure-branches
 git push origin --all
 ```
 
-### `climaybe update-workflows`
+### `climaybe update-workflows` / `climaybe theme update-workflows`
 
 Refresh GitHub Actions workflows from the latest bundled templates.
 

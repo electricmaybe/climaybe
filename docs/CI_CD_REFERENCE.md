@@ -2,6 +2,12 @@
 
 Full workflow and versioning specification for climaybe. For a quick overview, see [README](../README.md).
 
+## CLI entrypoints (v2+)
+
+- **Theme CI/CD** (workflows, stores, branches): `climaybe theme <command>` or the same command at the top level (e.g. `climaybe init` = `climaybe theme init`).
+- **App repos**: `climaybe app init` sets `config.project_type: "app"` and optional commitlint/Cursor only; theme workflows and store commands are disabled when `project_type` is `app`.
+- **Shared**: `climaybe setup-commitlint`, `climaybe add-cursor` (top level only).
+
 ## Versioning
 
 - **Format**: Always three-part (e.g. `v3.2.0`). No version is written in code or PR title; the system infers from tags.
@@ -18,10 +24,10 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 
 ## Local dev (multi-store)
 
-- **Select store**: `climaybe switch <alias>` (e.g. `climaybe switch voldt-staging`). Copies `stores/<alias>/` JSONs to repo root.
+- **Select store**: `climaybe theme switch <alias>` or `climaybe switch <alias>` (e.g. `climaybe switch voldt-staging`). Copies `stores/<alias>/` JSONs to repo root.
 - **Edit**: Change root JSONs as needed.
-- **Write back**: `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
-- **Cursor (optional)**: `climaybe init` can install the bundled `.cursor/rules` and `.cursor/skills` (Electric Maybe theme conventions). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
+- **Write back**: `climaybe theme sync [alias]` or `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
+- **Cursor (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled `.cursor/rules` and `.cursor/skills`. Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
 
 ## Hotfix flow (multi-store)
 
