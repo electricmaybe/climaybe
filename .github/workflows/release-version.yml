@@ -1,5 +1,5 @@
 # On merge to main: conventional commits → semantic-release bumps package.json, publishes to npm, pushes tag + commit.
-# Tag push still runs Release workflow (tests + tag/package version check only; publish happens here).
+# Tag push can run verify-release-tag.yml (tests + tag vs package.json; no publish).
 # Trusted publishing (OIDC): register this filename on npm → Package → Settings → Trusted Publisher → GitHub Actions.
 # Requires npm CLI ≥ 11.5.1 on the runner (see "Ensure npm for trusted publishing" below).
 name: Release version
@@ -12,8 +12,8 @@ jobs:
   release:
     name: Bump version and tag
     runs-on: ubuntu-latest
-    # Skip when the push is the version-bump commit from semantic-release (avoid loop)
-    if: "!contains(github.event.head_commit.message, 'chore(release):')"
+    # Skip only semantic-release’s version commit (first line chore(release): semver), not other chore(release):… commits
+    if: "${{ !github.event.head_commit || !matches(github.event.head_commit.message || '', '^chore\\(release\\): v?[0-9]+\\.[0-9]+\\.[0-9]+') }}"
     permissions:
       contents: write
       id-token: write
