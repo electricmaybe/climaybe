@@ -1,13 +1,16 @@
 import pc from 'picocolors';
 import { getMode, isBuildWorkflowsEnabled, isPreviewWorkflowsEnabled, readConfig } from '../lib/config.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
+import { requireThemeProject } from '../lib/theme-guard.js';
 
 export async function updateWorkflowsCommand() {
   console.log(pc.bold('\n  climaybe — Update Workflows\n'));
 
+  if (!requireThemeProject()) return;
+
   const config = readConfig();
   if (!config?.stores) {
-    console.log(pc.red('  No climaybe config found. Run "climaybe init" first.\n'));
+    console.log(pc.red('  No climaybe config found. Run "climaybe theme init" (or "climaybe init") first.\n'));
     return;
   }
 

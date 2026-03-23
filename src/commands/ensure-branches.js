@@ -1,5 +1,6 @@
 import pc from 'picocolors';
 import { readConfig } from '../lib/config.js';
+import { requireThemeProject } from '../lib/theme-guard.js';
 import {
   isGitRepo,
   currentBranch,
@@ -14,9 +15,11 @@ import {
 export async function ensureBranchesCommand() {
   console.log(pc.bold('\n  climaybe — Ensure Branches\n'));
 
+  if (!requireThemeProject()) return;
+
   const config = readConfig();
   if (!config?.stores) {
-    console.log(pc.red('  No climaybe config found. Run "climaybe init" first.\n'));
+    console.log(pc.red('  No climaybe config found. Run "climaybe theme init" (or "climaybe init") first.\n'));
     return;
   }
 

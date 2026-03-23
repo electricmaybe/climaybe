@@ -7,6 +7,50 @@ import { updateWorkflowsCommand } from './commands/update-workflows.js';
 import { ensureBranchesCommand } from './commands/ensure-branches.js';
 import { setupCommitlintCommand } from './commands/setup-commitlint.js';
 import { addCursorSkillCommand } from './commands/add-cursor-skill.js';
+import { appInitCommand } from './commands/app-init.js';
+
+/**
+ * Register theme CI/CD commands on a Commander instance (root or `theme` subgroup).
+ * @param {import('commander').Command} cmd
+ */
+function registerThemeCommands(cmd) {
+  cmd
+    .command('init')
+    .description('Initialize CI/CD setup for a Shopify theme repo')
+    .action(initCommand);
+
+  cmd
+    .command('reinit')
+    .description('Reinitialize theme CI/CD (re-scaffold workflows from templates)')
+    .action(reinitCommand);
+
+  cmd
+    .command('add-store')
+    .description('Add a new store to an existing multi-store config')
+    .action(addStoreCommand);
+
+  cmd
+    .command('switch')
+    .argument('<alias>', 'Store alias to switch to')
+    .description('Switch local dev environment to a specific store')
+    .action(switchCommand);
+
+  cmd
+    .command('sync')
+    .argument('[alias]', 'Store alias to sync to (defaults to active store)')
+    .description('Sync root JSON files back to a store directory')
+    .action(syncCommand);
+
+  cmd
+    .command('update-workflows')
+    .description('Refresh GitHub Actions workflows from latest bundled templates')
+    .action(updateWorkflowsCommand);
+
+  cmd
+    .command('ensure-branches')
+    .description('Create missing staging and per-store branches from current HEAD (then push)')
+    .action(ensureBranchesCommand);
+}
 
 /**
  * Create the CLI program (for testing and for run).
@@ -19,45 +63,23 @@ export function createProgram(version = '0.0.0', packageDir = '') {
 
   program
     .name('climaybe')
-    .description('Shopify CI/CD CLI — scaffolds workflows, branch strategy, and store config')
+    .description(
+      'Shopify CLI — theme CI/CD (workflows, branches, stores) and app repo helpers (commitlint, Cursor bundle)'
+    )
     .version(versionDisplay);
 
-  program
+  const theme = program
+    .command('theme')
+    .description('Shopify theme CI/CD: workflows, branches, and multi-store config');
+
+  registerThemeCommands(theme);
+  registerThemeCommands(program);
+
+  const app = program.command('app').description('Shopify app repo helpers (no theme workflows)');
+  app
     .command('init')
-    .description('Initialize CI/CD setup for a Shopify theme repo')
-    .action(initCommand);
-
-  program
-    .command('reinit')
-    .description('Reinitialize CI/CD setup (removes existing config and re-scaffolds workflows)')
-    .action(reinitCommand);
-
-  program
-    .command('add-store')
-    .description('Add a new store to an existing multi-store config')
-    .action(addStoreCommand);
-
-  program
-    .command('switch')
-    .argument('<alias>', 'Store alias to switch to')
-    .description('Switch local dev environment to a specific store')
-    .action(switchCommand);
-
-  program
-    .command('sync')
-    .argument('[alias]', 'Store alias to sync to (defaults to active store)')
-    .description('Sync root JSON files back to a store directory')
-    .action(syncCommand);
-
-  program
-    .command('update-workflows')
-    .description('Refresh GitHub Actions workflows from latest bundled templates')
-    .action(updateWorkflowsCommand);
-
-  program
-    .command('ensure-branches')
-    .description('Create missing staging and per-store branches from current HEAD (then push)')
-    .action(ensureBranchesCommand);
+    .description('Set up commitlint, Cursor rules/skills, and project_type: app in package.json')
+    .action(appInitCommand);
 
   program
     .command('setup-commitlint')

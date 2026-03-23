@@ -1,9 +1,12 @@
 import pc from 'picocolors';
 import { getStoreAliases, getMode, readConfig } from '../lib/config.js';
 import { rootToStores } from '../lib/store-sync.js';
+import { requireThemeProject } from '../lib/theme-guard.js';
 
 export async function syncCommand(alias) {
   console.log(pc.bold('\n  climaybe — Sync to Store\n'));
+
+  if (!requireThemeProject()) return;
 
   const mode = getMode();
   if (mode !== 'multi') {
@@ -22,7 +25,7 @@ export async function syncCommand(alias) {
 
     if (!alias) {
       console.log(pc.red('  No alias provided and no default store found.'));
-      console.log(pc.dim(`  Usage: climaybe sync <alias>`));
+      console.log(pc.dim(`  Usage: climaybe theme sync <alias>`));
       console.log(pc.dim(`  Available: ${aliases.join(', ')}\n`));
       return;
     }

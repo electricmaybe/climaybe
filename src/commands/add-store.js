@@ -1,6 +1,14 @@
 import pc from 'picocolors';
 import { promptNewStore, promptConfigureCISecrets, promptUpdateExistingSecrets, promptSecretValue, promptTestThemeToken } from '../lib/prompts.js';
-import { readConfig, addStoreToConfig, getStoreAliases, getMode, isPreviewWorkflowsEnabled, isBuildWorkflowsEnabled } from '../lib/config.js';
+import {
+  readConfig,
+  addStoreToConfig,
+  getStoreAliases,
+  getMode,
+  isPreviewWorkflowsEnabled,
+  isBuildWorkflowsEnabled,
+} from '../lib/config.js';
+import { requireThemeProject } from '../lib/theme-guard.js';
 import { createStoreBranches } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
@@ -21,10 +29,12 @@ import {
 export async function addStoreCommand() {
   console.log(pc.bold('\n  climaybe — Add Store\n'));
 
+  if (!requireThemeProject()) return;
+
   // Guard: config must exist
   const config = readConfig();
   if (!config?.stores) {
-    console.log(pc.red('  No climaybe config found. Run "climaybe init" first.\n'));
+    console.log(pc.red('  No climaybe config found. Run "climaybe theme init" (or "climaybe init") first.\n'));
     return;
   }
 

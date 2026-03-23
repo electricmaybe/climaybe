@@ -11,7 +11,7 @@ import {
   promptSecretValue,
   promptTestThemeToken,
 } from '../lib/prompts.js';
-import { readConfig, writeConfig } from '../lib/config.js';
+import { readConfig, writeConfig, getProjectType } from '../lib/config.js';
 import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches, getSuggestedTagForRelease } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
@@ -49,6 +49,7 @@ async function runInitFlow() {
 
   // 2. Build config
   const config = {
+    project_type: 'theme',
     port: 9295,
     default_store: stores[0].domain,
     preview_workflows: enablePreviewWorkflows,
@@ -236,7 +237,14 @@ async function runInitFlow() {
 }
 
 export async function initCommand() {
-  console.log(pc.bold('\n  climaybe — Shopify CI/CD Setup\n'));
+  console.log(pc.bold('\n  climaybe — Shopify theme CI/CD setup\n'));
+
+  if (getProjectType() === 'app') {
+    console.log(pc.red('  This repo is configured as a Shopify app (project_type: app).'));
+    console.log(pc.dim('  Use: npx climaybe app init'));
+    console.log(pc.dim('  To switch to theme CI/CD, remove or edit package.json → config first.\n'));
+    return;
+  }
 
   const existing = readConfig();
   const hasConfig = existing != null && typeof existing === 'object';
@@ -249,9 +257,9 @@ export async function initCommand() {
       initial: false,
     });
     if (!reinit) {
-      console.log(pc.dim('  Use "climaybe add-store" to add more stores.'));
-      console.log(pc.dim('  Use "climaybe update-workflows" to refresh workflows.'));
-      console.log(pc.dim('  Use "climaybe reinit" to reinitialize from scratch.\n'));
+      console.log(pc.dim('  Use "climaybe theme add-store" (or "climaybe add-store") to add more stores.'));
+      console.log(pc.dim('  Use "climaybe theme update-workflows" (or "climaybe update-workflows") to refresh workflows.'));
+      console.log(pc.dim('  Use "climaybe theme reinit" (or "climaybe reinit") to reinitialize from scratch.\n'));
       return;
     }
   }
@@ -260,6 +268,13 @@ export async function initCommand() {
 }
 
 export async function reinitCommand() {
-  console.log(pc.bold('\n  climaybe — Reinitialize CI/CD Setup\n'));
+  console.log(pc.bold('\n  climaybe — Reinitialize theme CI/CD setup\n'));
+
+  if (getProjectType() === 'app') {
+    console.log(pc.red('  This repo is a Shopify app (project_type: app).'));
+    console.log(pc.dim('  Use: npx climaybe app init\n'));
+    return;
+  }
+
   await runInitFlow();
 }

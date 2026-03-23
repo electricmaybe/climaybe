@@ -14,6 +14,8 @@ import {
   isCommitlintEnabled,
   isCursorSkillsEnabled,
   addStoreToConfig,
+  getProjectType,
+  isThemeProjectForAppInit,
 } from '../../src/lib/config.js';
 
 describe('config', () => {
@@ -108,6 +110,80 @@ describe('config', () => {
         const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
         assert.strictEqual(pkg.config.port, 9295);
         assert.deepStrictEqual(pkg.config.stores, { a: 'a.myshopify.com' });
+      } finally {
+        teardown();
+      }
+    });
+
+    it('creates package.json with shopify-app name when defaultPackageName option set', () => {
+      const dir = setup();
+      try {
+        writeConfig({ project_type: 'app' }, dir, { defaultPackageName: 'shopify-app' });
+        const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
+        assert.strictEqual(pkg.name, 'shopify-app');
+        assert.strictEqual(pkg.config.project_type, 'app');
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('getProjectType', () => {
+    it('returns theme when project_type missing or theme', () => {
+      const dir = setup();
+      try {
+        assert.strictEqual(getProjectType(dir), 'theme');
+        writeFileSync(join(dir, 'package.json'), JSON.stringify({ config: { stores: { a: 'a.myshopify.com' } } }), 'utf-8');
+        assert.strictEqual(getProjectType(dir), 'theme');
+        writeConfig({ project_type: 'theme' }, dir);
+        assert.strictEqual(getProjectType(dir), 'theme');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns app when project_type is app', () => {
+      const dir = setup();
+      try {
+        writeConfig({ project_type: 'app' }, dir);
+        assert.strictEqual(getProjectType(dir), 'app');
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('isThemeProjectForAppInit', () => {
+    it('returns false when no config', () => {
+      const dir = setup();
+      try {
+        assert.strictEqual(isThemeProjectForAppInit(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns true for legacy stores or project_type theme', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { x: 'x.myshopify.com' } }, dir);
+        assert.strictEqual(isThemeProjectForAppInit(dir), true);
+        writeFileSync(
+          join(dir, 'package.json'),
+          JSON.stringify({ name: 't', config: { project_type: 'theme' } }),
+          'utf-8'
+        );
+        assert.strictEqual(isThemeProjectForAppInit(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns false for app project_type without stores', () => {
+      const dir = setup();
+      try {
+        writeConfig({ project_type: 'app', commitlint: true }, dir);
+        assert.strictEqual(isThemeProjectForAppInit(dir), false);
       } finally {
         teardown();
       }
