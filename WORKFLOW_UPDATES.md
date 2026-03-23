@@ -179,6 +179,11 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 - **Release version** (`.github/workflows/release-version.yml`): semantic-release now publishes to npm in the same job as the version bump (`@semantic-release/npm` with default `npmPublish`, plus `publishConfig.provenance` / `access` in `package.json`). Uses `registry-url` and `id-token: write` for [Trusted Publisher](https://docs.npmjs.com/trusted-publishers) / provenance; installs `npm@^11.5.1` before `npm ci` because OIDC publish requires npm CLI ≥ 11.5.1.
 - **Verify release tag** (`.github/workflows/verify-release-tag.yml`, formerly `release.yml`): no `npm publish` on tag push; runs tests and verifies the tag matches `package.json`.
 
+## 16) version-bump: multiline AI changelog in annotated tag
+
+- **Problem:** Passing `inputs.changelog` into the shell via `CHANGELOG="${{ inputs.changelog }}"` expanded multiline markdown into the script body. Newlines broke the assignment; lines starting with `-` ran as commands; stray tokens (e.g. a heading word) could invoke bogus binaries (`markdown: command not found`).
+- **Fix:** Set `env: CHANGELOG: ${{ inputs.changelog }}` on the commit/tag step and pipe the message into `git tag -a "$NEW_VERSION" -F -` so the annotation is read from stdin. Empty changelog still uses `git tag -m "Release …"`.
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.

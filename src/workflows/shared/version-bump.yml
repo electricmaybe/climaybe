@@ -133,7 +133,11 @@ jobs:
             echo "No package.json found, skipping."
           fi
 
+      # Changelog must be env, not ${{ }} inside the script: multiline markdown breaks the shell
+      # (lines starting with "-" run as commands; words like "markdown" become bogus invocations).
       - name: Commit and tag
+        env:
+          CHANGELOG: ${{ inputs.changelog }}
         run: |
           NEW_VERSION="${{ steps.bump.outputs.new_version }}"
           TAG_CREATED="false"
@@ -152,9 +156,8 @@ jobs:
           elif git rev-parse -q --verify "refs/tags/${NEW_VERSION}" >/dev/null; then
             echo "Tag ${NEW_VERSION} already exists locally, reusing."
           else
-            CHANGELOG="${{ inputs.changelog }}"
             if [ -n "$CHANGELOG" ]; then
-              git tag -a "$NEW_VERSION" -m "$CHANGELOG"
+              printf '%s\n' "$CHANGELOG" | git tag -a "$NEW_VERSION" -F -
             else
               git tag -a "$NEW_VERSION" -m "Release ${NEW_VERSION}"
             fi
