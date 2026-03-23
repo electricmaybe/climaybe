@@ -16,7 +16,7 @@ describe('CLI', () => {
     assert.ok(reinitCmd);
   });
 
-  it('registers add-store, switch, sync, ensure-branches, update-workflows, setup-commitlint, add-cursor-skill', () => {
+  it('registers add-store, switch, sync, ensure-branches, update-workflows, setup-commitlint, add-cursor', () => {
     const program = createProgram();
     const names = program.commands.map((c) => c.name());
     assert.ok(names.includes('init'));
@@ -27,6 +27,8 @@ describe('CLI', () => {
     assert.ok(names.includes('ensure-branches'));
     assert.ok(names.includes('update-workflows'));
     assert.ok(names.includes('setup-commitlint'));
-    assert.ok(names.includes('add-cursor-skill'));
+    assert.ok(names.includes('add-cursor'));
+    const addCursor = program.commands.find((c) => c.name() === 'add-cursor');
+    assert.ok(addCursor.aliases().includes('add-cursor-skill'));
   });
 });

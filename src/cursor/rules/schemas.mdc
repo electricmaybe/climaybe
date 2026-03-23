@@ -1,0 +1,150 @@
+---
+description: Schema design rules — minimal settings, translation keys, no redundancy
+globs:
+  - "sections/**/*.liquid"
+  - "**/sections/*.liquid"
+  - "blocks/**/*.liquid"
+  - "**/blocks/*.liquid"
+alwaysApply: false
+---
+# Schema Design Rules for Electric Maybe Shopify Theme
+
+## Core Principles
+
+### 1. **Start Simple, Expand Gradually**
+- Begin with minimal, essential settings only
+- Add complexity only when there's a clear, demonstrated need
+- Ask for permission before adding multiple settings at once
+
+### 2. **Avoid Redundancy**
+- If text content exists in translation files (`en.default.json`), don't duplicate it in schema
+- Use translation keys for all text content, not schema text inputs
+- Schema should focus on functionality, not content
+
+### 3. **Question Every Setting**
+Before adding any schema setting, ask:
+- Is this truly necessary for the user?
+- Can this be handled by translation files instead?
+- Will this setting be used by most merchants?
+- Does this add value or just complexity?
+
+### 4. **Limit Settings Per Section**
+- **Maximum 5 settings per section** (excluding headers)
+- If more are needed, consider splitting into multiple sections
+- Group related settings under headers
+
+## Schema Setting Guidelines
+
+### **Essential Settings (Always Include)**
+- Link list selectors for menus
+- Image upload fields for key visuals
+- Color scheme selectors (if theme supports multiple schemes)
+
+### **Optional Settings (Add Only When Needed)**
+- Layout toggles (show/hide elements)
+- Spacing adjustments
+- Text alignment options
+- Background color/image options
+
+### **Avoid These Settings**
+- Text content inputs (use translation files)
+- Toggle switches for every element
+- Complex layout selectors
+- Settings that duplicate existing functionality
+
+## Implementation Rules
+
+### **Before Adding Settings**
+1. Check if the functionality can be achieved through:
+   - Translation files
+   - CSS classes
+   - Existing theme settings
+   - Liquid conditionals
+
+2. Consider the user experience:
+   - Will merchants actually use this setting?
+   - Is it intuitive and discoverable?
+   - Does it solve a real problem?
+
+3. Evaluate maintenance cost:
+   - Will this setting need updates?
+   - Does it create technical debt?
+   - Is it worth the complexity?
+
+### **When Adding Multiple Settings**
+- **Ask for permission first**
+- Explain the reasoning for each setting
+- Consider if they can be grouped or simplified
+- Test with a small subset first
+
+## Examples
+
+### ✅ Good Schema (Simple)
+```json
+{
+  "settings": [
+    {
+      "type": "link_list",
+      "id": "main_menu",
+      "label": "Main menu"
+    },
+    {
+      "type": "image_picker",
+      "id": "logo",
+      "label": "Logo"
+    }
+  ]
+}
+```
+
+### ❌ Bad Schema (Over-engineered)
+```json
+{
+  "settings": [
+    {
+      "type": "link_list",
+      "id": "main_menu",
+      "label": "Main menu"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_menu",
+      "label": "Show menu",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "menu_style",
+      "label": "Menu style",
+      "options": [
+        {"value": "horizontal", "label": "Horizontal"},
+        {"value": "vertical", "label": "Vertical"},
+        {"value": "dropdown", "label": "Dropdown"}
+      ]
+    },
+    {
+      "type": "range",
+      "id": "menu_spacing",
+      "min": 0,
+      "max": 50,
+      "step": 5,
+      "label": "Menu spacing"
+    }
+  ]
+}
+```
+
+## Review Process
+
+Before committing any schema changes:
+1. **Count the settings** - Keep under 5 per section
+2. **Check for redundancy** - Ensure no duplicate functionality
+3. **Verify necessity** - Each setting should solve a real problem
+4. **Consider alternatives** - Could this be handled differently?
+5. **Get approval** - For multiple settings or complex changes
+
+## Remember
+- **Simplicity is a feature**
+- **Less is more**
+- **When in doubt, leave it out**
+- **Ask before expanding** 

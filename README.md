@@ -5,7 +5,7 @@ Shopify CI/CD CLI — scaffolds GitHub Actions workflows, branch strategy, and s
 **Commit linting and AI-assisted commits are available as optional setup steps:**
 
 - **Conventional commit linting:** During `climaybe init`, you can choose to automatically install and configure [commitlint](https://commitlint.js.org/) and [Husky](https://typicode.github.io/husky) to enforce [Conventional Commits](https://www.conventionalcommits.org/) in your theme repository.
-- **Cursor AI commit skill:** You can also opt-in to installing the [Cursor AI commit skill](https://cursor.so/) (`.cursor/skills/commit/SKILL.md`) for AI-assisted, conventional commit message support in your project.
+- **Cursor rules + skills:** You can opt in to installing Electric Maybe’s bundled [Cursor](https://cursor.com/) project rules and agent skills under `.cursor/rules/` and `.cursor/skills/` (Liquid, JS, a11y, commits, changelog, Linear, etc.).
 
 Both options streamline commit message quality and team workflows but are fully optional during setup.
 
@@ -42,12 +42,12 @@ Interactive setup that configures your repo for CI/CD.
 4. Asks whether to enable optional **preview + cleanup** workflows (default: yes)
 5. Asks whether to enable optional **build + Lighthouse** workflows (default: yes)
 6. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
-7. Asks whether to add **Cursor commit skill** to the project (`.cursor/skills/commit/SKILL.md`) for AI-assisted conventional commits
+7. Asks whether to install **Cursor rules + skills** (`.cursor/rules/`, `.cursor/skills/`) — Electric Maybe conventions for themes and AI workflows
 8. Based on store count, sets up **single-store** or **multi-store** mode
 9. Writes `package.json` config
 10. Scaffolds GitHub Actions workflows
 11. Creates git branches and store directories (multi-store)
-12. Optionally installs commitlint, Husky, and the Cursor skill
+12. Optionally installs commitlint, Husky, and the Cursor bundle (rules + skills)
 
 ### `climaybe add-store`
 
@@ -109,13 +109,15 @@ Set up **only** commitlint + Husky (conventional commits enforced on `git commit
 npx climaybe setup-commitlint
 ```
 
-### `climaybe add-cursor-skill`
+### `climaybe add-cursor`
 
-Add **only** the Cursor commit skill to this project (`.cursor/skills/commit/SKILL.md`). Use this if you skipped it at init or want to add it later.
+Install Electric Maybe **Cursor rules and skills** into `.cursor/rules/` and `.cursor/skills/`. Use this if you skipped the bundle at init or want to refresh from the version of climaybe you have installed.
 
 ```bash
-npx climaybe add-cursor-skill
+npx climaybe add-cursor
 ```
+
+The previous command name `add-cursor-skill` still works as an alias. Re-running replaces the bundled rule and skill files with the copies shipped by your installed climaybe version (same idea as `update-workflows`).
 
 ## Configuration
 

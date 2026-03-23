@@ -19,6 +19,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Select store**: `climaybe switch <alias>` (e.g. `climaybe switch voldt-staging`). Copies `stores/<alias>/` JSONs to repo root.
 - **Edit**: Change root JSONs as needed.
 - **Write back**: `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
+- **Cursor (optional)**: `climaybe init` can install the bundled `.cursor/rules` and `.cursor/skills` (Electric Maybe theme conventions). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
 
 ## Hotfix flow (multi-store)
 
@@ -61,7 +62,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 
 - **main** is the default branch (created by Git when you init or by the host when you create a repo).
 - **staging** and per-store branches are created by `climaybe init` or `climaybe ensure-branches`.
-- If the repo only has `main` (e.g. after clone), run `climaybe ensure-branches` then `git push origin --all` so **main-to-staging-stores** can open PRs to each `staging-<alias>`.
+- If the repo only has `main` (e.g. after clone), run `climaybe ensure-branches` then `git push origin --all` so **main-to-staging-stores** can merge `main` into each `staging-<alias>`.
 
 ## Custom steps and optional paths
 

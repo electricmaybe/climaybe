@@ -15,7 +15,8 @@ import { readConfig, writeConfig } from '../lib/config.js';
 import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches, getSuggestedTagForRelease } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
-import { scaffoldCommitlint, scaffoldCursorCommitSkill } from '../lib/commit-tooling.js';
+import { scaffoldCommitlint } from '../lib/commit-tooling.js';
+import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
 import {
   isGhAvailable,
   hasGitHubRemote,
@@ -87,7 +88,7 @@ async function runInitFlow() {
     includeBuild: enableBuildWorkflows,
   });
 
-  // 7. Optional commitlint + Husky and Cursor commit skill
+  // 7. Optional commitlint + Husky and Cursor rules + skills bundle
   if (enableCommitlint) {
     console.log(pc.dim('  Setting up commitlint + Husky...'));
     if (scaffoldCommitlint()) {
@@ -97,8 +98,12 @@ async function runInitFlow() {
     }
   }
   if (enableCursorSkills) {
-    scaffoldCursorCommitSkill();
-    console.log(pc.green('  Cursor commit skill added to .cursor/skills/commit/SKILL.md'));
+    const cursorOk = scaffoldCursorBundle();
+    if (cursorOk) {
+      console.log(pc.green('  Electric Maybe Cursor rules + skills → .cursor/rules, .cursor/skills'));
+    } else {
+      console.log(pc.yellow('  Cursor bundle not found in package (skipped).'));
+    }
   }
 
   // Done
@@ -117,7 +122,7 @@ async function runInitFlow() {
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  commitlint + Husky: ${enableCommitlint ? 'enabled' : 'disabled'}`));
-  console.log(pc.dim(`  Cursor commit skill: ${enableCursorSkills ? 'added' : 'skipped'}`));
+  console.log(pc.dim(`  Cursor rules + skills: ${enableCursorSkills ? 'installed' : 'skipped'}`));
 
   const suggestedTag = getSuggestedTagForRelease();
   const tagLabel = suggestedTag === 'v1.0.0' ? 'Tag your first release' : 'Tag your next release';

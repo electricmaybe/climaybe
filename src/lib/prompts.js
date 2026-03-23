@@ -163,13 +163,14 @@ export async function promptCommitlint() {
 }
 
 /**
- * Ask whether to add Cursor commit skill to the project (.cursor/skills/commit).
+ * Ask whether to install bundled Cursor rules + skills (.cursor/rules, .cursor/skills).
  */
 export async function promptCursorSkills() {
   const { enableCursorSkills } = await prompts({
     type: 'confirm',
     name: 'enableCursorSkills',
-    message: 'Add Cursor commit skill to this project? (AI-assisted conventional commits)',
+    message:
+      'Install Electric Maybe Cursor rules + skills? (Liquid/JS/a11y conventions + AI skills in .cursor/)',
     initial: true,
   });
 

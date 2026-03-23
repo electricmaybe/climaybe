@@ -65,8 +65,9 @@ export function createProgram(version = '0.0.0', packageDir = '') {
     .action(setupCommitlintCommand);
 
   program
-    .command('add-cursor-skill')
-    .description('Add only the Cursor commit skill to this project (.cursor/skills/commit)')
+    .command('add-cursor')
+    .alias('add-cursor-skill')
+    .description('Install Electric Maybe Cursor rules + skills (.cursor/rules, .cursor/skills)')
     .action(addCursorSkillCommand);
 
   return program;

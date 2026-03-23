@@ -22,7 +22,7 @@ describe('add-cursor-skill command', () => {
     if (cwd && existsSync(cwd)) rmSync(cwd, { recursive: true });
   }
 
-  it('writes config.cursor_skills and .cursor/skills/commit/SKILL.md', async () => {
+  it('writes config.cursor_skills, rules, and skills (commit skill + index)', async () => {
     setup();
     try {
       writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'theme', version: '1.0.0' }), 'utf-8');
@@ -33,6 +33,7 @@ describe('add-cursor-skill command', () => {
       assert.ok(existsSync(skillPath));
       const content = readFileSync(skillPath, 'utf-8');
       assert.ok(content.includes('name: commit'));
+      assert.ok(existsSync(join(cwd, '.cursor', 'rules', '00-rule-index.mdc')));
     } finally {
       teardown();
     }

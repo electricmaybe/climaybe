@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { scaffoldCommitlint, scaffoldCursorCommitSkill } from '../../src/lib/commit-tooling.js';
+import { scaffoldCommitlint } from '../../src/lib/commit-tooling.js';
 
 describe('commit-tooling', () => {
   let cwd;
@@ -45,23 +45,6 @@ describe('commit-tooling', () => {
         assert.strictEqual(pkg.scripts.prepare, 'husky');
         assert.ok(pkg.devDependencies['@commitlint/cli']);
         assert.ok(pkg.devDependencies.husky);
-      } finally {
-        teardown();
-      }
-    });
-  });
-
-  describe('scaffoldCursorCommitSkill', () => {
-    it('writes .cursor/skills/commit/SKILL.md', () => {
-      const dir = setup();
-      try {
-        const result = scaffoldCursorCommitSkill(dir);
-        assert.strictEqual(result, true);
-        const skillPath = join(dir, '.cursor', 'skills', 'commit', 'SKILL.md');
-        assert.ok(existsSync(skillPath));
-        const content = readFileSync(skillPath, 'utf-8');
-        assert.ok(content.includes('name: commit'));
-        assert.ok(content.includes('conventional commit'));
       } finally {
         teardown();
       }
