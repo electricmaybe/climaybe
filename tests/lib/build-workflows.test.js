@@ -3,7 +3,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { getMissingBuildWorkflowRequirements, installBuildScript, removeBuildScript } from '../../src/lib/build-workflows.js';
+import {
+  getMissingBuildWorkflowRequirements,
+  installBuildScript,
+  removeBuildScript,
+  ensureBuildWorkflowDefaults,
+} from '../../src/lib/build-workflows.js';
 
 describe('build-workflows helpers', () => {
   let cwd;
@@ -22,7 +27,18 @@ describe('build-workflows helpers', () => {
     try {
       const missing = getMissingBuildWorkflowRequirements(dir);
       const missingPaths = missing.map((m) => m.path).sort();
-      assert.deepStrictEqual(missingPaths, ['_scripts/main.js', '_styles/main.css', 'assets', 'release-notes.md']);
+      assert.deepStrictEqual(missingPaths, ['_scripts/main.js', '_styles/main.css']);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('creates default build files when missing', () => {
+    const dir = setup();
+    try {
+      ensureBuildWorkflowDefaults(dir);
+      assert.ok(existsSync(join(dir, 'assets')));
+      assert.ok(existsSync(join(dir, 'release-notes.md')));
     } finally {
       teardown();
     }

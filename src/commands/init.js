@@ -19,7 +19,7 @@ import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
 import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
-import { getMissingBuildWorkflowRequirements, getBuildScriptRelativePath } from '../lib/build-workflows.js';
+import { getMissingBuildWorkflowRequirements, getBuildScriptRelativePath, ensureBuildWorkflowDefaults } from '../lib/build-workflows.js';
 import { getDevKitExistingFiles, scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
 import {
   isGhAvailable,
@@ -54,6 +54,7 @@ async function runInitFlow() {
   console.log(pc.dim(`\n  Mode: ${mode}-store (${stores.length} store(s))`));
 
   if (enableBuildWorkflows) {
+    ensureBuildWorkflowDefaults();
     const missingBuildFiles = getMissingBuildWorkflowRequirements();
     if (missingBuildFiles.length > 0) {
       console.log(pc.red('\n  Build workflows are enabled, but required files are missing:'));

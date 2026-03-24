@@ -1,7 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync } from 'node:fs';
 
 const SCRIPT_SOURCE = fileURLToPath(new URL('../workflows/build/build-scripts.js', import.meta.url));
 const SCRIPT_TARGET = '.climaybe/build-scripts.js';
@@ -20,8 +19,18 @@ module.exports = { buildScripts };
 const REQUIRED_PATHS = [
   { path: '_scripts/main.js', kind: 'file' },
   { path: '_styles/main.css', kind: 'file' },
+];
+
+const DEFAULTS = [
   { path: 'assets', kind: 'dir' },
-  { path: 'release-notes.md', kind: 'file' },
+  {
+    path: 'release-notes.md',
+    kind: 'file',
+    content: `# Release Notes
+
+- describe key changes for this release
+`,
+  },
 ];
 
 function targetScriptPath(cwd = process.cwd()) {
@@ -59,6 +68,18 @@ export function getMissingBuildWorkflowRequirements(cwd = process.cwd()) {
     }
   }
   return missing;
+}
+
+export function ensureBuildWorkflowDefaults(cwd = process.cwd()) {
+  for (const entry of DEFAULTS) {
+    const abs = join(cwd, entry.path);
+    if (existsSync(abs)) continue;
+    if (entry.kind === 'dir') {
+      mkdirSync(abs, { recursive: true });
+      continue;
+    }
+    writeFileSync(abs, entry.content || '', 'utf-8');
+  }
 }
 
 export function getBuildScriptRelativePath() {

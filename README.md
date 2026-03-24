@@ -234,8 +234,10 @@ Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`; defa
 When enabled, `init` validates required theme files and exits with an error if any are missing:
 - `_scripts/main.js`
 - `_styles/main.css`
+
+`init` auto-creates:
 - `assets/`
-- `release-notes.md`
+- `release-notes.md` (starter template)
 
 `climaybe` auto-installs the shared build script at `.climaybe/build-scripts.js` during workflow scaffolding.
 
