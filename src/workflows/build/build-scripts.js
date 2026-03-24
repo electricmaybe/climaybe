@@ -3,7 +3,7 @@ const path = require('path');
 const ROOT_DIR = process.cwd();
 
 function extractImports(content) {
-  const importRegex = /import\s+['"]([^'"]+)['"];?/g;
+  const importRegex = /^\s*import\s+(?:[^'"\n;]+?\s+from\s+)?['"]([^'"]+)['"]\s*;?\s*$/gm;
   const imports = [];
   let match;
 
@@ -36,7 +36,7 @@ function processScriptFile(filePath, processedFiles = new Set()) {
     importedContent += processScriptFile(importPath, processedFiles);
   }
 
-  content = content.replace(/import\s+['"][^'"]+['"];?\s*/g, '');
+  content = content.replace(/^\s*import\s+(?:[^'"\n;]+?\s+from\s+)?['"][^'"]+['"]\s*;?\s*$/gm, '');
 
   if (process.env.NODE_ENV === 'production') {
     content = content.replace(/\/\*\*[\s\S]*?\*\//g, '');

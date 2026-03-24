@@ -25,6 +25,8 @@ npm install -D climaybe
 
 Run commands with `npx climaybe` (or add scripts to your `package.json`).
 
+When a newer `climaybe` is available, the CLI can prompt at startup to update. Press **Enter** to accept the update (`npm install -g climaybe@latest`) or type `n` to skip.
+
 ## Quick Start (theme)
 
 ```bash

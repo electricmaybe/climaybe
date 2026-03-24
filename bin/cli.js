@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../src/index.js';
+import { maybeOfferCliUpdate } from '../src/lib/update-notifier.js';
 
 const require = createRequire(import.meta.url);
 const binDir = dirname(fileURLToPath(import.meta.url));
@@ -19,4 +20,6 @@ if (existsSync(versionFile)) {
   version = require(join(packageDir, 'package.json')).version;
 }
 
+const packageName = require(join(packageDir, 'package.json')).name || 'climaybe';
+await maybeOfferCliUpdate({ packageName, currentVersion: version, packageDir });
 run(process.argv, version, packageDir);
