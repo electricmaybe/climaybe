@@ -2,6 +2,8 @@
 
 Shopify CLI for **theme CI/CD** (GitHub Actions, branches, multi-store config) and light **app repo** setup. Same install works in theme or app repositories.
 
+Built by [Electric Maybe](https://electricmaybe.com) — a Shopify-focused product and development studio.
+
 **Commit linting and Cursor bundle (optional in both flows):**
 
 - **Conventional commit linting:** During `climaybe theme init` or `climaybe app init`, you can install [commitlint](https://commitlint.js.org/) and [Husky](https://typicode.github.io/husky) for [Conventional Commits](https://www.conventionalcommits.org/).
@@ -336,7 +338,7 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 
 - **Branch:** Single default branch `main`. Feature branches open as PRs into `main`.
 - **Versioning:** [SemVer](https://semver.org/). Versions are **bumped automatically** when PRs are merged to `main` using [conventional commits](https://www.conventionalcommits.org/): `fix:` → patch, `feat:` → minor, `BREAKING CHANGE` or `feat!:` → major.
-- **Flow:** Merge to `main` → [Release version](.github/workflows/release-version.yml) runs semantic-release (bumps `package.json`, publishes to npm, pushes tag). Optional: tag push runs [Verify release tag](.github/workflows/verify-release-tag.yml) for an extra test pass and tag vs `package.json` check (no publish). Prefer [npm Trusted Publisher](https://docs.npmjs.com/trusted-publishers) (workflow file `release-version.yml`) so no long-lived `NPM_TOKEN` is needed for CI; see [CONTRIBUTING.md](CONTRIBUTING.md). Do not create tags manually; only the Release version workflow creates tags so that tag and package version stay in sync.
+- **Flow:** Merge to `main` → [Release version](.github/workflows/release-version.yml) runs semantic-release (bumps `package.json`, creates GitHub Release notes, publishes to npm, pushes tag). Optional: tag push runs [Verify release tag](.github/workflows/verify-release-tag.yml) for an extra test pass and tag vs `package.json` check (no publish). We publish to **npmjs.com** only (not GitHub Packages). Prefer [npm Trusted Publisher](https://docs.npmjs.com/trusted-publishers) (workflow file `release-version.yml`) so no long-lived `NPM_TOKEN` is needed for CI; see [CONTRIBUTING.md](CONTRIBUTING.md). Do not create tags manually; only the Release version workflow creates tags so that tag and package version stay in sync.
 - **CI:** Every PR and push to `main` runs tests on Node 20 and 22 ([CI workflow](.github/workflows/ci.yml)).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch, PR, and conventional-commit details.

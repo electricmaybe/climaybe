@@ -10,6 +10,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 
 ## Versioning
 
+- **Release artifacts**: `release-version.yml` (semantic-release) creates the git tag + GitHub Release and publishes the npm package to **npmjs.com**. GitHub Packages is not used.
 - **Format**: Always three-part (e.g. `v3.2.0`). No version is written in code or PR title; the system infers from tags.
 - **“Latest” tag**: The workflows take the **highest** `vMAJOR.MINOR.PATCH` tag among tags **merged into** the checked-out ref (`git tag --merged` + version sort), not `git describe`. After a staging→main merge, `git describe` can incorrectly pick an older tag that is graph-closer on the staging side than the real latest release on main.
 - **Monotonic releases**: The reusable **version-bump** job fails if the computed tag is not **strictly greater** (semver) than the highest merged release tag, so a bad base or explicit version cannot move the line backward or sideways.
