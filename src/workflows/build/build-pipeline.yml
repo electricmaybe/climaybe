@@ -4,7 +4,7 @@ name: Build Pipeline
 
 on:
   push:
-    branches: [main, staging, develop]
+    branches: ['**']
 
 jobs:
   build:

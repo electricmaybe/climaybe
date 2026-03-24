@@ -233,7 +233,7 @@ Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`; defa
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `build-pipeline.yml` | Push to `main/staging/develop` | Runs reusable build and Lighthouse checks (when required secrets exist) |
+| `build-pipeline.yml` | Push to any branch | Runs reusable build and Lighthouse checks (when required secrets exist) |
 | `reusable-build.yml` | workflow_call | Runs Node build + Tailwind compile, then commits compiled assets when changed |
 | `create-release.yml` | Push tag `v*` | Builds release archive and creates GitHub Release using `release-notes.md` |
 
