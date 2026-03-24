@@ -69,6 +69,22 @@ describe('workflows', () => {
         const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
         const hasBuild = files.some((f) => f.includes('build') || f.includes('release'));
         assert.ok(hasBuild, 'expected at least one build workflow');
+        assert.ok(existsSync(join(dir, '.climaybe', 'build-scripts.js')));
+        assert.ok(existsSync(join(dir, 'build-scripts.js')));
+      } finally {
+        teardown();
+      }
+    });
+
+    it('removes bundled build script when includeBuild is false', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeBuild: true }, dir);
+        assert.ok(existsSync(join(dir, '.climaybe', 'build-scripts.js')));
+        assert.ok(existsSync(join(dir, 'build-scripts.js')));
+        scaffoldWorkflows('single', { includeBuild: false }, dir);
+        assert.ok(!existsSync(join(dir, '.climaybe', 'build-scripts.js')));
+        assert.ok(!existsSync(join(dir, 'build-scripts.js')));
       } finally {
         teardown();
       }

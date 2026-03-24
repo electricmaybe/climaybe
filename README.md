@@ -231,6 +231,14 @@ Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`; defau
 
 Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`; default: yes).
 
+When enabled, `init` validates required theme files and exits with an error if any are missing:
+- `_scripts/main.js`
+- `_styles/main.css`
+- `assets/`
+- `release-notes.md`
+
+`climaybe` auto-installs the shared build script at `.climaybe/build-scripts.js` during workflow scaffolding.
+
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
 | `build-pipeline.yml` | Push to any branch | Runs reusable build and Lighthouse checks (when required secrets exist) |

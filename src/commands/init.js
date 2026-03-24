@@ -17,6 +17,7 @@ import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
 import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
+import { getMissingBuildWorkflowRequirements, getBuildScriptRelativePath } from '../lib/build-workflows.js';
 import {
   isGhAvailable,
   hasGitHubRemote,
@@ -46,6 +47,20 @@ async function runInitFlow() {
   const enableCursorSkills = await promptCursorSkills();
 
   console.log(pc.dim(`\n  Mode: ${mode}-store (${stores.length} store(s))`));
+
+  if (enableBuildWorkflows) {
+    const missingBuildFiles = getMissingBuildWorkflowRequirements();
+    if (missingBuildFiles.length > 0) {
+      console.log(pc.red('\n  Build workflows are enabled, but required files are missing:'));
+      for (const req of missingBuildFiles) {
+        const expected = req.kind === 'dir' ? `${req.path}/` : req.path;
+        console.log(pc.red(`    - ${expected}`));
+      }
+      console.log(pc.dim(`\n  climaybe will auto-install ${getBuildScriptRelativePath()} during workflow scaffolding.`));
+      console.log(pc.dim('  Add the missing files above, then run init again.\n'));
+      return;
+    }
+  }
 
   // 2. Build config
   const config = {
