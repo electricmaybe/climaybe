@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const ROOT_DIR = process.cwd();
 
 function extractImports(content) {
   const importRegex = /import\s+['"]([^'"]+)['"];?/g;
@@ -20,7 +21,7 @@ function processScriptFile(filePath, processedFiles = new Set()) {
 
   processedFiles.add(filePath);
 
-  const fullPath = path.join(__dirname, '_scripts', filePath);
+  const fullPath = path.join(ROOT_DIR, '_scripts', filePath);
 
   if (!fs.existsSync(fullPath)) {
     console.warn(`Warning: File ${filePath} not found`);
@@ -51,12 +52,12 @@ function buildScripts() {
   try {
     if (global.gc) global.gc();
 
-    const mainPath = path.join(__dirname, '_scripts', 'main.js');
+    const mainPath = path.join(ROOT_DIR, '_scripts', 'main.js');
     fs.readFileSync(mainPath, 'utf8');
 
     const processedFiles = new Set();
     const finalContent = processScriptFile('main.js', processedFiles);
-    const outputPath = path.join(__dirname, 'assets', 'index.js');
+    const outputPath = path.join(ROOT_DIR, 'assets', 'index.js');
     fs.writeFileSync(outputPath, finalContent.trim() + '\n');
 
     const fileCount = processedFiles.size;

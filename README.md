@@ -245,6 +245,19 @@ When enabled, `init` validates required theme files and exits with an error if a
 | `reusable-build.yml` | workflow_call | Runs Node build + Tailwind compile, then commits compiled assets when changed |
 | `create-release.yml` | Push tag `v*` | Builds release archive and creates GitHub Release using `release-notes.md` |
 
+### Optional theme dev kit package
+
+During `climaybe init`, you can enable the Electric Maybe theme dev kit (default: yes). This installs local
+dev scripts/config defaults (`nodemon.json`, `.theme-check.yml`, `.shopifyignore`, `.prettierrc`,
+`.lighthouserc.js`), merges matching `package.json` scripts/dependencies, appends a managed `.gitignore` block,
+and optionally adds `.vscode/tasks.json` (default: yes).
+
+If these files already exist, `init` warns that they will be replaced.
+
+You can install/update this later with:
+
+`climaybe add-dev-kit` (or `climaybe theme add-dev-kit`)
+
 ## Versioning
 
 - **Version format**: Always three-part (e.g. `v3.2.0`). No version in code or PR title; the system infers from tags.

@@ -4,6 +4,8 @@ import {
   promptStoreLoop,
   promptPreviewWorkflows,
   promptBuildWorkflows,
+  promptDevKit,
+  promptVSCodeDevTasks,
   promptCommitlint,
   promptCursorSkills,
   promptConfigureCISecrets,
@@ -18,6 +20,7 @@ import { createStoreDirectories } from '../lib/store-sync.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
 import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
 import { getMissingBuildWorkflowRequirements, getBuildScriptRelativePath } from '../lib/build-workflows.js';
+import { getDevKitExistingFiles, scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
 import {
   isGhAvailable,
   hasGitHubRemote,
@@ -43,6 +46,8 @@ async function runInitFlow() {
   const mode = stores.length > 1 ? 'multi' : 'single';
   const enablePreviewWorkflows = await promptPreviewWorkflows();
   const enableBuildWorkflows = await promptBuildWorkflows();
+  const enableDevKit = await promptDevKit();
+  const enableVSCodeTasks = enableDevKit ? await promptVSCodeDevTasks() : false;
   const enableCommitlint = await promptCommitlint();
   const enableCursorSkills = await promptCursorSkills();
 
@@ -69,6 +74,8 @@ async function runInitFlow() {
     default_store: stores[0].domain,
     preview_workflows: enablePreviewWorkflows,
     build_workflows: enableBuildWorkflows,
+    dev_kit: enableDevKit,
+    vscode_tasks: enableVSCodeTasks,
     commitlint: enableCommitlint,
     cursor_skills: enableCursorSkills,
     stores: {},
@@ -122,6 +129,19 @@ async function runInitFlow() {
     }
   }
 
+  if (enableDevKit) {
+    const existing = getDevKitExistingFiles({ includeVSCodeTasks: enableVSCodeTasks });
+    if (existing.length > 0) {
+      console.log(pc.yellow('  Theme dev kit will replace existing files:'));
+      for (const path of existing) console.log(pc.yellow(`    - ${path}`));
+    }
+    scaffoldThemeDevKit({
+      includeVSCodeTasks: enableVSCodeTasks,
+      defaultStoreDomain: stores[0]?.domain || '',
+    });
+    console.log(pc.green('  Theme dev kit installed (scripts/watch/lint + ignore defaults).'));
+  }
+
   // Done
   console.log(pc.bold(pc.green('\n  Setup complete!\n')));
 
@@ -137,6 +157,10 @@ async function runInitFlow() {
   }
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Theme dev kit: ${enableDevKit ? 'enabled' : 'disabled'}`));
+  if (enableDevKit) {
+    console.log(pc.dim(`  VS Code tasks: ${enableVSCodeTasks ? 'enabled' : 'disabled'}`));
+  }
   console.log(pc.dim(`  commitlint + Husky: ${enableCommitlint ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Cursor rules + skills: ${enableCursorSkills ? 'installed' : 'skipped'}`));
 

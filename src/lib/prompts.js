@@ -149,6 +149,35 @@ export async function promptBuildWorkflows() {
 }
 
 /**
+ * Ask whether to scaffold the local theme dev kit files (scripts, lint, ignores, editor tasks).
+ */
+export async function promptDevKit() {
+  const { enableDevKit } = await prompts({
+    type: 'confirm',
+    name: 'enableDevKit',
+    message:
+      'Install Electric Maybe theme dev kit? (local scripts/watch/lint configs, ignores, and optional VS Code tasks)',
+    initial: true,
+  });
+
+  return !!enableDevKit;
+}
+
+/**
+ * Ask whether to scaffold VS Code tasks for local serve/watch.
+ */
+export async function promptVSCodeDevTasks() {
+  const { enableVSCodeTasks } = await prompts({
+    type: 'confirm',
+    name: 'enableVSCodeTasks',
+    message: 'Add VS Code tasks.json to auto-run Shopify + Tailwind local dev tasks?',
+    initial: true,
+  });
+
+  return !!enableVSCodeTasks;
+}
+
+/**
  * Ask whether to set up commitlint + Husky (conventional commits enforced on git commit).
  */
 export async function promptCommitlint() {

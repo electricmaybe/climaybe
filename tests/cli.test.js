@@ -26,12 +26,12 @@ describe('CLI', () => {
     assert.ok(program.commands.find((c) => c.name() === 'reinit'));
   });
 
-  it('registers theme and root add-store, switch, sync, ensure-branches, update-workflows', () => {
+  it('registers theme and root add-store, switch, sync, add-dev-kit, ensure-branches, update-workflows', () => {
     const program = createProgram();
     const theme = program.commands.find((c) => c.name() === 'theme');
     const themeNames = theme.commands.map((c) => c.name());
     const rootNames = program.commands.map((c) => c.name());
-    for (const name of ['add-store', 'switch', 'sync', 'ensure-branches', 'update-workflows']) {
+    for (const name of ['add-store', 'switch', 'sync', 'add-dev-kit', 'ensure-branches', 'update-workflows']) {
       assert.ok(themeNames.includes(name), `theme ${name}`);
       assert.ok(rootNames.includes(name), `root ${name}`);
     }

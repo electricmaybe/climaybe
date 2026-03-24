@@ -7,6 +7,7 @@ import { updateWorkflowsCommand } from './commands/update-workflows.js';
 import { ensureBranchesCommand } from './commands/ensure-branches.js';
 import { setupCommitlintCommand } from './commands/setup-commitlint.js';
 import { addCursorSkillCommand } from './commands/add-cursor-skill.js';
+import { addDevKitCommand } from './commands/add-dev-kit.js';
 import { appInitCommand } from './commands/app-init.js';
 
 /**
@@ -40,6 +41,11 @@ function registerThemeCommands(cmd) {
     .argument('[alias]', 'Store alias to sync to (defaults to active store)')
     .description('Sync root JSON files back to a store directory')
     .action(syncCommand);
+
+  cmd
+    .command('add-dev-kit')
+    .description('Install/update local theme dev kit files (scripts, lint, ignores, optional VS Code tasks)')
+    .action(addDevKitCommand);
 
   cmd
     .command('update-workflows')
