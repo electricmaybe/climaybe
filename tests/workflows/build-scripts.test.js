@@ -50,4 +50,83 @@ console.log("main");
       teardown();
     }
   });
+
+  it('strips common ESM export syntax from output bundle', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'main.js'),
+        `import "./exports.js";
+console.log("main");
+`,
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, '_scripts', 'exports.js'),
+        `export const a = 1;
+export function run() { return a; }
+export default class Demo {}
+export { a };
+`,
+        'utf-8'
+      );
+
+      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
+      const tempScriptPath = join(dir, 'build-scripts.js');
+      copyFileSync(sourceScriptPath, tempScriptPath);
+      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+
+      const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      assert.ok(!/\bexport\b/.test(out), `bundle should not contain export statements\n${out}`);
+      assert.match(out, /\bconst a = 1;/);
+      assert.match(out, /\bfunction run\(\)/);
+      assert.match(out, /\bclass Demo/);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('strips multiline named imports from main.js style headers', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'main.js'),
+        `import {
+  debounce,
+  delegate,
+  triggerEvent,
+  fetchConfig
+} from "./helpers.js";
+import "./core-components.js";
+console.log("main");
+`,
+        'utf-8'
+      );
+
+      writeFileSync(join(dir, '_scripts', 'helpers.js'), 'console.log("helpers");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'core-components.js'), 'console.log("core");\n', 'utf-8');
+
+      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
+      const tempScriptPath = join(dir, 'build-scripts.js');
+      copyFileSync(sourceScriptPath, tempScriptPath);
+      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+
+      const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
+      assert.match(out, /console\.log\(["']helpers["']\)/, out);
+      assert.match(out, /console\.log\(["']core["']\)/, out);
+      assert.match(out, /console\.log\(["']main["']\)/, out);
+    } finally {
+      teardown();
+    }
+  });
 });

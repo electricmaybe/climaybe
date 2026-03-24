@@ -3,12 +3,16 @@ const path = require('path');
 const ROOT_DIR = process.cwd();
 
 function extractImports(content) {
-  const importRegex = /^\s*import\s+(?:[^'"\n;]+?\s+from\s+)?['"]([^'"]+)['"]\s*;?\s*$/gm;
   const imports = [];
+  const fromImportRegex = /(^|\n)\s*import\s+[\s\S]*?\s+from\s+['"]([^'"]+)['"]\s*;?/g;
+  const sideEffectImportRegex = /(^|\n)\s*import\s+['"]([^'"]+)['"]\s*;?/g;
   let match;
 
-  while ((match = importRegex.exec(content)) !== null) {
-    imports.push(match[1]);
+  while ((match = fromImportRegex.exec(content)) !== null) {
+    imports.push(match[2]);
+  }
+  while ((match = sideEffectImportRegex.exec(content)) !== null) {
+    imports.push(match[2]);
   }
 
   return imports;
@@ -36,7 +40,12 @@ function processScriptFile(filePath, processedFiles = new Set()) {
     importedContent += processScriptFile(importPath, processedFiles);
   }
 
-  content = content.replace(/^\s*import\s+(?:[^'"\n;]+?\s+from\s+)?['"][^'"]+['"]\s*;?\s*$/gm, '');
+  // Remove import statements (including multiline "import { ... } from '...'" forms).
+  content = content.replace(/(^|\n)\s*import\s+[\s\S]*?\s+from\s+['"][^'"]+['"]\s*;?/g, '$1');
+  content = content.replace(/(^|\n)\s*import\s+['"][^'"]+['"]\s*;?/g, '$1');
+  content = content.replace(/^\s*export\s+default\s+/gm, '');
+  content = content.replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, '');
+  content = content.replace(/^\s*export\s+(?=(const|let|var|function|class)\b)/gm, '');
 
   if (process.env.NODE_ENV === 'production') {
     content = content.replace(/\/\*\*[\s\S]*?\*\//g, '');
