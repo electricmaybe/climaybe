@@ -48,6 +48,21 @@ describe('workflows', () => {
       }
     });
 
+    it('keeps live hotfixes eligible for same-store staging sync', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('multi', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'main-to-staging-stores.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+
+        assert.match(workflow, /hotfix_skip_alias/);
+        assert.match(workflow, /\$SOURCE_BRANCH" == staging-\*/);
+        assert.doesNotMatch(workflow, /Hotfix came from staging-\$ALIAS or live-\$ALIAS, skipping/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('includes preview workflows when includePreview is true', () => {
       const dir = setup();
       try {

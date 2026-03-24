@@ -4,7 +4,9 @@
 # merge brings main in but we immediately restore root from stores/<alias>/ so store-specific data is kept.
 # Runs on every push to main except pure store-sync commits ([stores-to-root], [root-to-stores]), so that:
 # - Version-bump commits: staging-<alias> get the new version.
-# - Hotfix backports (live or staging-<alias> → main): other staging-<alias> get those changes; the store that sent the hotfix is skipped (no need to merge back to the same branch).
+# - Hotfix backports:
+#   - staging-<alias> → main: skip syncing back into the same staging-<alias> (already has the change).
+#   - live-<alias> → main: sync into staging-<alias> too (so staging gets the live hotfix).
 #
 # Also runs when Post-Merge Tag or Nightly Hotfix Tag complete: version-bump pushes with GITHUB_TOKEN,
 # which does not trigger push-based workflows, so we explicitly run sync after those workflows finish.
@@ -25,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Gate: skip only pure store-sync commits. When hotfix-backport, extract source branch alias so we skip merging back into that same store.
+  # Gate: skip only pure store-sync commits. For hotfix-backport, skip syncing back only when source was staging-<alias>.
   # When triggered by workflow_run (version-bump finished), run sync if the workflow succeeded.
   gate:
     runs-on: ubuntu-latest
@@ -33,7 +35,7 @@ jobs:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
-      hotfix_source_alias: ${{ steps.check.outputs.hotfix_source_alias }}
+      hotfix_skip_alias: ${{ steps.check.outputs.hotfix_skip_alias }}
     steps:
       - name: Check commit message and hotfix source
         id: check
@@ -41,7 +43,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             echo "Triggered by workflow_run (version-bump finished); syncing main to staging."
             echo "should_run=true" >> $GITHUB_OUTPUT
-            echo "hotfix_source_alias=" >> $GITHUB_OUTPUT
+            echo "hotfix_skip_alias=" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -50,22 +52,21 @@ jobs:
           if echo "$COMMIT_MSG" | grep -qE "\[skip-store-sync\]|\[stores-to-root\]|\[root-to-stores\]"; then
             echo "Skipping — store sync commit (avoid loop)"
             echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "hotfix_source_alias=" >> $GITHUB_OUTPUT
+            echo "hotfix_skip_alias=" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           echo "should_run=true" >> $GITHUB_OUTPUT
 
-          # If hotfix-backport, extract source branch alias (e.g. staging-norway or live-norway → norway) so we skip that store in sync
-          HOTFIX_SOURCE_ALIAS=""
+          # If hotfix-backport came from staging-<alias>, skip syncing back to that same staging branch.
+          HOTFIX_SKIP_ALIAS=""
           if echo "$COMMIT_MSG" | grep -q "\[hotfix-backport\]"; then
             SOURCE_BRANCH=$(echo "$COMMIT_MSG" | sed -n 's/.*Merge \([^ ]*\) into main.*/\1/p' | head -1)
-            if [ -n "$SOURCE_BRANCH" ]; then
-              HOTFIX_SOURCE_ALIAS="${SOURCE_BRANCH#staging-}"
-              HOTFIX_SOURCE_ALIAS="${HOTFIX_SOURCE_ALIAS#live-}"
+            if [[ -n "$SOURCE_BRANCH" && "$SOURCE_BRANCH" == staging-* ]]; then
+              HOTFIX_SKIP_ALIAS="${SOURCE_BRANCH#staging-}"
             fi
           fi
-          echo "hotfix_source_alias=$HOTFIX_SOURCE_ALIAS" >> $GITHUB_OUTPUT
+          echo "hotfix_skip_alias=$HOTFIX_SKIP_ALIAS" >> $GITHUB_OUTPUT
 
   # Read store list from package.json
   config:
@@ -88,7 +89,8 @@ jobs:
           echo "stores=$STORES" >> $GITHUB_OUTPUT
           echo "Store aliases: $STORES"
 
-  # Merge main into each staging-<alias>; root JSONs ignored (restored from stores/<alias>/). Skip the store that sent the hotfix (no need to merge back).
+  # Merge main into each staging-<alias>; root JSONs ignored (restored from stores/<alias>/).
+  # Skip only staging-origin hotfix source branch (no need to merge back to same staging branch).
   sync:
     needs: [gate, config]
     if: needs.gate.outputs.should_run == 'true'
@@ -103,7 +105,7 @@ jobs:
       actions: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      HOTFIX_SOURCE_ALIAS: ${{ needs.gate.outputs.hotfix_source_alias }}
+      HOTFIX_SKIP_ALIAS: ${{ needs.gate.outputs.hotfix_skip_alias }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -116,8 +118,8 @@ jobs:
           ALIAS="${{ matrix.store }}"
           STORE_DIR="stores/${ALIAS}"
 
-          if [ -n "$HOTFIX_SOURCE_ALIAS" ] && [ "$HOTFIX_SOURCE_ALIAS" = "$ALIAS" ]; then
-            echo "Hotfix came from staging-$ALIAS or live-$ALIAS, skipping (no need to merge back to same store)."
+          if [ -n "$HOTFIX_SKIP_ALIAS" ] && [ "$HOTFIX_SKIP_ALIAS" = "$ALIAS" ]; then
+            echo "Hotfix came from staging-$ALIAS, skipping (no need to merge back to same staging branch)."
             exit 0
           fi
 

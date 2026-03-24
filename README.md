@@ -209,7 +209,7 @@ Direct pushes to `staging-<store>` or `live-<store>` are automatically synced ba
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `main-to-staging-stores.yml` (main-to-staging-&lt;store&gt;) | Push to `main` | Merges main into each `staging-<alias>`; root JSONs ignored. For hotfix-backport, skips the store that sent the hotfix; other stores get the merge. Skips only on pure store-sync. |
+| `main-to-staging-stores.yml` (main-to-staging-&lt;store&gt;) | Push to `main` | Merges main into each `staging-<alias>`; root JSONs ignored. For hotfix-backport: if source is `staging-<alias>`, that same staging branch is skipped; if source is `live-<alias>`, `staging-<alias>` is also synced. Skips only on pure store-sync. |
 | `stores-to-root.yml` | Push to `staging-*` | From main merge: stores→root. From elsewhere (e.g. Shopify): root→stores |
 | `pr-to-live.yml` | After stores-to-root | Opens PR from `staging-<alias>` to `live-<alias>` |
 | `root-to-stores.yml` | Push to `live-*` | From main merge: stores→root. From elsewhere: root→stores (same as stores-to-root on staging-*) |
@@ -268,7 +268,7 @@ You can install/update this later with:
 - **No tags yet?** The system uses `theme_version` from `config/settings_schema.json` (`theme_info`), creates that tag on main (e.g. `v1.0.0`), and continues from there.
 - **Staging → main**: On PR, a pre-release patch tag (e.g. v3.1.13) locks the current minor line; on merge, **minor** bump (e.g. v3.1.13 → v3.2.0).
 - **Non-staging to main** (hotfix backports, direct commits): **Patch** bump only, via **nightly workflow** at 02:00 US Eastern (not at commit time).
-- **Version bump runs only on main** (post-merge-tag and nightly-hotfix). Main-to-staging-stores merges main into each `staging-<alias>` on every push (version bumps and hotfixes). When the push is a hotfix from one store (e.g. live-norway), that store’s staging branch is skipped; other stores’ staging branches still get the merge.
+- **Version bump runs only on main** (post-merge-tag and nightly-hotfix). Main-to-staging-stores merges main into each `staging-<alias>` on every push (version bumps and hotfixes). For hotfix-backport, only a `staging-<alias> -> main` source skips syncing back to the same staging branch; a `live-<alias> -> main` source still syncs into `staging-<alias>`.
 - Version bumps update `config/settings_schema.json` and, when present, `package.json` `version`.
 - **Safety**: The version-bump workflow fails if the new tag would not be **strictly higher** than the latest merged release tag (semver), so the release line cannot step backward.
 
