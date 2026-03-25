@@ -23,14 +23,6 @@ const REQUIRED_PATHS = [
 
 const DEFAULTS = [
   { path: 'assets', kind: 'dir' },
-  {
-    path: 'release-notes.md',
-    kind: 'file',
-    content: `# Release Notes
-
-- describe key changes for this release
-`,
-  },
 ];
 
 function targetScriptPath(cwd = process.cwd()) {

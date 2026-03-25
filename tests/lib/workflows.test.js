@@ -91,6 +91,20 @@ describe('workflows', () => {
       }
     });
 
+    it('wires create-release to tagging workflow completion', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeBuild: true }, dir);
+        const releaseWorkflow = readFileSync(join(dir, '.github', 'workflows', 'create-release.yml'), 'utf-8');
+        assert.match(releaseWorkflow, /workflow_run:/);
+        assert.match(releaseWorkflow, /Post-Merge Tag/);
+        assert.match(releaseWorkflow, /Nightly Hotfix Tag/);
+        assert.match(releaseWorkflow, /tag_name:\s*\$\{\{\s*steps\.tag\.outputs\.tag_name\s*\}\}/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('removes bundled build script when includeBuild is false', () => {
       const dir = setup();
       try {

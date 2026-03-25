@@ -53,6 +53,9 @@ yarn.lock
       startServerCommand: 'shopify theme serve',
       startServerReadyPattern: 'Preview your theme',
       startServerReadyTimeout: 60000,
+      settings: {
+        chromeFlags: '--no-sandbox --disable-dev-shm-usage',
+      },
     },
     assert: {
       assertions: {

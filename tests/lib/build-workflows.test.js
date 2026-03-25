@@ -38,7 +38,6 @@ describe('build-workflows helpers', () => {
     try {
       ensureBuildWorkflowDefaults(dir);
       assert.ok(existsSync(join(dir, 'assets')));
-      assert.ok(existsSync(join(dir, 'release-notes.md')));
     } finally {
       teardown();
     }
@@ -52,7 +51,6 @@ describe('build-workflows helpers', () => {
       mkdirSync(join(dir, 'assets'), { recursive: true });
       writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("x");\n');
       writeFileSync(join(dir, '_styles', 'main.css'), '@import "tailwindcss";\n');
-      writeFileSync(join(dir, 'release-notes.md'), '# Release\n');
 
       const missing = getMissingBuildWorkflowRequirements(dir);
       assert.strictEqual(missing.length, 0);
