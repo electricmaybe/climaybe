@@ -7,7 +7,7 @@ Built by [Electric Maybe](https://electricmaybe.com) — a Shopify-focused produ
 **Commit linting and Cursor bundle (optional in both flows):**
 
 - **Conventional commit linting:** During `climaybe theme init` or `climaybe app init`, you can install [commitlint](https://commitlint.js.org/) and [Husky](https://typicode.github.io/husky) for [Conventional Commits](https://www.conventionalcommits.org/).
-- **Cursor rules + skills:** Opt in to Electric Maybe’s bundled [Cursor](https://cursor.com/) rules and skills under `.cursor/rules/` and `.cursor/skills/` (themes, JS, a11y, commits, changelog, Linear, etc.).
+- **Cursor bundle (rules + skills + subagents):** Opt in to Electric Maybe’s bundled [Cursor](https://cursor.com/) files under `.cursor/rules/`, `.cursor/skills/`, and `.cursor/agents/` (themes, JS, a11y, commits, changelog, Linear, **theme-translator** for locale sync, etc.).
 
 ## Command layout (Shopify CLI–style)
 
@@ -48,7 +48,7 @@ npm install -D climaybe
 npx climaybe app init
 ```
 
-Installs optional commitlint/Husky and Cursor rules/skills only. Use [Shopify CLI](https://shopify.dev/docs/api/shopify-cli) for app development and deployment.
+Installs optional commitlint/Husky and the Cursor bundle (rules, skills, agents). Use [Shopify CLI](https://shopify.dev/docs/api/shopify-cli) for app development and deployment.
 
 ## Commands
 
@@ -62,12 +62,12 @@ Interactive setup that configures your repo for CI/CD.
 4. Asks whether to enable optional **preview + cleanup** workflows (default: yes)
 5. Asks whether to enable optional **build + Lighthouse** workflows (default: yes)
 6. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
-7. Asks whether to install **Cursor rules + skills** (`.cursor/rules/`, `.cursor/skills/`) — Electric Maybe conventions for themes and AI workflows
+7. Asks whether to install the **Cursor bundle** (`.cursor/rules/`, `.cursor/skills/`, `.cursor/agents/`) — Electric Maybe conventions for themes and AI workflows
 8. Based on store count, sets up **single-store** or **multi-store** mode
 9. Writes `package.json` config
 10. Scaffolds GitHub Actions workflows
 11. Creates git branches and store directories (multi-store)
-12. Optionally installs commitlint, Husky, and the Cursor bundle (rules + skills)
+12. Optionally installs commitlint, Husky, and the Cursor bundle (rules, skills, agents)
 
 ### `climaybe app init`
 
@@ -135,13 +135,13 @@ npx climaybe setup-commitlint
 
 ### `climaybe add-cursor`
 
-Install Electric Maybe **Cursor rules and skills** into `.cursor/rules/` and `.cursor/skills/`. Use this if you skipped the bundle at init or want to refresh from the version of climaybe you have installed.
+Install Electric Maybe **Cursor rules, skills, and subagents** into `.cursor/rules/`, `.cursor/skills/`, and `.cursor/agents/` (including **theme-translator** for `theme/locales/`). Use this if you skipped the bundle at init or want to refresh from the version of climaybe you have installed.
 
 ```bash
 npx climaybe add-cursor
 ```
 
-The previous command name `add-cursor-skill` still works as an alias. Re-running replaces the bundled rule and skill files with the copies shipped by your installed climaybe version (same idea as `update-workflows`).
+The previous command name `add-cursor-skill` still works as an alias. Re-running replaces the bundled rules, skills, and subagent files with the copies shipped by your installed climaybe version (same idea as `update-workflows`).
 
 ## Configuration
 
@@ -241,7 +241,6 @@ When enabled, `init` validates required theme files and exits with an error if a
 
 `init` auto-creates:
 - `assets/`
-- `release-notes.md` (starter template)
 
 `climaybe` auto-installs the shared build script at `.climaybe/build-scripts.js` during workflow scaffolding.
 
@@ -249,7 +248,7 @@ When enabled, `init` validates required theme files and exits with an error if a
 |----------|---------|-------------|
 | `build-pipeline.yml` | Push to any branch | Runs reusable build and Lighthouse checks (when required secrets exist) |
 | `reusable-build.yml` | workflow_call | Runs Node build + Tailwind compile, then commits compiled assets when changed |
-| `create-release.yml` | Push tag `v*` | Builds release archive and creates GitHub Release using `release-notes.md` |
+| `create-release.yml` | Push tag `v*`, or **workflow_run** after Post-Merge Tag / Nightly Hotfix Tag succeed on `main` | Builds release archive and creates GitHub Release notes from commits since the previous tag. If commit subjects are low-signal and `GEMINI_API_KEY` exists, it uses Gemini to generate cleaner merchant-facing notes. Also covers tags created by workflows with `GITHUB_TOKEN`, which may not trigger tag-push workflows. |
 
 ### Optional theme dev kit package
 

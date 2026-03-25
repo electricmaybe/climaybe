@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** Bundled Electric Maybe Cursor rules + skills (shipped under src/cursor/). */
+/** Bundled Electric Maybe Cursor rules, skills, and subagents (shipped under src/cursor/). */
 const BUNDLE_ROOT = join(__dirname, '..', 'cursor');
 
 const SKIP_NAMES = new Set(['.DS_Store']);
@@ -30,18 +30,20 @@ function copyTree(src, dest) {
 }
 
 /**
- * Install bundled `.cursor/rules` and `.cursor/skills` into the target repo.
+ * Install bundled `.cursor/rules`, `.cursor/skills`, and `.cursor/agents` into the target repo.
  * @param {string} [cwd] - Working directory (default process.cwd())
  * @returns {boolean} - false if bundle source is missing (broken install)
  */
 export function scaffoldCursorBundle(cwd = process.cwd()) {
   const rulesSrc = join(BUNDLE_ROOT, 'rules');
   const skillsSrc = join(BUNDLE_ROOT, 'skills');
-  if (!existsSync(rulesSrc) || !existsSync(skillsSrc)) {
+  const agentsSrc = join(BUNDLE_ROOT, 'agents');
+  if (!existsSync(rulesSrc) || !existsSync(skillsSrc) || !existsSync(agentsSrc)) {
     return false;
   }
   const cursorRoot = join(cwd, '.cursor');
   copyTree(rulesSrc, join(cursorRoot, 'rules'));
   copyTree(skillsSrc, join(cursorRoot, 'skills'));
+  copyTree(agentsSrc, join(cursorRoot, 'agents'));
   return true;
 }

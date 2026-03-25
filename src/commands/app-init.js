@@ -42,7 +42,9 @@ async function runAppInitFlow() {
   if (enableCursorSkills) {
     const cursorOk = scaffoldCursorBundle();
     if (cursorOk) {
-      console.log(pc.green('  Electric Maybe Cursor rules + skills → .cursor/rules, .cursor/skills'));
+      console.log(
+        pc.green('  Electric Maybe Cursor bundle → .cursor/rules, .cursor/skills, .cursor/agents'),
+      );
     } else {
       console.log(pc.yellow('  Cursor bundle not found in package (skipped).'));
     }
@@ -50,7 +52,7 @@ async function runAppInitFlow() {
 
   console.log(pc.bold(pc.green('\n  App setup complete!\n')));
   console.log(pc.dim('  commitlint + Husky: ' + (enableCommitlint ? 'enabled' : 'disabled')));
-  console.log(pc.dim('  Cursor rules + skills: ' + (enableCursorSkills ? 'installed' : 'skipped')));
+  console.log(pc.dim('  Cursor bundle: ' + (enableCursorSkills ? 'installed' : 'skipped')));
   console.log(pc.dim('\n  Next steps:'));
   console.log(pc.dim('    Use Shopify CLI (`shopify app dev`, etc.) for app development.'));
   console.log(pc.dim('    Theme CI/CD workflows are not installed; add your own deployment as needed.\n'));

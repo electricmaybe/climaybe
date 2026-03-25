@@ -11,6 +11,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 ## Versioning
 
 - **Release artifacts**: `release-version.yml` (semantic-release) creates the git tag + GitHub Release and publishes the npm package to **npmjs.com**. GitHub Packages is not used.
+- **Theme release notes**: Optional build workflow `create-release.yml` writes GitHub Release notes from commits between tags. If commit subjects are mostly non-conventional and `GEMINI_API_KEY` is available, it summarizes them via Gemini; otherwise it falls back to a raw commit list.
 - **Format**: Always three-part (e.g. `v3.2.0`). No version is written in code or PR title; the system infers from tags.
 - **“Latest” tag**: The workflows take the **highest** `vMAJOR.MINOR.PATCH` tag among tags **merged into** the checked-out ref (`git tag --merged` + version sort), not `git describe`. After a staging→main merge, `git describe` can incorrectly pick an older tag that is graph-closer on the staging side than the real latest release on main.
 - **Monotonic releases**: The reusable **version-bump** job fails if the computed tag is not **strictly greater** (semver) than the highest merged release tag, so a bad base or explicit version cannot move the line backward or sideways.
@@ -28,7 +29,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Select store**: `climaybe theme switch <alias>` or `climaybe switch <alias>` (e.g. `climaybe switch voldt-staging`). Copies `stores/<alias>/` JSONs to repo root.
 - **Edit**: Change root JSONs as needed.
 - **Write back**: `climaybe theme sync [alias]` or `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
-- **Cursor (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled `.cursor/rules` and `.cursor/skills`. Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
+- **Cursor (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled `.cursor/rules`, `.cursor/skills`, and `.cursor/agents` (e.g. **theme-translator** for syncing `theme/locales/` from English defaults). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
 
 ## Hotfix flow (multi-store)
 

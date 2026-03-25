@@ -192,14 +192,14 @@ export async function promptCommitlint() {
 }
 
 /**
- * Ask whether to install bundled Cursor rules + skills (.cursor/rules, .cursor/skills).
+ * Ask whether to install bundled Cursor rules, skills, and subagents (.cursor/rules, .cursor/skills, .cursor/agents).
  */
 export async function promptCursorSkills() {
   const { enableCursorSkills } = await prompts({
     type: 'confirm',
     name: 'enableCursorSkills',
     message:
-      'Install Electric Maybe Cursor rules + skills? (Liquid/JS/a11y conventions + AI skills in .cursor/)',
+      'Install Electric Maybe Cursor bundle? (rules, skills, subagents e.g. theme-translator in .cursor/)',
     initial: true,
   });
 

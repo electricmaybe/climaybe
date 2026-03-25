@@ -143,7 +143,7 @@ export function isCommitlintEnabled(cwd = process.cwd()) {
 }
 
 /**
- * Whether bundled Cursor rules + skills were installed (init or add-cursor).
+ * Whether bundled Cursor rules, skills, and subagents were installed (init or add-cursor).
  */
 export function isCursorSkillsEnabled(cwd = process.cwd()) {
   const config = readConfig(cwd);

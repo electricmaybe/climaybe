@@ -84,7 +84,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
   const app = program.command('app').description('Shopify app repo helpers (no theme workflows)');
   app
     .command('init')
-    .description('Set up commitlint, Cursor rules/skills, and project_type: app in package.json')
+    .description('Set up commitlint, Cursor bundle (rules/skills/agents), and project_type: app in package.json')
     .action(appInitCommand);
 
   program
@@ -95,7 +95,9 @@ export function createProgram(version = '0.0.0', packageDir = '') {
   program
     .command('add-cursor')
     .alias('add-cursor-skill')
-    .description('Install Electric Maybe Cursor rules + skills (.cursor/rules, .cursor/skills)')
+    .description(
+      'Install Electric Maybe Cursor bundle (.cursor/rules, .cursor/skills, .cursor/agents)',
+    )
     .action(addCursorSkillCommand);
 
   return program;

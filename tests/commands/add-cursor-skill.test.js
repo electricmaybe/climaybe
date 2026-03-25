@@ -22,7 +22,7 @@ describe('add-cursor-skill command', () => {
     if (cwd && existsSync(cwd)) rmSync(cwd, { recursive: true });
   }
 
-  it('writes config.cursor_skills, rules, and skills (commit skill + index)', async () => {
+  it('writes config.cursor_skills, rules, skills, and agents (theme-translator)', async () => {
     setup();
     try {
       writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'theme', version: '1.0.0' }), 'utf-8');
@@ -34,6 +34,7 @@ describe('add-cursor-skill command', () => {
       const content = readFileSync(skillPath, 'utf-8');
       assert.ok(content.includes('name: commit'));
       assert.ok(existsSync(join(cwd, '.cursor', 'rules', '00-rule-index.mdc')));
+      assert.ok(existsSync(join(cwd, '.cursor', 'agents', 'theme-translator.md')));
     } finally {
       teardown();
     }
@@ -45,6 +46,7 @@ describe('add-cursor-skill command', () => {
       await addCursorSkillCommand();
       assert.ok(existsSync(join(cwd, 'package.json')));
       assert.ok(existsSync(join(cwd, '.cursor', 'skills', 'commit', 'SKILL.md')));
+      assert.ok(existsSync(join(cwd, '.cursor', 'agents', 'theme-translator.md')));
     } finally {
       teardown();
     }

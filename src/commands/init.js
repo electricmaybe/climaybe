@@ -112,7 +112,7 @@ async function runInitFlow() {
     includeBuild: enableBuildWorkflows,
   });
 
-  // 7. Optional commitlint + Husky and Cursor rules + skills bundle
+  // 7. Optional commitlint + Husky and Cursor bundle (rules, skills, agents)
   if (enableCommitlint) {
     console.log(pc.dim('  Setting up commitlint + Husky...'));
     if (scaffoldCommitlint()) {
@@ -124,7 +124,9 @@ async function runInitFlow() {
   if (enableCursorSkills) {
     const cursorOk = scaffoldCursorBundle();
     if (cursorOk) {
-      console.log(pc.green('  Electric Maybe Cursor rules + skills → .cursor/rules, .cursor/skills'));
+      console.log(
+        pc.green('  Electric Maybe Cursor bundle → .cursor/rules, .cursor/skills, .cursor/agents'),
+      );
     } else {
       console.log(pc.yellow('  Cursor bundle not found in package (skipped).'));
     }
@@ -163,7 +165,7 @@ async function runInitFlow() {
     console.log(pc.dim(`  VS Code tasks: ${enableVSCodeTasks ? 'enabled' : 'disabled'}`));
   }
   console.log(pc.dim(`  commitlint + Husky: ${enableCommitlint ? 'enabled' : 'disabled'}`));
-  console.log(pc.dim(`  Cursor rules + skills: ${enableCursorSkills ? 'installed' : 'skipped'}`));
+  console.log(pc.dim(`  Cursor bundle: ${enableCursorSkills ? 'installed' : 'skipped'}`));
 
   const suggestedTag = getSuggestedTagForRelease();
   const tagLabel = suggestedTag === 'v1.0.0' ? 'Tag your first release' : 'Tag your next release';
