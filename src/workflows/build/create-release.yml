@@ -119,9 +119,18 @@ jobs:
             COMMITS=$(git log --pretty=format:"%s" -n 30 "$TAG_NAME" 2>/dev/null || true)
           fi
 
+          # Filter out noisy system-generated sync/merge commits so release notes stay readable.
+          FILTERED_COMMITS=$(printf '%s\n' "$COMMITS" | sed '/^[[:space:]]*$/d' | grep -Eiv \
+            '^Sync main → staging-|^Sync main -> staging-|^Merge pull request #|^Merge branch |^Merge live-.* into main \[hotfix-backport\]$|^chore: sync root to stores/.+ \[root-to-stores\]$|^chore: keep store root JSONs from stores/.+ \[stores-to-root\]$|^Update from Shopify for theme ')
+          if [ -z "$FILTERED_COMMITS" ]; then
+            NOISY_ONLY_COMMITS=true
+          else
+            NOISY_ONLY_COMMITS=false
+          fi
+
           # Score how many commit subjects follow conventional-commit style.
-          TOTAL_COUNT=$(printf '%s\n' "$COMMITS" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
-          CONVENTIONAL_COUNT=$(printf '%s\n' "$COMMITS" | sed '/^[[:space:]]*$/d' | grep -Eic '^(feat|fix|refactor|perf|docs|style|test|build|ci|chore|revert)(\([^)]+\))?!?: ')
+          TOTAL_COUNT=$(printf '%s\n' "$FILTERED_COMMITS" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+          CONVENTIONAL_COUNT=$(printf '%s\n' "$FILTERED_COMMITS" | sed '/^[[:space:]]*$/d' | grep -Eic '^(feat|fix|refactor|perf|docs|style|test|build|ci|chore|revert)(\([^)]+\))?!?: ')
           if [ -z "$TOTAL_COUNT" ] || [ "$TOTAL_COUNT" -eq 0 ]; then
             TOTAL_COUNT=1
           fi
@@ -139,8 +148,8 @@ jobs:
           } > "$NOTES_FILE"
 
           # If commit quality is low and Gemini is available, ask AI to summarize merchant-facing notes.
-          if [ "$QUALITY" -lt 50 ] && [ -n "$GEMINI_API_KEY" ]; then
-            printf '%s\n' "$COMMITS" > .sys/release-notes/commits-for-ai.txt
+          if [ "$QUALITY" -lt 50 ] && [ -n "$GEMINI_API_KEY" ] && [ "$NOISY_ONLY_COMMITS" != "true" ]; then
+            printf '%s\n' "$FILTERED_COMMITS" > .sys/release-notes/commits-for-ai.txt
 
             PROMPT=$(cat <<'PROMPT_EOF'
           You generate release notes for a Shopify theme.
@@ -182,12 +191,20 @@ jobs:
             else
               echo "## Changes" >> "$NOTES_FILE"
               echo >> "$NOTES_FILE"
-              printf '%s\n' "$COMMITS" | sed '/^[[:space:]]*$/d' | sed 's/^/- /' >> "$NOTES_FILE"
+              if [ "$NOISY_ONLY_COMMITS" = "true" ]; then
+                echo "- No notable merchant-facing changes in this release." >> "$NOTES_FILE"
+              else
+                printf '%s\n' "$FILTERED_COMMITS" | sed '/^[[:space:]]*$/d' | sed 's/^/- /' >> "$NOTES_FILE"
+              fi
             fi
           else
             echo "## Changes" >> "$NOTES_FILE"
             echo >> "$NOTES_FILE"
-            printf '%s\n' "$COMMITS" | sed '/^[[:space:]]*$/d' | sed 's/^/- /' >> "$NOTES_FILE"
+            if [ "$NOISY_ONLY_COMMITS" = "true" ]; then
+              echo "- No notable merchant-facing changes in this release." >> "$NOTES_FILE"
+            else
+              printf '%s\n' "$FILTERED_COMMITS" | sed '/^[[:space:]]*$/d' | sed 's/^/- /' >> "$NOTES_FILE"
+            fi
           fi
 
           echo "notes_file=$NOTES_FILE" >> $GITHUB_OUTPUT

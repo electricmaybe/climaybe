@@ -248,7 +248,7 @@ When enabled, `init` validates required theme files and exits with an error if a
 |----------|---------|-------------|
 | `build-pipeline.yml` | Push to any branch | Runs reusable build and Lighthouse checks (when required secrets exist) |
 | `reusable-build.yml` | workflow_call | Runs Node build + Tailwind compile, then commits compiled assets when changed |
-| `create-release.yml` | Push tag `v*`, or **workflow_run** after Post-Merge Tag / Nightly Hotfix Tag succeed on `main` | Builds release archive and creates GitHub Release notes from commits since the previous tag. If commit subjects are low-signal and `GEMINI_API_KEY` exists, it uses Gemini to generate cleaner merchant-facing notes. Also covers tags created by workflows with `GITHUB_TOKEN`, which may not trigger tag-push workflows. |
+| `create-release.yml` | Push tag `v*`, or **workflow_run** after Post-Merge Tag / Nightly Hotfix Tag succeed on `main` | Builds release archive and creates GitHub Release notes from commits since the previous tag. It filters repetitive automation subjects (main→staging syncs, store/root sync chores, bot merge noise) before generating notes. If remaining subjects are low-signal and `GEMINI_API_KEY` exists, it uses Gemini to generate cleaner merchant-facing notes. Also covers tags created by workflows with `GITHUB_TOKEN`, which may not trigger tag-push workflows. |
 
 ### Optional theme dev kit package
 

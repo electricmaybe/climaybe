@@ -144,6 +144,9 @@ describe('workflows', () => {
         assert.match(releaseWorkflow, /Post-Merge Tag/);
         assert.match(releaseWorkflow, /Nightly Hotfix Tag/);
         assert.match(releaseWorkflow, /tag_name:\s*\$\{\{\s*steps\.tag\.outputs\.tag_name\s*\}\}/);
+        assert.match(releaseWorkflow, /FILTERED_COMMITS=/);
+        assert.match(releaseWorkflow, /\^Sync main → staging-/);
+        assert.match(releaseWorkflow, /\\\[root-to-stores\\\]/);
       } finally {
         teardown();
       }
