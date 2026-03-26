@@ -1,11 +1,28 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { watchTree } from './watch.js';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import pc from 'picocolors';
 import { readConfig } from './config.js';
 import { buildScripts } from './build-scripts.js';
 import { runShopify } from './shopify-cli.js';
+
+function tagLabel(tag, color = (s) => s) {
+  return color(`[${tag}]`);
+}
+
+function writeTaggedLine(tag, color, line, stream = process.stdout) {
+  const text = String(line || '').trimEnd();
+  if (!text) return;
+  stream.write(`${tagLabel(tag, color)} ${text}\n`);
+}
+
+function writeTaggedChunk(tag, color, chunk, stream = process.stdout) {
+  for (const line of String(chunk || '').split('\n')) {
+    if (!line) continue;
+    writeTaggedLine(tag, color, line, stream);
+  }
+}
 
 function getPackageDir() {
   return process.env.CLIMAYBE_PACKAGE_DIR || process.cwd();
@@ -16,21 +33,29 @@ function binPath(binName) {
   return join(getPackageDir(), 'node_modules', '.bin', binName);
 }
 
-function spawnLogged(command, args, { name, cwd = process.cwd(), env = process.env } = {}) {
+function spawnLogged(
+  command,
+  args,
+  { name, cwd = process.cwd(), env = process.env, stdio = 'inherit', tag = null, color = (s) => s } = {}
+) {
   const child = spawn(command, args, {
     cwd,
     env,
-    stdio: 'inherit',
+    stdio,
     shell: process.platform === 'win32',
   });
+  if (stdio === 'pipe') {
+    if (child.stdout) child.stdout.on('data', (buf) => writeTaggedChunk(tag || name, color, String(buf), process.stdout));
+    if (child.stderr) child.stderr.on('data', (buf) => writeTaggedChunk(tag || name, color, String(buf), process.stderr));
+  }
 
   child.on('exit', (code, signal) => {
     if (signal) {
-      console.log(pc.yellow(`\n  ${name} exited with signal ${signal}\n`));
+      writeTaggedLine(tag || name, color, `exited with signal ${signal}`);
       return;
     }
     if (code && code !== 0) {
-      console.log(pc.red(`\n  ${name} exited with code ${code}\n`));
+      writeTaggedLine(tag || name, color, `exited with code ${code}`, process.stderr);
     }
   });
 
@@ -41,7 +66,7 @@ function runTailwind(args, { cwd = process.cwd(), env = process.env, name = 'tai
   return spawnLogged(
     'npx',
     ['-y', '--package', '@tailwindcss/cli@latest', '--package', 'tailwindcss@latest', 'tailwindcss', ...args],
-    { name, cwd, env }
+    { name, cwd, env, stdio: 'pipe', tag: 'tailwind', color: pc.blue }
   );
 }
 
@@ -63,12 +88,134 @@ function safeKill(child) {
   }
 }
 
+function writeThemeCheckErrorsOnly(chunk, stream = process.stdout) {
+  for (const line of String(chunk || '').split('\n')) {
+    if (!line) continue;
+    if (/warning/i.test(line)) continue;
+    writeTaggedLine('theme-check', pc.red, line, stream);
+  }
+}
+
+function collectThemeCheckOffenses(payload) {
+  const out = [];
+  const visit = (value, inheritedPath = '') => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, inheritedPath);
+      return;
+    }
+    if (typeof value !== 'object') return;
+
+    const localPath =
+      value.path ||
+      value.file ||
+      value.file_path ||
+      value.relative_path ||
+      value.source ||
+      inheritedPath ||
+      '';
+
+    if (typeof value.severity === 'string' && typeof value.message === 'string') {
+      out.push({ ...value, __path: localPath || inheritedPath || '' });
+      return;
+    }
+
+    if (Array.isArray(value.offenses)) {
+      for (const offense of value.offenses) visit(offense, localPath || inheritedPath);
+    }
+    if (Array.isArray(value.checks)) {
+      for (const check of value.checks) visit(check, localPath || inheritedPath);
+    }
+
+    for (const nested of Object.values(value)) visit(nested, localPath || inheritedPath);
+  };
+  visit(payload);
+  return out;
+}
+
+function normalizeThemeCheckPath(file, cwd) {
+  const raw = String(file || '').trim();
+  if (!raw) return 'unknown';
+  if (isAbsolute(raw)) {
+    const rel = relative(cwd, raw);
+    if (rel && !rel.startsWith('..')) return rel;
+  }
+  return raw;
+}
+
+function formatThemeCheckError(offense, { cwd = process.cwd() } = {}) {
+  const file = offense.__path || offense.path || offense.file || offense.file_path || offense.relative_path || 'unknown';
+  const line =
+    offense.start_line ||
+    offense.startLine ||
+    offense.line ||
+    offense.line_number ||
+    offense.start_row ||
+    offense.row ||
+    '?';
+  const check = offense.check || offense.check_name || 'theme-check';
+  const message = offense.message || '';
+  const safeFile = normalizeThemeCheckPath(file, cwd);
+  return `${pc.cyan(safeFile)}:${pc.yellow(String(line))} ${pc.magenta(`[${check}]`)} ${pc.white(message)}`;
+}
+
+function runThemeCheckFiltered({ cwd = process.cwd() } = {}) {
+  let stdout = '';
+  let stderr = '';
+  const child = runShopify(['theme', 'check', '--fail-level', 'error', '--output', 'json'], {
+    cwd,
+    name: 'theme-check',
+    stdio: 'pipe',
+    onStdout: (chunk) => {
+      stdout += String(chunk || '');
+    },
+    onStderr: (chunk) => {
+      stderr += String(chunk || '');
+    },
+  });
+  child.on('exit', () => {
+    const trimmed = stdout.trim();
+    if (trimmed) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const offenses = collectThemeCheckOffenses(parsed).filter(
+          (offense) => String(offense.severity || '').toLowerCase() === 'error'
+        );
+        const seen = new Set();
+        for (const offense of offenses) {
+          const key = JSON.stringify([
+            offense.__path || offense.path || offense.file || offense.file_path || offense.relative_path || '',
+            offense.start_line || offense.startLine || offense.line || offense.line_number || offense.start_row || offense.row || '',
+            offense.check || offense.check_name || '',
+            offense.message || '',
+          ]);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          writeTaggedLine('theme-check', pc.red, formatThemeCheckError(offense, { cwd }), process.stderr);
+        }
+      } catch {
+        writeThemeCheckErrorsOnly(stdout, process.stdout);
+      }
+    }
+    if (stderr.trim()) {
+      writeThemeCheckErrorsOnly(stderr, process.stderr);
+    }
+  });
+  return child;
+}
+
 export function serveShopify({ cwd = process.cwd() } = {}) {
   const config = readConfig(cwd) || {};
   const store = config.default_store || config.store || '';
   const args = ['theme', 'dev', '--theme-editor-sync'];
   if (store) args.push(`--store=${store}`);
-  return runShopify(args, { cwd, name: 'shopify' });
+  return runShopify(args, {
+    cwd,
+    name: 'shopify',
+    stdio: 'pipe',
+    onStdout: (chunk) => writeTaggedChunk('shopify', pc.green, chunk, process.stdout),
+    onStderr: (chunk) => writeTaggedChunk('shopify', pc.green, chunk, process.stderr),
+  });
 }
 
 export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = {}) {
@@ -85,9 +232,9 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
   if (existsSync(scriptsDir)) {
     try {
       buildScripts({ cwd });
-      console.log(pc.green('  scripts built (initial)'));
+      writeTaggedLine('scripts', pc.yellow, 'built (initial)');
     } catch (err) {
-      console.log(pc.red(`  initial scripts build failed: ${err.message}`));
+      writeTaggedLine('scripts', pc.yellow, `initial build failed: ${err.message}`, process.stderr);
     }
   }
   const scriptsWatch = existsSync(scriptsDir)
@@ -98,9 +245,9 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
         onChange: () => {
           try {
             buildScripts({ cwd });
-            console.log(pc.green('  scripts rebuilt'));
+            writeTaggedLine('scripts', pc.yellow, 'rebuilt');
           } catch (err) {
-            console.log(pc.red(`  scripts build failed: ${err.message}`));
+            writeTaggedLine('scripts', pc.yellow, `build failed: ${err.message}`, process.stderr);
           }
         },
       })
@@ -114,7 +261,7 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
       return;
     }
     themeCheckRunning = true;
-    const child = runShopify(['theme', 'check'], { cwd, name: 'theme-check' });
+    const child = runThemeCheckFiltered({ cwd });
     child.on('exit', () => {
       themeCheckRunning = false;
       if (themeCheckQueued) {
@@ -187,7 +334,7 @@ export function lintAll({ cwd = process.cwd() } = {}) {
     ['./assets/*.css', '--config', '.config/.stylelintrc.json'],
     { name: 'stylelint', cwd }
   );
-  const themeCheck = runShopify(['theme', 'check'], { cwd, name: 'theme-check' });
+  const themeCheck = runThemeCheckFiltered({ cwd });
   return { eslint, stylelint, themeCheck };
 }
 
