@@ -133,8 +133,14 @@ jobs:
 
           git fetch origin "$BRANCH"
           git checkout "$BRANCH"
-          git merge origin/main --no-ff -m "Sync main → $BRANCH" || true
-          if [ $? -ne 0 ]; then
+          BRANCH_TREE=$(git rev-parse HEAD^{tree} 2>/dev/null || echo "")
+          MAIN_TREE=$(git rev-parse origin/main^{tree} 2>/dev/null || echo "")
+          if [ -n "$BRANCH_TREE" ] && [ "$BRANCH_TREE" = "$MAIN_TREE" ]; then
+            echo "$BRANCH is already in sync with main (no-op), skipping."
+            exit 0
+          fi
+
+          if ! git merge origin/main --no-ff -m "Sync main → $BRANCH"; then
             echo "Merge had conflicts; aborting. Manual resolution may be needed."
             git merge --abort 2>/dev/null || true
             exit 1

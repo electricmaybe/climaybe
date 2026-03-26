@@ -63,6 +63,50 @@ describe('workflows', () => {
       }
     });
 
+    it('skips no-op main-to-staging sync when trees are identical', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('multi', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'main-to-staging-stores.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+
+        assert.match(workflow, /is already in sync with main \(no-op\), skipping\./);
+        assert.match(workflow, /git rev-parse HEAD\^\{tree\}/);
+        assert.match(workflow, /git rev-parse origin\/main\^\{tree\}/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('skips no-op hotfix backports when source and main trees match', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('multi', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'multistore-hotfix-to-main.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+
+        assert.match(workflow, /No-op backport: origin\/main and origin\/\$SOURCE trees are identical\./);
+        assert.match(workflow, /git rev-parse origin\/main\^\{tree\}/);
+        assert.match(workflow, /git rev-parse origin\/\$SOURCE\^\{tree\}/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('ignores no-op commits in nightly hotfix tagging', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'nightly-hotfix.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+
+        assert.match(workflow, /git diff-tree --quiet --no-commit-id -r "\$SHA"/);
+        assert.match(workflow, /Skipping no-op commit \(empty tree diff\): \$SHA/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('includes preview workflows when includePreview is true', () => {
       const dir = setup();
       try {

@@ -103,6 +103,15 @@ jobs:
           fi
 
           if [ -n "$COMMITS" ]; then
+            # Skip no-op history merges when source and main already have identical content.
+            MAIN_TREE=$(git rev-parse origin/main^{tree} 2>/dev/null || echo "")
+            SOURCE_TREE=$(git rev-parse origin/$SOURCE^{tree} 2>/dev/null || echo "")
+            if [ -n "$MAIN_TREE" ] && [ "$MAIN_TREE" = "$SOURCE_TREE" ]; then
+              echo "needs_backport=false" >> $GITHUB_OUTPUT
+              echo "No-op backport: origin/main and origin/$SOURCE trees are identical."
+              exit 0
+            fi
+
             echo "needs_backport=true" >> $GITHUB_OUTPUT
             echo "is_default_store=$([ -n "$DEFAULT_ALIAS" ] && [ "$SOURCE_ALIAS" = "$DEFAULT_ALIAS" ] && echo true || echo false)" >> $GITHUB_OUTPUT
             echo "Commits to sync to main:"

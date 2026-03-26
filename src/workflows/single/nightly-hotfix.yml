@@ -90,6 +90,12 @@ jobs:
           while IFS=$'\t' read -r SHA SUBJECT; do
             [ -z "$SHA" ] && continue
 
+            # Ignore metadata-only commits (e.g. no-op merges) so they do not trigger bumps.
+            if git diff-tree --quiet --no-commit-id -r "$SHA"; then
+              echo "Skipping no-op commit (empty tree diff): $SHA"
+              continue
+            fi
+
             HEAD_REF=$(gh api \
               repos/${{ github.repository }}/commits/$SHA/pulls \
               --jq '.[0].head.ref // ""' 2>/dev/null || true)
