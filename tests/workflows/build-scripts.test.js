@@ -20,6 +20,8 @@ describe('build-scripts', () => {
   it('inlines imported files and strips ESM import syntax from output bundle', () => {
     const dir = setup();
     try {
+      const climaybeDir = join(dir, '.climaybe');
+      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -36,7 +38,7 @@ console.log("main");
       writeFileSync(join(dir, '_scripts', 'helper.js'), 'console.log("helper");\n', 'utf-8');
 
       const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(dir, 'build-scripts.js');
+      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
       copyFileSync(sourceScriptPath, tempScriptPath);
       const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
       assert.strictEqual(result.status, 0, result.stderr || result.stdout);
@@ -54,6 +56,8 @@ console.log("main");
   it('strips common ESM export syntax from output bundle', () => {
     const dir = setup();
     try {
+      const climaybeDir = join(dir, '.climaybe');
+      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -76,7 +80,7 @@ export { a };
       );
 
       const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(dir, 'build-scripts.js');
+      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
       copyFileSync(sourceScriptPath, tempScriptPath);
       const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
       assert.strictEqual(result.status, 0, result.stderr || result.stdout);
@@ -94,6 +98,8 @@ export { a };
   it('strips multiline named imports from main.js style headers', () => {
     const dir = setup();
     try {
+      const climaybeDir = join(dir, '.climaybe');
+      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -115,7 +121,7 @@ console.log("main");
       writeFileSync(join(dir, '_scripts', 'core-components.js'), 'console.log("core");\n', 'utf-8');
 
       const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(dir, 'build-scripts.js');
+      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
       copyFileSync(sourceScriptPath, tempScriptPath);
       const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
       assert.strictEqual(result.status, 0, result.stderr || result.stdout);
@@ -133,6 +139,8 @@ console.log("main");
   it('strips compact imports and import attributes from output bundle', () => {
     const dir = setup();
     try {
+      const climaybeDir = join(dir, '.climaybe');
+      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -154,7 +162,7 @@ console.log(run());
       writeFileSync(join(dir, '_scripts', 'flags.js'), 'console.log("flags");\n', 'utf-8');
 
       const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(dir, 'build-scripts.js');
+      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
       copyFileSync(sourceScriptPath, tempScriptPath);
       const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
       assert.strictEqual(result.status, 0, result.stderr || result.stdout);
@@ -164,6 +172,47 @@ console.log(run());
       assert.match(out, /\bfunction run\(\)/);
       assert.match(out, /console\.log\("flags"\)/);
       assert.match(out, /console\.log\(run\(\)\)/);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('strips bare side-effect import lines without semicolon from main.js', () => {
+    const dir = setup();
+    try {
+      const climaybeDir = join(dir, '.climaybe');
+      mkdirSync(climaybeDir, { recursive: true });
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'main.js'),
+        `// Main script file - imports all individual scripts
+
+
+
+
+
+
+
+
+
+import "./electric-variant-link-converter.js"
+`,
+        'utf-8'
+      );
+
+      writeFileSync(join(dir, '_scripts', 'electric-variant-link-converter.js'), 'console.log("variant");\n', 'utf-8');
+
+      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
+      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
+      copyFileSync(sourceScriptPath, tempScriptPath);
+      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+
+      const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
+      assert.match(out, /console\.log\(["']variant["']\)/, out);
     } finally {
       teardown();
     }

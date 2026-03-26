@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const ROOT_DIR = process.cwd();
+const CLIMAYBE_DIR = process.cwd();
+const SCRIPTS_DIR = path.join(CLIMAYBE_DIR, '_scripts');
 
 function extractImports(content) {
   const imports = [];
@@ -21,6 +22,27 @@ function extractImports(content) {
   return imports;
 }
 
+function stripModuleSyntax(content) {
+  // Remove import statements (including multiline/compact forms and import attributes).
+  let cleaned = content.replace(
+    /(^|\n)\s*import(?:\s+type)?\s*[\s\S]*?\s*\bfrom\b\s*['"][^'"]+['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g,
+    '$1'
+  );
+  cleaned = cleaned.replace(/(^|\n)\s*import\s*['"][^'"]+['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g, '$1');
+
+  // Fallback: ensure no standalone import declarations leak into bundle output.
+  cleaned = cleaned.replace(/^[ \t]*import\s*['"][^'"]+['"][ \t]*;?[ \t]*$/gm, '');
+  cleaned = cleaned.replace(
+    /^[ \t]*import(?:\s+type)?[ \t]*[^;\n\r]*\bfrom\b[ \t]*['"][^'"]+['"][ \t]*(?:with[ \t]*\{[^}\n\r]*\})?[ \t]*;?[ \t]*$/gm,
+    ''
+  );
+
+  cleaned = cleaned.replace(/^\s*export\s+default\s+/gm, '');
+  cleaned = cleaned.replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, '');
+  cleaned = cleaned.replace(/^\s*export\s+(?=(const|let|var|function|class)\b)/gm, '');
+  return cleaned;
+}
+
 function processScriptFile(filePath, processedFiles = new Set()) {
   if (processedFiles.has(filePath)) {
     return '';
@@ -28,7 +50,7 @@ function processScriptFile(filePath, processedFiles = new Set()) {
 
   processedFiles.add(filePath);
 
-  const fullPath = path.join(ROOT_DIR, '_scripts', filePath);
+  const fullPath = path.join(SCRIPTS_DIR, filePath);
 
   if (!fs.existsSync(fullPath)) {
     console.warn(`Warning: File ${filePath} not found`);
@@ -43,15 +65,7 @@ function processScriptFile(filePath, processedFiles = new Set()) {
     importedContent += processScriptFile(importPath, processedFiles);
   }
 
-  // Remove import statements (including multiline/compact forms and import attributes).
-  content = content.replace(
-    /(^|\n)\s*import(?:\s+type)?\s*[\s\S]*?\s*\bfrom\b\s*['"][^'"]+['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g,
-    '$1'
-  );
-  content = content.replace(/(^|\n)\s*import\s*['"][^'"]+['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g, '$1');
-  content = content.replace(/^\s*export\s+default\s+/gm, '');
-  content = content.replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, '');
-  content = content.replace(/^\s*export\s+(?=(const|let|var|function|class)\b)/gm, '');
+  content = stripModuleSyntax(content);
 
   if (process.env.NODE_ENV === 'production') {
     content = content.replace(/\/\*\*[\s\S]*?\*\//g, '');
@@ -67,12 +81,13 @@ function buildScripts() {
   try {
     if (global.gc) global.gc();
 
-    const mainPath = path.join(ROOT_DIR, '_scripts', 'main.js');
+    const mainPath = path.join(SCRIPTS_DIR, 'main.js');
     fs.readFileSync(mainPath, 'utf8');
 
     const processedFiles = new Set();
-    const finalContent = processScriptFile('main.js', processedFiles);
-    const outputPath = path.join(ROOT_DIR, 'assets', 'index.js');
+    let finalContent = processScriptFile('main.js', processedFiles);
+    finalContent = stripModuleSyntax(finalContent);
+    const outputPath = path.join(CLIMAYBE_DIR, 'assets', 'index.js');
     fs.writeFileSync(outputPath, finalContent.trim() + '\n');
 
     const fileCount = processedFiles.size;
