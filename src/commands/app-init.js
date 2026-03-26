@@ -26,7 +26,7 @@ async function runAppInitFlow() {
   };
 
   writeConfig(config, process.cwd(), { defaultPackageName: 'shopify-app' });
-  console.log(pc.green('  Updated package.json config.'));
+  console.log(pc.green('  Updated climaybe config.'));
 
   ensureGitRepo();
   ensureInitialCommit();

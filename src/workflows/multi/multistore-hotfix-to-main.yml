@@ -48,9 +48,9 @@ jobs:
         run: |
           DEFAULT_ALIAS=$(node -e "
             const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const stores = pkg?.config?.stores || {};
-            const defaultStoreRaw = pkg?.config?.default_store;
+            const cfg = JSON.parse(fs.readFileSync('./climaybe.config.json', 'utf8'));
+            const stores = cfg?.stores || {};
+            const defaultStoreRaw = cfg?.default_store;
             const normalize = (v) => String(v || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/\/.*\$/, '');
             const defaultStore = normalize(defaultStoreRaw);
             let alias = '';

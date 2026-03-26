@@ -2,3 +2,5 @@ node_modules/
 test.log
 bin/version.txt
 sample/
+.DS_Store
+**/.DS_Store

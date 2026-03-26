@@ -1,5 +1,6 @@
 import prompts from 'prompts';
 import pc from 'picocolors';
+import { basename } from 'node:path';
 
 /**
  * Extract the subdomain (storeKey) from a Shopify domain.
@@ -42,13 +43,13 @@ export async function promptStore(defaultDomain = '') {
   const { domain } = await prompts({
     type: 'text',
     name: 'domain',
-    message: 'Store URL',
+    message: 'Store name or domain',
     initial: defaultDomain,
     validate: (v) => {
-      if (v.trim().length === 0) return 'Store URL is required';
+      if (v.trim().length === 0) return 'Store name is required';
       const normalized = normalizeDomain(v);
       if (!normalized || !isValidShopifyDomain(normalized)) {
-        return 'Enter a valid Shopify domain (e.g. voldt-staging.myshopify.com)';
+        return 'Enter a valid store name or domain (e.g. voldt-staging or voldt-staging.myshopify.com)';
       }
       return true;
     },
@@ -149,14 +150,14 @@ export async function promptBuildWorkflows() {
 }
 
 /**
- * Ask whether to scaffold the local theme dev kit files (scripts, lint, ignores, editor tasks).
+ * Ask whether to scaffold local theme dev-kit files (configs, ignores, editor tasks).
  */
 export async function promptDevKit() {
   const { enableDevKit } = await prompts({
     type: 'confirm',
     name: 'enableDevKit',
     message:
-      'Install Electric Maybe theme dev kit? (local scripts/watch/lint configs, ignores, and optional VS Code tasks)',
+      'Install Electric Maybe theme dev kit? (local dev config files, ignore defaults, and optional VS Code tasks)',
     initial: true,
   });
 
@@ -170,7 +171,7 @@ export async function promptVSCodeDevTasks() {
   const { enableVSCodeTasks } = await prompts({
     type: 'confirm',
     name: 'enableVSCodeTasks',
-    message: 'Add VS Code tasks.json to auto-run Shopify + Tailwind local dev tasks?',
+    message: 'Add VS Code tasks.json to auto-run climaybe local dev commands (Shopify + assets watch)?',
     initial: true,
   });
 
@@ -204,6 +205,28 @@ export async function promptCursorSkills() {
   });
 
   return !!enableCursorSkills;
+}
+
+/**
+ * Prompt for package.json name when creating a new package.json.
+ */
+export async function promptProjectName(cwd = process.cwd()) {
+  const suggested = basename(cwd).trim().toLowerCase().replace(/\s+/g, '-');
+  const { projectName } = await prompts({
+    type: 'text',
+    name: 'projectName',
+    message: 'Project name for package.json',
+    initial: suggested || 'shopify-theme',
+    validate: (v) => {
+      const name = String(v || '').trim();
+      if (!name) return 'Project name is required';
+      if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) {
+        return 'Use lowercase letters, numbers, dot, underscore, or hyphen';
+      }
+      return true;
+    },
+  });
+  return String(projectName || '').trim();
 }
 
 /**

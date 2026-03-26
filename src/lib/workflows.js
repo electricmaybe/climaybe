@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, copyFileSync, rmSync } from 'node:f
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pc from 'picocolors';
-import { installBuildScript, removeBuildScript } from './build-workflows.js';
+import { ensureBuildWorkflowDefaults } from './build-workflows.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, '..', 'workflows');
@@ -110,9 +110,7 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
     for (const f of listYmls(buildDir)) {
       copyWorkflow(buildDir, f, dest);
     }
-    installBuildScript(cwd);
-  } else {
-    removeBuildScript(cwd);
+    ensureBuildWorkflowDefaults(cwd);
   }
 
   const total = readdirSync(dest).filter((f) => f.endsWith('.yml')).length;

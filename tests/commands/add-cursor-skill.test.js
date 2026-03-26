@@ -40,11 +40,11 @@ describe('add-cursor-skill command', () => {
     }
   });
 
-  it('does not throw when no package.json (writeConfig creates it)', async () => {
+  it('does not throw when no package.json (writes climaybe.config.json instead)', async () => {
     setup();
     try {
       await addCursorSkillCommand();
-      assert.ok(existsSync(join(cwd, 'package.json')));
+      assert.ok(existsSync(join(cwd, 'climaybe.config.json')));
       assert.ok(existsSync(join(cwd, '.cursor', 'skills', 'commit', 'SKILL.md')));
       assert.ok(existsSync(join(cwd, '.cursor', 'agents', 'theme-translator.md')));
     } finally {

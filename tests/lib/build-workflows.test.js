@@ -5,8 +5,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   getMissingBuildWorkflowRequirements,
-  installBuildScript,
-  removeBuildScript,
   ensureBuildWorkflowDefaults,
 } from '../../src/lib/build-workflows.js';
 
@@ -59,29 +57,5 @@ describe('build-workflows helpers', () => {
     }
   });
 
-  it('installs and removes bundled build script', () => {
-    const dir = setup();
-    try {
-      installBuildScript(dir);
-      assert.ok(existsSync(join(dir, '.climaybe', 'build-scripts.js')));
-      assert.ok(existsSync(join(dir, 'build-scripts.js')));
-      removeBuildScript(dir);
-      assert.ok(!existsSync(join(dir, '.climaybe', 'build-scripts.js')));
-      assert.ok(!existsSync(join(dir, 'build-scripts.js')));
-    } finally {
-      teardown();
-    }
-  });
-
-  it('does not remove user-managed root build script', () => {
-    const dir = setup();
-    try {
-      writeFileSync(join(dir, 'build-scripts.js'), 'console.log("custom");\n');
-      installBuildScript(dir);
-      removeBuildScript(dir);
-      assert.ok(existsSync(join(dir, 'build-scripts.js')));
-    } finally {
-      teardown();
-    }
-  });
+  // build-scripts runner is now part of climaybe runtime (no per-repo install).
 });

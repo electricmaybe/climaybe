@@ -9,6 +9,10 @@ import { setupCommitlintCommand } from './commands/setup-commitlint.js';
 import { addCursorSkillCommand } from './commands/add-cursor-skill.js';
 import { addDevKitCommand } from './commands/add-dev-kit.js';
 import { appInitCommand } from './commands/app-init.js';
+import { migrateLegacyConfigCommand } from './commands/migrate-legacy-config.js';
+import { buildScriptsCommand } from './commands/build-scripts.js';
+import { createEntrypointsCommand } from './commands/create-entrypoints.js';
+import { serveAll, serveAssets, serveShopify, lintAll, buildAll } from './lib/dev-runtime.js';
 
 /**
  * Register theme CI/CD commands on a Commander instance (root or `theme` subgroup).
@@ -44,8 +48,37 @@ function registerThemeCommands(cmd) {
 
   cmd
     .command('add-dev-kit')
-    .description('Install/update local theme dev kit files (scripts, lint, ignores, optional VS Code tasks)')
+    .description('Install/update local theme dev kit files (configs, ignores, optional VS Code tasks)')
     .action(addDevKitCommand);
+
+  cmd
+    .command('migrate-legacy-config')
+    .description('Migrate legacy package.json config to climaybe.config.json (optional workflow refresh)')
+    .option('--overwrite', 'Overwrite existing climaybe.config.json')
+    .option('-y, --yes', 'Non-interactive; assume "yes" for prompts')
+    .option('--no-update-workflows', 'Do not refresh workflows after migrating')
+    .action(migrateLegacyConfigCommand);
+
+  cmd
+    .command('serve')
+    .description('Run local theme dev (Shopify + assets + Theme Check)')
+    .option('--no-theme-check', 'Disable Theme Check watcher')
+    .action((opts) => serveAll({ includeThemeCheck: opts.themeCheck !== false }));
+  cmd.command('serve:shopify').description('Run Shopify theme dev server').action(() => serveShopify());
+  cmd
+    .command('serve:assets')
+    .description('Run assets watch (Tailwind + scripts + Theme Check)')
+    .option('--no-theme-check', 'Disable Theme Check watcher')
+    .action((opts) => serveAssets({ includeThemeCheck: opts.themeCheck !== false }));
+
+  cmd.command('lint').description('Run theme linting (liquid, js, css)').action(() => lintAll());
+
+  cmd.command('build').description('Build assets (Tailwind + scripts build)').action(() => buildAll());
+  cmd.command('build-scripts').description('Build _scripts → assets/index.js').action(buildScriptsCommand);
+  cmd
+    .command('create-entrypoints')
+    .description('Create _scripts/main.js and _styles/main.css (optional)')
+    .action(createEntrypointsCommand);
 
   cmd
     .command('update-workflows')
@@ -84,7 +117,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
   const app = program.command('app').description('Shopify app repo helpers (no theme workflows)');
   app
     .command('init')
-    .description('Set up commitlint, Cursor bundle (rules/skills/agents), and project_type: app in package.json')
+    .description('Set up commitlint, Cursor bundle (rules/skills/agents), and project_type: app in climaybe.config.json')
     .action(appInitCommand);
 
   program
@@ -104,5 +137,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
 }
 
 export function run(argv, version, packageDir = '') {
+  if (packageDir) process.env.CLIMAYBE_PACKAGE_DIR = packageDir;
+  if (version) process.env.CLIMAYBE_PACKAGE_VERSION = version;
   createProgram(version, packageDir).parse(argv);
 }

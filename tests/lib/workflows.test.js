@@ -128,8 +128,11 @@ describe('workflows', () => {
         const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
         const hasBuild = files.some((f) => f.includes('build') || f.includes('release'));
         assert.ok(hasBuild, 'expected at least one build workflow');
-        assert.ok(existsSync(join(dir, '.climaybe', 'build-scripts.js')));
-        assert.ok(existsSync(join(dir, 'build-scripts.js')));
+        const reusableBuild = readFileSync(join(workflowsDir, 'reusable-build.yml'), 'utf-8');
+        assert.match(reusableBuild, /Detect build entrypoints/);
+        assert.match(reusableBuild, /npx -y climaybe@latest build-scripts/);
+        assert.match(reusableBuild, /No _styles\/main\.css found; skipping Tailwind build/);
+        assert.match(reusableBuild, /git add -f assets\/\*\.js/);
       } finally {
         teardown();
       }
@@ -152,12 +155,10 @@ describe('workflows', () => {
       }
     });
 
-    it('removes bundled build script when includeBuild is false', () => {
+    it('does not install per-repo build script shims', () => {
       const dir = setup();
       try {
         scaffoldWorkflows('single', { includeBuild: true }, dir);
-        assert.ok(existsSync(join(dir, '.climaybe', 'build-scripts.js')));
-        assert.ok(existsSync(join(dir, 'build-scripts.js')));
         scaffoldWorkflows('single', { includeBuild: false }, dir);
         assert.ok(!existsSync(join(dir, '.climaybe', 'build-scripts.js')));
         assert.ok(!existsSync(join(dir, 'build-scripts.js')));

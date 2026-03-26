@@ -47,7 +47,7 @@ jobs:
           echo "staging_branch=$BRANCH" >> $GITHUB_OUTPUT
           echo "live_branch=live-${ALIAS}" >> $GITHUB_OUTPUT
 
-      - name: Resolve store domain from package.json
+      - name: Resolve store domain from climaybe.config.json
         id: store
         env:
           SHOPIFY_STORE_URL_SCOPED: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', steps.alias.outputs.alias_secret)] }}
@@ -56,8 +56,8 @@ jobs:
           ALIAS="${{ steps.alias.outputs.alias }}"
           DOMAIN_CONFIG=$(node -e "
             const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            const domain = pkg?.config?.stores?.['${ALIAS}'] || '';
+            const cfg = JSON.parse(fs.readFileSync('./climaybe.config.json', 'utf8'));
+            const domain = cfg?.stores?.['${ALIAS}'] || '';
             process.stdout.write(domain);
           ")
           DOMAIN="${SHOPIFY_STORE_URL_SCOPED:-}"

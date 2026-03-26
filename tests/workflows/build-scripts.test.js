@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { spawnSync } from 'node:child_process';
+import { buildScripts } from '../../src/lib/build-scripts.js';
 
 describe('build-scripts', () => {
   let cwd;
@@ -20,8 +20,6 @@ describe('build-scripts', () => {
   it('inlines imported files and strips ESM import syntax from output bundle', () => {
     const dir = setup();
     try {
-      const climaybeDir = join(dir, '.climaybe');
-      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -37,11 +35,7 @@ console.log("main");
       writeFileSync(join(dir, '_scripts', 'utils.js'), 'console.log("utils");\n', 'utf-8');
       writeFileSync(join(dir, '_scripts', 'helper.js'), 'console.log("helper");\n', 'utf-8');
 
-      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
-      copyFileSync(sourceScriptPath, tempScriptPath);
-      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
-      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+      buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
       assert.match(out, /console\.log\(["']utils["']\)/, out);
@@ -56,8 +50,6 @@ console.log("main");
   it('strips common ESM export syntax from output bundle', () => {
     const dir = setup();
     try {
-      const climaybeDir = join(dir, '.climaybe');
-      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -79,11 +71,7 @@ export { a };
         'utf-8'
       );
 
-      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
-      copyFileSync(sourceScriptPath, tempScriptPath);
-      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
-      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+      buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
       assert.ok(!/\bexport\b/.test(out), `bundle should not contain export statements\n${out}`);
@@ -98,8 +86,6 @@ export { a };
   it('strips multiline named imports from main.js style headers', () => {
     const dir = setup();
     try {
-      const climaybeDir = join(dir, '.climaybe');
-      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -120,11 +106,7 @@ console.log("main");
       writeFileSync(join(dir, '_scripts', 'helpers.js'), 'console.log("helpers");\n', 'utf-8');
       writeFileSync(join(dir, '_scripts', 'core-components.js'), 'console.log("core");\n', 'utf-8');
 
-      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
-      copyFileSync(sourceScriptPath, tempScriptPath);
-      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
-      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+      buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
       assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
@@ -139,8 +121,6 @@ console.log("main");
   it('strips compact imports and import attributes from output bundle', () => {
     const dir = setup();
     try {
-      const climaybeDir = join(dir, '.climaybe');
-      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -161,11 +141,7 @@ console.log(run());
       );
       writeFileSync(join(dir, '_scripts', 'flags.js'), 'console.log("flags");\n', 'utf-8');
 
-      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
-      copyFileSync(sourceScriptPath, tempScriptPath);
-      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
-      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+      buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
       assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
@@ -180,8 +156,6 @@ console.log(run());
   it('strips bare side-effect import lines without semicolon from main.js', () => {
     const dir = setup();
     try {
-      const climaybeDir = join(dir, '.climaybe');
-      mkdirSync(climaybeDir, { recursive: true });
       mkdirSync(join(dir, '_scripts'), { recursive: true });
       mkdirSync(join(dir, 'assets'), { recursive: true });
 
@@ -204,15 +178,52 @@ import "./electric-variant-link-converter.js"
 
       writeFileSync(join(dir, '_scripts', 'electric-variant-link-converter.js'), 'console.log("variant");\n', 'utf-8');
 
-      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
-      const tempScriptPath = join(climaybeDir, 'build-scripts.js');
-      copyFileSync(sourceScriptPath, tempScriptPath);
-      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
-      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+      buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
       assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
       assert.match(out, /console\.log\(["']variant["']\)/, out);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('builds additional top-level entrypoints to separate asset files', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("main");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'productpage.js'), 'console.log("product");\n', 'utf-8');
+
+      buildScripts({ cwd: dir });
+
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'productpage.js')));
+      assert.match(readFileSync(join(dir, 'assets', 'productpage.js'), 'utf-8'), /product/);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('does not emit separate bundles for files imported by main.js', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'import "./productpage.js";\nconsole.log("main");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'productpage.js'), 'import "./helpers.js";\nconsole.log("product");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'helpers.js'), 'console.log("helpers");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'other.js'), 'console.log("other");\n', 'utf-8');
+
+      buildScripts({ cwd: dir });
+
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'other.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'productpage.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'helpers.js')));
     } finally {
       teardown();
     }

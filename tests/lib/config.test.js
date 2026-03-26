@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
@@ -7,6 +7,8 @@ import {
   readPkg,
   readConfig,
   writeConfig,
+  readClimaybeConfig,
+  migrateLegacyPackageConfigToClimaybe,
   getStoreAliases,
   getMode,
   isPreviewWorkflowsEnabled,
@@ -53,7 +55,7 @@ describe('config', () => {
   });
 
   describe('readConfig', () => {
-    it('returns null when no package.json', () => {
+    it('returns null when no package.json and no climaybe config file', () => {
       const dir = setup();
       try {
         assert.strictEqual(readConfig(dir), null);
@@ -72,6 +74,17 @@ describe('config', () => {
       }
     });
 
+    it('returns climaybe.config.json when present', () => {
+      const dir = setup();
+      try {
+        const config = { port: 9295, stores: { foo: 'foo.myshopify.com' } };
+        writeFileSync(join(dir, 'climaybe.config.json'), JSON.stringify(config), 'utf-8');
+        assert.deepStrictEqual(readConfig(dir), config);
+      } finally {
+        teardown();
+      }
+    });
+
     it('returns config object when present', () => {
       const dir = setup();
       try {
@@ -85,43 +98,67 @@ describe('config', () => {
   });
 
   describe('writeConfig', () => {
-    it('creates package.json with config when missing', () => {
+    it('creates climaybe.config.json when missing', () => {
       const dir = setup();
       try {
         writeConfig({ port: 9295, stores: {} }, dir);
-        const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
-        assert.ok(pkg.config);
-        assert.strictEqual(pkg.config.port, 9295);
-        assert.deepStrictEqual(pkg.config.stores, {});
+        const cfg = readClimaybeConfig(dir);
+        assert.ok(cfg);
+        assert.strictEqual(cfg.port, 9295);
+        assert.deepStrictEqual(cfg.stores, {});
       } finally {
         teardown();
       }
     });
 
-    it('merges config into existing package.json', () => {
+    it('merges config into existing climaybe.config.json', () => {
       const dir = setup();
       try {
-        writeFileSync(
-          join(dir, 'package.json'),
-          JSON.stringify({ name: 'theme', version: '1.0.0', config: { port: 9295 } }, null, 2),
-          'utf-8'
-        );
+        writeFileSync(join(dir, 'climaybe.config.json'), JSON.stringify({ port: 9295 }, null, 2), 'utf-8');
         writeConfig({ stores: { a: 'a.myshopify.com' } }, dir);
-        const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
-        assert.strictEqual(pkg.config.port, 9295);
-        assert.deepStrictEqual(pkg.config.stores, { a: 'a.myshopify.com' });
+        const cfg = readClimaybeConfig(dir);
+        assert.strictEqual(cfg.port, 9295);
+        assert.deepStrictEqual(cfg.stores, { a: 'a.myshopify.com' });
       } finally {
         teardown();
       }
     });
 
-    it('creates package.json with shopify-app name when defaultPackageName option set', () => {
+    it('does not create package.json by default', () => {
       const dir = setup();
       try {
         writeConfig({ project_type: 'app' }, dir, { defaultPackageName: 'shopify-app' });
+        assert.strictEqual(existsSync(join(dir, 'package.json')), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('can also write legacy package.json config when enabled', () => {
+      const dir = setup();
+      try {
+        writeConfig({ project_type: 'app' }, dir, {
+          defaultPackageName: 'shopify-app',
+          alsoWriteLegacyPackageConfig: true,
+        });
         const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8'));
         assert.strictEqual(pkg.name, 'shopify-app');
         assert.strictEqual(pkg.config.project_type, 'app');
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('migrateLegacyPackageConfigToClimaybe', () => {
+    it('writes climaybe.config.json from package.json config when missing', () => {
+      const dir = setup();
+      try {
+        const legacy = { port: 9295, stores: { a: 'a.myshopify.com' } };
+        writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'x', config: legacy }), 'utf-8');
+        const did = migrateLegacyPackageConfigToClimaybe({ cwd: dir });
+        assert.strictEqual(did, true);
+        assert.deepStrictEqual(readClimaybeConfig(dir), legacy);
       } finally {
         teardown();
       }

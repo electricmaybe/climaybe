@@ -31,6 +31,11 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Write back**: `climaybe theme sync [alias]` or `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
 - **Cursor (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled `.cursor/rules`, `.cursor/skills`, and `.cursor/agents` (e.g. **theme-translator** for syncing `theme/locales/` from English defaults). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
 
+## Build workflows (optional)
+
+- Build workflows run `npx -y climaybe@latest build-scripts` (scripts) and `npx -y climaybe@latest build` (Tailwind).
+- If `_scripts/*.js` or `_styles/main.css` are missing, the build workflow **skips** the missing step(s) and continues (so builds don’t block other workflows on repos that don’t use these entrypoints yet).
+
 ## Hotfix flow (multi-store)
 
 - Direct pushes to **`staging-<store>`** or **`live-<store>`** are synced back to `main` automatically by **multistore-hotfix-to-main**.
@@ -51,8 +56,8 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 | root-to-stores | `root-to-stores.yml` | Push to `live-*` | **From main** (merge): copies `stores/<alias>/` → root. **From elsewhere**: copies root → `stores/<alias>/`. Same logic as stores-to-root on staging-*. |
 | multistore-hotfix-to-main | `multistore-hotfix-to-main.yml` | Push to `staging-*` or `live-*`; also after Root to Stores (live-*) | Merges store branch into main (no PR). **Skips** when push is a merge from main (avoids loop) and when source/main trees are identical (no-op backport). **Default store**: backport includes root + code. **Non-default store**: only `stores/<alias>/` changes go to main; root sync paths are reverted to main after merge. |
 
-- **main-to-staging-stores** reads the store list from `package.json` → `config.stores` (matrix). Other multi-store workflows derive the alias from the branch name (`staging-<alias>`, `live-<alias>`).
-- Adding a new store: update `package.json` and run `climaybe add-store` (creates branches and `stores/<alias>/`).
+- **main-to-staging-stores** reads the store list from `climaybe.config.json` → `stores` (matrix). Other multi-store workflows derive the alias from the branch name (`staging-<alias>`, `live-<alias>`).
+- Adding a new store: update `climaybe.config.json` (or run `climaybe add-store`) (creates branches and `stores/<alias>/`).
 
 ## Recursive trigger prevention
 
@@ -110,4 +115,4 @@ When the implementation changes, update the external “CI/CD – Developer Comm
 | **§2.7 Versiyon bump** | “Staging→main merge: minor bump (anında). Staging dışı (hotfix): patch bump sadece gece 02:00 US Eastern nightly workflow ile; commit anında tag yok.” |
 | **Yapılacaklar – komut** | Use `climaybe add-store` (not “setup add-store”). |
 | **Yapılacaklar – prompt** | Optional: “Store URL” and “Alias” as prompt labels; alias default from subdomain. |
-| **Yapılacaklar – workflow/store list** | main-to-staging-<store> uses `package.json` config.stores for matrix; other workflows derive alias from branch name. New store = package.json update + `climaybe add-store` (branch + dir creation). |
+| **Yapılacaklar – workflow/store list** | main-to-staging-<store> uses `climaybe.config.json` `stores` for matrix; other workflows derive alias from branch name. New store = config update + `climaybe add-store` (branch + dir creation). |

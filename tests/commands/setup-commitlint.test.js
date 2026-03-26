@@ -40,12 +40,12 @@ describe('setup-commitlint command', () => {
     }
   });
 
-  it('does not throw when no package.json (writeConfig creates it)', async () => {
+  it('does not throw when no package.json (writes climaybe.config.json instead)', async () => {
     setup();
     process.env.CLIMAYBE_SKIP_INSTALL = '1';
     try {
       await setupCommitlintCommand();
-      assert.ok(existsSync(join(cwd, 'package.json')));
+      assert.ok(existsSync(join(cwd, 'climaybe.config.json')));
       const config = readConfig(cwd);
       assert.strictEqual(config.commitlint, true);
     } finally {

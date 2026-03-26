@@ -1,21 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { readPkg, writePkg } from './config.js';
+import { readPkg, writePkg, writeClimaybeConfig } from './config.js';
 
 const DEV_KIT_FILES = {
-  'nodemon.json': `{
-  "watch": ["_scripts"],
-  "ext": "js",
-  "exec": "npm run scripts:build --silent",
-  "quiet": true,
-  "no-colours": true,
-  "ignore": ["node_modules/**/*", "assets/**/*", "**/*.min.js"],
-  "delay": "500",
-  "polling": false,
-  "legacyWatch": false,
-  "restartable": "rs"
-}
-`,
   '.theme-check.yml': `root: .
 
 extends: :nothing
@@ -80,7 +67,7 @@ const VSCODE_TASKS_CONTENT = `{
     {
       "label": "Shopify",
       "type": "shell",
-      "command": "yarn shopify:serve",
+      "command": "climaybe serve:shopify",
       "isBackground": true,
       "presentation": {
         "echo": true,
@@ -96,7 +83,7 @@ const VSCODE_TASKS_CONTENT = `{
     {
       "label": "Tailwind",
       "type": "shell",
-      "command": "yarn tailwind:watch",
+      "command": "climaybe serve:assets",
       "isBackground": true,
       "presentation": {
         "echo": true,
@@ -128,33 +115,6 @@ assets/index.js
 .vercel
 `;
 
-const PACKAGE_MERGES = {
-  scripts: {
-    'shopify:serve': 'shopify theme dev --theme-editor-sync --store=$npm_package_config_store',
-    'shopify:populate': 'shopify populate --store=$npm_package_config_store',
-    'scripts:build': 'node build-scripts.js',
-    'scripts:watch': 'nodemon',
-    'tailwind:watch':
-      `concurrently --kill-others --max-restarts 3 "NODE_ENV=production NODE_OPTIONS='--max-old-space-size=512' ` +
-      `npx @tailwindcss/cli -i _styles/main.css -o assets/style.css --watch" "NODE_OPTIONS='--max-old-space-size=256' ` +
-      `npm run scripts:watch" "npx -y @shopify/dev-mcp@latest"`,
-    'tailwind:build': 'NODE_ENV=production npx @tailwindcss/cli -i _styles/main.css -o assets/style.css --minify && npm run scripts:build',
-    'lint:liquid': 'shopify theme check',
-    'lint:js': 'eslint ./assets/*.js --config .config/eslint.config.mjs',
-    'lint:css': 'node_modules/.bin/stylelint ./assets/*.css --config .config/.stylelintrc.json',
-    release: 'node .sys/scripts/release.js',
-  },
-  devDependencies: {
-    '@shopify/prettier-plugin-liquid': '^1.6.3',
-    '@tailwindcss/cli': '^4.1.17',
-    concurrently: '^8.2.2',
-    nodemon: '^3.0.2',
-    prettier: '^3.4.2',
-    stylelint: '^16.9.0',
-    eslint: '^9.11.0',
-  },
-};
-
 function ensureParent(path) {
   mkdirSync(dirname(path), { recursive: true });
 }
@@ -171,12 +131,16 @@ function mergeGitignore(cwd = process.cwd()) {
   writeFileSync(path, `${next}\n`, 'utf-8');
 }
 
-function mergePackageJson(defaultStoreDomain = '', cwd = process.cwd()) {
-  const pkg = readPkg(cwd) || { name: 'shopify-theme', version: '1.0.0', private: true };
-  pkg.config = { ...(pkg.config || {}) };
-  if (!pkg.config.store && defaultStoreDomain) pkg.config.store = defaultStoreDomain;
-  pkg.scripts = { ...(pkg.scripts || {}), ...PACKAGE_MERGES.scripts };
-  pkg.devDependencies = { ...(pkg.devDependencies || {}), ...PACKAGE_MERGES.devDependencies };
+function mergePackageJson({ packageName = 'shopify-theme', cwd = process.cwd() } = {}) {
+  const pkg = readPkg(cwd) || { name: packageName, version: '1.0.0', private: true };
+  pkg.devDependencies = { ...(pkg.devDependencies || {}) };
+
+  // Ensure teammates can run climaybe + Tailwind after plain npm install.
+  const cliVersion = process.env.CLIMAYBE_PACKAGE_VERSION;
+  const climaybeRange = /^\d+\.\d+\.\d+/.test(String(cliVersion || '')) ? `^${cliVersion}` : 'latest';
+  if (!pkg.devDependencies.climaybe) pkg.devDependencies.climaybe = climaybeRange;
+  if (!pkg.devDependencies.tailwindcss) pkg.devDependencies.tailwindcss = 'latest';
+
   writePkg(pkg, cwd);
 }
 
@@ -186,7 +150,12 @@ export function getDevKitExistingFiles({ includeVSCodeTasks = true, cwd = proces
   return paths.filter((p) => existsSync(join(cwd, p)));
 }
 
-export function scaffoldThemeDevKit({ includeVSCodeTasks = true, defaultStoreDomain = '', cwd = process.cwd() } = {}) {
+export function scaffoldThemeDevKit({
+  includeVSCodeTasks = true,
+  defaultStoreDomain = '',
+  packageName = 'shopify-theme',
+  cwd = process.cwd(),
+} = {}) {
   for (const [rel, content] of Object.entries(DEV_KIT_FILES)) {
     const dest = join(cwd, rel);
     ensureParent(dest);
@@ -198,5 +167,18 @@ export function scaffoldThemeDevKit({ includeVSCodeTasks = true, defaultStoreDom
     writeFileSync(dest, VSCODE_TASKS_CONTENT, 'utf-8');
   }
   mergeGitignore(cwd);
-  mergePackageJson(defaultStoreDomain, cwd);
+  mergePackageJson({ packageName, cwd });
+
+  // New source-of-truth config file for climaybe (local dev + CI).
+  // We intentionally keep package.json changes minimal (no script injection).
+  writeClimaybeConfig(
+    {
+      port: 9295,
+      default_store: defaultStoreDomain || undefined,
+      dev_kit: true,
+      vscode_tasks: includeVSCodeTasks,
+      project_type: 'theme',
+    },
+    cwd
+  );
 }

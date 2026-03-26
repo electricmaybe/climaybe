@@ -13,10 +13,10 @@ Built by [Electric Maybe](https://electricmaybe.com) — a Shopify-focused produ
 
 - **`climaybe theme <command>`** — canonical commands for theme repos (workflows, stores, branches).
 - **Same commands at the top level** — `climaybe init` is the same as `climaybe theme init` (backward compatible).
-- **`climaybe app init`** — app repos only: writes `project_type: "app"` in `package.json` config, optional commitlint + Cursor bundle. Does **not** install theme GitHub Actions or store/branch setup.
+- **`climaybe app init`** — app repos only: writes `project_type: "app"` in `climaybe.config.json`, optional commitlint + Cursor bundle. Does **not** install theme GitHub Actions or store/branch setup.
 - **`climaybe setup-commitlint`** and **`climaybe add-cursor`** — always at the top level (stack-agnostic).
 
-Theme-only commands refuse to run when `package.json` → `config.project_type` is **`app`**.
+Theme-only commands refuse to run when `climaybe.config.json` → `project_type` is **`app`**.
 
 ## Install
 
@@ -64,7 +64,7 @@ Interactive setup that configures your repo for CI/CD.
 6. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
 7. Asks whether to install the **Cursor bundle** (`.cursor/rules/`, `.cursor/skills/`, `.cursor/agents/`) — Electric Maybe conventions for themes and AI workflows
 8. Based on store count, sets up **single-store** or **multi-store** mode
-9. Writes `package.json` config
+9. Writes `climaybe.config.json`
 10. Scaffolds GitHub Actions workflows
 11. Creates git branches and store directories (multi-store)
 12. Optionally installs commitlint, Husky, and the Cursor bundle (rules, skills, agents)
@@ -145,21 +145,19 @@ The previous command name `add-cursor-skill` still works as an alias. Re-running
 
 ## Configuration
 
-The CLI writes config into the `config` field of your `package.json`:
+The CLI writes config into `climaybe.config.json`:
 
 ```json
 {
-  "config": {
-    "port": 9295,
-    "default_store": "voldt-staging.myshopify.com",
-    "preview_workflows": true,
-    "build_workflows": true,
-    "commitlint": true,
-    "cursor_skills": true,
-    "stores": {
-      "voldt-staging": "voldt-staging.myshopify.com",
-      "voldt-norway": "voldt-norway.myshopify.com"
-    }
+  "port": 9295,
+  "default_store": "voldt-staging.myshopify.com",
+  "preview_workflows": true,
+  "build_workflows": true,
+  "commitlint": true,
+  "cursor_skills": true,
+  "stores": {
+    "voldt-staging": "voldt-staging.myshopify.com",
+    "voldt-norway": "voldt-norway.myshopify.com"
   }
 }
 ```
@@ -235,14 +233,11 @@ Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`; defau
 
 Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`; default: yes).
 
-When enabled, `init` validates required theme files and exits with an error if any are missing:
-- `_scripts/main.js`
-- `_styles/main.css`
+When enabled, builds are **resilient**:
+- If `_scripts/*.js` or `_styles/main.css` are missing, the build workflow **skips** those steps and continues.
+- `init` may offer to create entrypoints; **default answer is No**.
 
-`init` auto-creates:
-- `assets/`
-
-`climaybe` auto-installs the shared build script at `.climaybe/build-scripts.js` during workflow scaffolding.
+Build workflows run bundling via `npx -y climaybe@latest build-scripts` and Tailwind via `npx -y climaybe@latest build` (no per-repo build script is installed).
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
@@ -253,9 +248,13 @@ When enabled, `init` validates required theme files and exits with an error if a
 ### Optional theme dev kit package
 
 During `climaybe init`, you can enable the Electric Maybe theme dev kit (default: yes). This installs local
-dev scripts/config defaults (`nodemon.json`, `.theme-check.yml`, `.shopifyignore`, `.prettierrc`,
-`.lighthouserc.js`), merges matching `package.json` scripts/dependencies, appends a managed `.gitignore` block,
-and optionally adds `.vscode/tasks.json` (default: yes).
+dev config defaults (`.theme-check.yml`, `.shopifyignore`, `.prettierrc`,
+`.lighthouserc.js`), writes `climaybe.config.json`, appends a managed `.gitignore` block, and optionally adds
+`.vscode/tasks.json` (default: yes) wired to run `climaybe` dev commands.
+
+You can create optional build entrypoints later with:
+
+`climaybe create-entrypoints`
 
 If these files already exist, `init` warns that they will be replaced.
 

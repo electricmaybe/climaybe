@@ -31,9 +31,9 @@ jobs:
           else
             ALIAS=$(node -e "
               const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-              const stores = pkg?.config?.stores || {};
-              const defaultStoreRaw = pkg?.config?.default_store;
+              const cfg = JSON.parse(fs.readFileSync('./climaybe.config.json', 'utf8'));
+              const stores = cfg?.stores || {};
+              const defaultStoreRaw = cfg?.default_store;
               const normalize = (v) => String(v || '')
                 .toLowerCase()
                 .replace(/^https?:\\/\\//, '')
@@ -63,7 +63,7 @@ jobs:
           fi
 
           if [ -z "$ALIAS" ]; then
-            echo "Could not resolve store alias from package.json config or base branch."
+            echo "Could not resolve store alias from climaybe.config.json config or base branch."
             exit 1
           fi
 

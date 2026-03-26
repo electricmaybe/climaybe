@@ -37,6 +37,27 @@ describe('CLI', () => {
     }
   });
 
+  it('registers migrate-legacy-config on theme and root', () => {
+    const program = createProgram();
+    const theme = program.commands.find((c) => c.name() === 'theme');
+    assert.ok(theme.commands.some((c) => c.name() === 'migrate-legacy-config'));
+    assert.ok(program.commands.some((c) => c.name() === 'migrate-legacy-config'));
+  });
+
+  it('registers build-scripts on theme and root', () => {
+    const program = createProgram();
+    const theme = program.commands.find((c) => c.name() === 'theme');
+    assert.ok(theme.commands.some((c) => c.name() === 'build-scripts'));
+    assert.ok(program.commands.some((c) => c.name() === 'build-scripts'));
+  });
+
+  it('registers create-entrypoints on theme and root', () => {
+    const program = createProgram();
+    const theme = program.commands.find((c) => c.name() === 'theme');
+    assert.ok(theme.commands.some((c) => c.name() === 'create-entrypoints'));
+    assert.ok(program.commands.some((c) => c.name() === 'create-entrypoints'));
+  });
+
   it('registers app init', () => {
     const program = createProgram();
     const app = program.commands.find((c) => c.name() === 'app');

@@ -1,8 +1,8 @@
 import prompts from 'prompts';
 import pc from 'picocolors';
-import { readConfig, writeConfig } from '../lib/config.js';
+import { readConfig, readPkg, writeConfig } from '../lib/config.js';
 import { getDevKitExistingFiles, scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
-import { promptVSCodeDevTasks } from '../lib/prompts.js';
+import { promptProjectName, promptVSCodeDevTasks } from '../lib/prompts.js';
 
 export async function addDevKitCommand() {
   console.log(pc.bold('\n  climaybe — Add theme dev kit\n'));
@@ -25,12 +25,14 @@ export async function addDevKitCommand() {
   }
 
   const config = readConfig() || {};
+  const projectName = !readPkg() ? await promptProjectName() : undefined;
   scaffoldThemeDevKit({
     includeVSCodeTasks,
     defaultStoreDomain: config.default_store || '',
+    packageName: projectName || undefined,
   });
   writeConfig({ dev_kit: true, vscode_tasks: includeVSCodeTasks });
 
   console.log(pc.green('  Theme dev kit installed.'));
-  console.log(pc.dim('  Added scripts/configs for local serve/watch/lint and ignore defaults.\n'));
+  console.log(pc.dim('  Added local dev-kit config files and ignore defaults.\n'));
 }

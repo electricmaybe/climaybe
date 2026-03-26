@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { getDevKitExistingFiles, scaffoldThemeDevKit } from '../../src/lib/theme-dev-kit.js';
-import { readPkg } from '../../src/lib/config.js';
+import { readPkg, readClimaybeConfig } from '../../src/lib/config.js';
 
 describe('theme-dev-kit', () => {
   let cwd;
@@ -18,7 +18,7 @@ describe('theme-dev-kit', () => {
     if (cwd && existsSync(cwd)) rmSync(cwd, { recursive: true });
   }
 
-  it('scaffolds dev kit files and merges package.json defaults', () => {
+  it('scaffolds dev kit files, writes climaybe.config.json, and adds climaybe + tailwindcss deps', () => {
     const dir = setup();
     try {
       writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'theme', version: '1.0.0' }), 'utf-8');
@@ -28,9 +28,16 @@ describe('theme-dev-kit', () => {
       assert.ok(existsSync(join(dir, '.shopifyignore')));
       assert.ok(existsSync(join(dir, '.vscode', 'tasks.json')));
       const pkg = readPkg(dir);
-      assert.strictEqual(pkg.config.store, 'demo.myshopify.com');
-      assert.ok(pkg.scripts['tailwind:watch']);
-      assert.ok(pkg.devDependencies.nodemon);
+      assert.strictEqual(pkg.config, undefined);
+      assert.strictEqual(pkg.scripts, undefined);
+      assert.ok(pkg.devDependencies);
+      assert.ok(pkg.devDependencies.climaybe);
+      assert.ok(pkg.devDependencies.tailwindcss);
+      const cfg = readClimaybeConfig(dir);
+      assert.ok(cfg);
+      assert.strictEqual(cfg.project_type, 'theme');
+      assert.strictEqual(cfg.default_store, 'demo.myshopify.com');
+      assert.strictEqual(cfg.vscode_tasks, true);
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf-8');
       assert.ok(gitignore.includes('# climaybe: theme dev kit (managed)'));
     } finally {
@@ -41,11 +48,9 @@ describe('theme-dev-kit', () => {
   it('detects existing files that will be replaced', () => {
     const dir = setup();
     try {
-      writeFileSync(join(dir, 'nodemon.json'), '{}\n', 'utf-8');
       mkdirSync(join(dir, '.vscode'), { recursive: true });
       writeFileSync(join(dir, '.vscode', 'tasks.json'), '{}\n', 'utf-8');
       const existing = getDevKitExistingFiles({ includeVSCodeTasks: true, cwd: dir });
-      assert.ok(existing.includes('nodemon.json'));
       assert.ok(existing.includes('.vscode/tasks.json'));
     } finally {
       teardown();

@@ -6,20 +6,20 @@ import {
   promptBuildWorkflows,
   promptDevKit,
   promptVSCodeDevTasks,
+  promptProjectName,
   promptCommitlint,
   promptCursorSkills,
   promptConfigureCISecrets,
   promptUpdateExistingSecrets,
   promptSecretValue,
-  promptTestThemeToken,
 } from '../lib/prompts.js';
-import { readConfig, writeConfig, getProjectType } from '../lib/config.js';
+import { readConfig, writeConfig, getProjectType, readPkg } from '../lib/config.js';
 import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches, getSuggestedTagForRelease } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
 import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
-import { getMissingBuildWorkflowRequirements, getBuildScriptRelativePath, ensureBuildWorkflowDefaults } from '../lib/build-workflows.js';
+import { getMissingBuildWorkflowRequirements, ensureBuildWorkflowDefaults } from '../lib/build-workflows.js';
 import { getDevKitExistingFiles, scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
 import {
   isGhAvailable,
@@ -48,23 +48,36 @@ async function runInitFlow() {
   const enableBuildWorkflows = await promptBuildWorkflows();
   const enableDevKit = await promptDevKit();
   const enableVSCodeTasks = enableDevKit ? await promptVSCodeDevTasks() : false;
+  const projectName = enableDevKit && !readPkg() ? await promptProjectName() : undefined;
   const enableCommitlint = await promptCommitlint();
   const enableCursorSkills = await promptCursorSkills();
 
   console.log(pc.dim(`\n  Mode: ${mode}-store (${stores.length} store(s))`));
 
+  let missingBuildFiles = [];
   if (enableBuildWorkflows) {
     ensureBuildWorkflowDefaults();
-    const missingBuildFiles = getMissingBuildWorkflowRequirements();
+    missingBuildFiles = getMissingBuildWorkflowRequirements();
     if (missingBuildFiles.length > 0) {
       console.log(pc.red('\n  Build workflows are enabled, but required files are missing:'));
       for (const req of missingBuildFiles) {
         const expected = req.kind === 'dir' ? `${req.path}/` : req.path;
         console.log(pc.red(`    - ${expected}`));
       }
-      console.log(pc.dim(`\n  climaybe will auto-install ${getBuildScriptRelativePath()} during workflow scaffolding.`));
-      console.log(pc.dim('  Add the missing files above, then run init again.\n'));
-      return;
+      console.log(pc.dim('\n  Build workflows will be scaffolded, but build steps will be skipped until entrypoints exist.'));
+      const { createNow } = await prompts({
+        type: 'confirm',
+        name: 'createNow',
+        message: 'Create _scripts/main.js and _styles/main.css now?',
+        initial: false,
+      });
+      if (createNow) {
+        // Lazy import to avoid circular deps and keep init lean.
+        const { createEntrypointsCommand } = await import('./create-entrypoints.js');
+        await createEntrypointsCommand();
+      } else {
+        console.log(pc.dim('  Skipping entrypoint creation (default).'));
+      }
     }
   }
 
@@ -75,6 +88,7 @@ async function runInitFlow() {
     default_store: stores[0].domain,
     preview_workflows: enablePreviewWorkflows,
     build_workflows: enableBuildWorkflows,
+    build_entrypoints_ready: enableBuildWorkflows ? missingBuildFiles?.length === 0 : undefined,
     dev_kit: enableDevKit,
     vscode_tasks: enableVSCodeTasks,
     commitlint: enableCommitlint,
@@ -86,9 +100,9 @@ async function runInitFlow() {
     config.stores[s.alias] = s.domain;
   }
 
-  // 3. Write package.json config
+  // 3. Write climaybe config
   writeConfig(config);
-  console.log(pc.green('  Updated package.json config.'));
+  console.log(pc.green('  Updated climaybe config.'));
 
   // 4. Ensure git repo
   ensureGitRepo();
@@ -141,8 +155,9 @@ async function runInitFlow() {
     scaffoldThemeDevKit({
       includeVSCodeTasks: enableVSCodeTasks,
       defaultStoreDomain: stores[0]?.domain || '',
+      packageName: projectName || undefined,
     });
-    console.log(pc.green('  Theme dev kit installed (scripts/watch/lint + ignore defaults).'));
+    console.log(pc.green('  Theme dev kit installed (local config + ignore defaults).'));
   }
 
   // Done
@@ -245,25 +260,44 @@ async function runInitFlow() {
   console.log(pc.cyan(`\n  Configure ${totalToPrompt} ${setter.name} secret(s)/variable(s). Leave optional ones blank to skip.\n`));
   for (let i = 0; i < toPrompt.length; i++) {
     const secret = toPrompt[i];
-    const value = await promptSecretValue(secret, i, totalToPrompt);
-    if (!value) continue;
-
     const isThemeToken =
       secret.name === 'SHOPIFY_THEME_ACCESS_TOKEN' || secret.name.startsWith('SHOPIFY_THEME_ACCESS_TOKEN_');
     const storeUrl = isThemeToken ? getStoreUrlForThemeTokenSecret(secret.name, stores) : null;
 
-    if (storeUrl) {
-      const doTest = await promptTestThemeToken();
-      if (doTest) {
+    if (isThemeToken) {
+      if (!storeUrl) {
+        console.log(pc.red(`  Could not resolve store URL for required token ${secret.name}.`));
+        continue;
+      }
+      // Theme tokens are required and must validate; keep prompting until valid + set.
+      while (true) {
+        const value = await promptSecretValue(secret, i, totalToPrompt);
+        if (!value) {
+          console.log(pc.red('  Theme access token is required.'));
+          continue;
+        }
         const result = await validateThemeAccessToken(storeUrl, value);
         if (!result.ok) {
           console.log(pc.red(`  Token test failed: ${result.error}`));
-          console.log(pc.dim('  Secret not set. You can add it later in repo Settings → Secrets.'));
+          console.log(pc.dim('  Please try again with a valid Theme Access token.'));
           continue;
         }
         console.log(pc.green('  Token validated against store.'));
+        try {
+          await setter.set(secret.name, value);
+          console.log(pc.green(`  Set ${secret.name}.`));
+          setCount++;
+          break;
+        } catch (err) {
+          console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
+          console.log(pc.dim('  Please try entering the token again.'));
+        }
       }
+      continue;
     }
+
+    const value = await promptSecretValue(secret, i, totalToPrompt);
+    if (!value) continue;
 
     try {
       await setter.set(secret.name, value);
@@ -284,7 +318,7 @@ export async function initCommand() {
   if (getProjectType() === 'app') {
     console.log(pc.red('  This repo is configured as a Shopify app (project_type: app).'));
     console.log(pc.dim('  Use: npx climaybe app init'));
-    console.log(pc.dim('  To switch to theme CI/CD, remove or edit package.json → config first.\n'));
+    console.log(pc.dim('  To switch to theme CI/CD, remove or edit climaybe.config.json → project_type first.\n'));
     return;
   }
 

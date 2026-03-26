@@ -134,7 +134,7 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 
 ## 10) Deploy PR body links for store branches
 
-- Updated `src/workflows/multi/pr-to-live.yml` to resolve the store domain from `package.json` (`config.stores[alias]`).
+- Updated `src/workflows/multi/pr-to-live.yml` to resolve the store domain from `climaybe.config.json` (`stores[alias]`).
 - Hardened store domain parsing to strip protocol/path segments before URL generation.
 - Added support for store-scoped secrets in `pr-to-live.yml`:
   - `SHOPIFY_STORE_URL_<ALIAS>`

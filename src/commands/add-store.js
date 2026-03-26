@@ -1,5 +1,5 @@
 import pc from 'picocolors';
-import { promptNewStore, promptConfigureCISecrets, promptUpdateExistingSecrets, promptSecretValue, promptTestThemeToken } from '../lib/prompts.js';
+import { promptNewStore, promptConfigureCISecrets, promptUpdateExistingSecrets, promptSecretValue } from '../lib/prompts.js';
 import {
   readConfig,
   addStoreToConfig,
@@ -119,22 +119,37 @@ export async function addStoreCommand() {
         console.log(pc.cyan(`\n  Configure ${total} secret(s) for store "${store.alias}" (theme token required).\n`));
         for (let i = 0; i < secretsToPrompt.length; i++) {
           const secret = secretsToPrompt[i];
-          const value = await promptSecretValue(secret, i, total);
-          if (!value) continue;
-
           const isThemeToken = secret.name === 'SHOPIFY_THEME_ACCESS_TOKEN' || secret.name.startsWith('SHOPIFY_THEME_ACCESS_TOKEN_');
           if (isThemeToken && store.domain) {
-            const doTest = await promptTestThemeToken();
-            if (doTest) {
+            // Theme tokens are required and must validate; keep prompting until valid + set.
+            while (true) {
+              const value = await promptSecretValue(secret, i, total);
+              if (!value) {
+                console.log(pc.red('  Theme access token is required.'));
+                continue;
+              }
               const result = await validateThemeAccessToken(store.domain, value);
               if (!result.ok) {
                 console.log(pc.red(`  Token test failed: ${result.error}`));
-                console.log(pc.dim('  Secret not set. You can add it later in repo Settings → Secrets.'));
+                console.log(pc.dim('  Please try again with a valid Theme Access token.'));
                 continue;
               }
               console.log(pc.green('  Token validated against store.'));
+              try {
+                await setter.set(secret.name, value);
+                console.log(pc.green(`  Set ${secret.name}.`));
+                setCount++;
+                break;
+              } catch (err) {
+                console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
+                console.log(pc.dim('  Please try entering the token again.'));
+              }
             }
+            continue;
           }
+
+          const value = await promptSecretValue(secret, i, total);
+          if (!value) continue;
 
           try {
             await setter.set(secret.name, value);

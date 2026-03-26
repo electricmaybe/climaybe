@@ -68,7 +68,7 @@ jobs:
           fi
           echo "hotfix_skip_alias=$HOTFIX_SKIP_ALIAS" >> $GITHUB_OUTPUT
 
-  # Read store list from package.json
+  # Read store list from climaybe.config.json
   config:
     needs: gate
     if: needs.gate.outputs.should_run == 'true'
@@ -82,8 +82,9 @@ jobs:
         id: read
         run: |
           STORES=$(node -e "
-            const pkg = require('./package.json');
-            const stores = Object.keys(pkg.config?.stores || {});
+            const fs = require('fs');
+            const cfg = JSON.parse(fs.readFileSync('./climaybe.config.json', 'utf8'));
+            const stores = Object.keys(cfg?.stores || {});
             console.log(JSON.stringify(stores));
           ")
           echo "stores=$STORES" >> $GITHUB_OUTPUT
