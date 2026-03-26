@@ -3,7 +3,7 @@ import { initCommand, reinitCommand } from './commands/init.js';
 import { addStoreCommand } from './commands/add-store.js';
 import { switchCommand } from './commands/switch.js';
 import { syncCommand } from './commands/sync.js';
-import { updateWorkflowsCommand } from './commands/update-workflows.js';
+import { updateCommand } from './commands/update-workflows.js';
 import { ensureBranchesCommand } from './commands/ensure-branches.js';
 import { setupCommitlintCommand } from './commands/setup-commitlint.js';
 import { addCursorSkillCommand } from './commands/add-cursor-skill.js';
@@ -81,9 +81,10 @@ function registerThemeCommands(cmd) {
     .action(createEntrypointsCommand);
 
   cmd
-    .command('update-workflows')
-    .description('Refresh GitHub Actions workflows from latest bundled templates')
-    .action(updateWorkflowsCommand);
+    .command('update')
+    .alias('update-workflows')
+    .description('Refresh workflows and all climaybe-managed project files')
+    .action(updateCommand);
 
   cmd
     .command('ensure-branches')

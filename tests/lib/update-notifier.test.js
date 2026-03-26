@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { isVersionGreater, resolveInstallScope } from '../../src/lib/update-notifier.js';
+import { getLocalInstallFlag, isVersionGreater, resolveInstallScope } from '../../src/lib/update-notifier.js';
 
 describe('update-notifier', () => {
   describe('isVersionGreater', () => {
@@ -45,6 +45,22 @@ describe('update-notifier', () => {
     it('falls back to global when local project does not exist', () => {
       const dir = join(tmpdir(), `climaybe-update-notifier-missing-${Date.now()}`);
       assert.strictEqual(resolveInstallScope({ packageDir: '/tmp/somewhere', cwd: dir }), 'global');
+    });
+  });
+
+  describe('local install policy', () => {
+    it('always installs climaybe in dependencies for local updates', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'climaybe-update-notifier-policy-'));
+      try {
+        writeFileSync(
+          join(dir, 'package.json'),
+          JSON.stringify({ name: 'theme', version: '1.0.0', devDependencies: { climaybe: '^3.0.0' } }),
+          'utf-8'
+        );
+        assert.strictEqual(getLocalInstallFlag({ packageName: 'climaybe', cwd: dir }), '--save');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

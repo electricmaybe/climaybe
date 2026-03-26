@@ -115,15 +115,21 @@ npx climaybe ensure-branches
 git push origin --all
 ```
 
-### `climaybe update-workflows` / `climaybe theme update-workflows`
+### `climaybe update` / `climaybe theme update`
 
-Refresh GitHub Actions workflows from the latest bundled templates.
+Refresh all climaybe-managed project files from your installed CLI version:
+- GitHub workflows
+- root dev-kit files (`.theme-check.yml`, `.shopifyignore`, `.prettierrc`, `.lighthouserc.js`, `.gitignore`)
+- `package.json` managed deps (`climaybe`, `tailwindcss`)
+- optional `.vscode/tasks.json` (if enabled)
+- optional commitlint + Husky files (if enabled)
+- optional Cursor bundle files (if enabled)
 
 ```bash
-npx climaybe update-workflows
+npx climaybe update
 ```
 
-Useful after updating the CLI to get the latest workflow improvements.
+`update-workflows` still works as a backward-compatible alias.
 
 ### `climaybe setup-commitlint`
 
@@ -141,7 +147,7 @@ Install Electric Maybe **Cursor rules, skills, and subagents** into `.cursor/rul
 npx climaybe add-cursor
 ```
 
-The previous command name `add-cursor-skill` still works as an alias. Re-running replaces the bundled rules, skills, and subagent files with the copies shipped by your installed climaybe version (same idea as `update-workflows`).
+The previous command name `add-cursor-skill` still works as an alias. Re-running replaces the bundled rules, skills, and subagent files with the copies shipped by your installed climaybe version (same idea as `update`).
 
 ## Configuration
 

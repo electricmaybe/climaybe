@@ -66,43 +66,20 @@ const VSCODE_TASKS_CONTENT = `{
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Shopify",
+      "label": "Climaybe Serve",
       "type": "shell",
-      "command": "climaybe serve:shopify",
+      "command": "climaybe serve",
       "isBackground": true,
       "presentation": {
         "echo": true,
         "reveal": "always",
         "focus": true,
-        "panel": "new",
+        "panel": "shared",
         "group": "develop",
         "showReuseMessage": false,
         "clear": true
       },
       "problemMatcher": []
-    },
-    {
-      "label": "Tailwind",
-      "type": "shell",
-      "command": "climaybe serve:assets",
-      "isBackground": true,
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "new",
-        "group": "develop",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Run Both Consoles",
-      "dependsOn": ["Shopify", "Tailwind"],
-      "runOptions": {
-        "runOn": "folderOpen"
-      }
     }
   ]
 }
@@ -111,6 +88,8 @@ const VSCODE_TASKS_CONTENT = `{
 const GITIGNORE_BLOCK = `# climaybe: theme dev kit (managed)
 .vscode
 node_modules/
+.DS_Store
+**/.DS_Store
 assets/style.css
 assets/index.js
 .shopify

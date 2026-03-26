@@ -57,7 +57,9 @@ export function resolveInstallScope({ packageDir, cwd = process.cwd() } = {}) {
   return 'global';
 }
 
-function getLocalInstallFlag({ packageName, cwd = process.cwd() } = {}) {
+export function getLocalInstallFlag({ packageName, cwd = process.cwd() } = {}) {
+  // Always keep climaybe in runtime dependencies for theme repos.
+  if (packageName === 'climaybe') return '--save';
   try {
     const pkgPath = join(cwd, 'package.json');
     if (!existsSync(pkgPath)) return '--save-dev';
@@ -88,6 +90,7 @@ export async function maybeOfferCliUpdate({
   timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
   if (!packageName || !currentVersion || !canPromptForUpdate()) return;
+  const invocationCwd = process.cwd();
 
   const latestVersion = await fetchLatestVersion(packageName, timeoutMs);
   if (!latestVersion || !isVersionGreater(latestVersion, currentVersion)) return;
@@ -104,7 +107,8 @@ export async function maybeOfferCliUpdate({
     try {
       const updatedScope = runUpdate(packageName, { packageDir, cwd: process.cwd() });
       console.log(pc.green(`Updated ${packageName} (${updatedScope}) to latest. Restarting command...`));
-      process.chdir(packageDir || process.cwd());
+      // Continue in the repo where the user invoked the command.
+      process.chdir(invocationCwd);
     } catch (err) {
       console.log(pc.red('Update failed. Continuing with current version.'));
       if (err?.message) console.log(pc.dim(err.message));
