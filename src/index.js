@@ -61,15 +61,15 @@ function registerThemeCommands(cmd) {
 
   cmd
     .command('serve')
-    .description('Run local theme dev (Shopify + assets + Theme Check)')
-    .option('--no-theme-check', 'Disable Theme Check watcher')
-    .action((opts) => serveAll({ includeThemeCheck: opts.themeCheck !== false }));
+    .description('Run local theme dev (Shopify + assets; Theme Check off by default)')
+    .option('--theme-check', 'Enable Theme Check watcher')
+    .action((opts) => serveAll({ includeThemeCheck: opts.themeCheck === true }));
   cmd.command('serve:shopify').description('Run Shopify theme dev server').action(() => serveShopify());
   cmd
     .command('serve:assets')
-    .description('Run assets watch (Tailwind + scripts + Theme Check)')
-    .option('--no-theme-check', 'Disable Theme Check watcher')
-    .action((opts) => serveAssets({ includeThemeCheck: opts.themeCheck !== false }));
+    .description('Run assets watch (Tailwind + scripts; Theme Check off by default)')
+    .option('--theme-check', 'Enable Theme Check watcher')
+    .action((opts) => serveAssets({ includeThemeCheck: opts.themeCheck === true }));
 
   cmd.command('lint').description('Run theme linting (liquid, js, css)').action(() => lintAll());
 

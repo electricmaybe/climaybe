@@ -217,7 +217,7 @@ export function serveShopify({ cwd = process.cwd() } = {}) {
   return runShopify(args, { cwd, name: 'shopify' });
 }
 
-export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = {}) {
+export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
   printServeStartupHeader();
   const env = { ...process.env, NODE_ENV: 'production' };
   const styleEntrypoint = join(cwd, '_styles', 'main.css');
@@ -312,7 +312,7 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
   return { tailwind, devMcp, scriptsWatch, themeCheckWatch, cleanup };
 }
 
-export function serveAll({ cwd = process.cwd(), includeThemeCheck = true } = {}) {
+export function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
   // Start assets first, then bring up Shopify after a short delay.
   const assets = serveAssets({ cwd, includeThemeCheck });
   let shopify = null;

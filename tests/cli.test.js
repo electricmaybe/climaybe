@@ -80,4 +80,18 @@ describe('CLI', () => {
     const addCursor = program.commands.find((c) => c.name() === 'add-cursor');
     assert.ok(addCursor.aliases().includes('add-cursor-skill'));
   });
+
+  it('registers serve flags with theme-check opt-in', () => {
+    const program = createProgram();
+    const theme = program.commands.find((c) => c.name() === 'theme');
+    const serve = theme.commands.find((c) => c.name() === 'serve');
+    const serveAssets = theme.commands.find((c) => c.name() === 'serve:assets');
+    const serveFlags = serve.options.map((o) => o.long);
+    const serveAssetsFlags = serveAssets.options.map((o) => o.long);
+
+    assert.ok(serveFlags.includes('--theme-check'));
+    assert.ok(!serveFlags.includes('--no-theme-check'));
+    assert.ok(serveAssetsFlags.includes('--theme-check'));
+    assert.ok(!serveAssetsFlags.includes('--no-theme-check'));
+  });
 });

@@ -258,6 +258,9 @@ dev config defaults (`.theme-check.yml`, `.shopifyignore`, `.prettierrc`,
 `.lighthouserc.js`), writes `climaybe.config.json`, appends a managed `.gitignore` block, and optionally adds
 `.vscode/tasks.json` (default: yes) wired to run `climaybe` dev commands.
 
+Local serve commands keep Theme Check disabled by default for faster startup. Enable it explicitly with
+`climaybe serve --theme-check` or `climaybe serve:assets --theme-check`.
+
 You can create optional build entrypoints later with:
 
 `climaybe create-entrypoints`
