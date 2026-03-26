@@ -108,6 +108,28 @@ export function ensureGitRepo(cwd = process.cwd()) {
 }
 
 /**
+ * Check if origin remote exists.
+ */
+export function hasOriginRemote(cwd = process.cwd()) {
+  try {
+    exec('git remote get-url origin', cwd);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Push branches to origin if remote exists.
+ */
+export function pushBranchesToOrigin(branches = [], cwd = process.cwd()) {
+  if (!branches.length) return true;
+  const unique = [...new Set(branches)];
+  exec(`git push origin ${unique.join(' ')}`, cwd);
+  return true;
+}
+
+/**
  * Get the latest tag version (e.g. "1.2.3") from v* tags, or null if none.
  * Sorts by version so v2.0.0 > v1.9.9.
  */

@@ -6,6 +6,8 @@ import {
   currentBranch,
   ensureStagingBranch,
   createStoreBranches,
+  hasOriginRemote,
+  pushBranchesToOrigin,
 } from '../lib/git.js';
 
 /**
@@ -36,15 +38,26 @@ export async function ensureBranchesCommand() {
   console.log(pc.dim(`  Mode: ${mode}-store (${aliases.length} store(s))\n`));
 
   ensureStagingBranch();
+  const branchesToPush = ['staging'];
   for (const alias of aliases) {
     createStoreBranches(alias);
+    branchesToPush.push(`staging-${alias}`, `live-${alias}`);
   }
 
   console.log(pc.bold(pc.green('\n  Branches ensured.\n')));
-  console.log(pc.dim('  Push them so CI can run:'));
-  console.log(pc.dim('    git push origin staging'));
-  for (const alias of aliases) {
-    console.log(pc.dim(`    git push origin staging-${alias} live-${alias}`));
+  if (hasOriginRemote()) {
+    try {
+      pushBranchesToOrigin(branchesToPush);
+      console.log(pc.green('  Pushed ensured branches to origin.\n'));
+    } catch (err) {
+      console.log(pc.yellow(`  Could not push branches automatically: ${err.message}`));
+      console.log(pc.dim('  Push them manually so CI can run:'));
+      console.log(pc.dim('    git push origin --all\n'));
+    }
+  } else {
+    console.log(pc.dim('  No origin remote found.'));
+    console.log(pc.dim('  Push them after adding a remote so CI can run:'));
+    console.log(pc.dim('    git remote add origin <url>'));
+    console.log(pc.dim('    git push origin --all\n'));
   }
-  console.log(pc.dim('  Or push all at once: git push origin --all\n'));
 }

@@ -118,4 +118,37 @@ describe('ensure-branches command', () => {
       teardown();
     }
   });
+
+  it('pushes ensured branches to origin when remote exists', async () => {
+    setup();
+    let remoteDir;
+    try {
+      writeFileSync(
+        join(cwd, 'package.json'),
+        JSON.stringify({
+          config: { stores: { foo: 'foo.myshopify.com' } },
+        }),
+        'utf-8'
+      );
+      exec('git init', cwd);
+      setGitIdentity(cwd);
+      writeFileSync(join(cwd, 'f'), 'x', 'utf-8');
+      exec('git add f', cwd);
+      exec('git commit -m "first"', cwd);
+
+      remoteDir = mkdtempSync(join(tmpdir(), 'climaybe-ensure-branches-remote-'));
+      exec('git init --bare', remoteDir);
+      exec(`git remote add origin "${remoteDir}"`, cwd);
+
+      await ensureBranchesCommand();
+
+      const remoteShowRef = exec(`git --git-dir "${remoteDir}" show-ref`, cwd);
+      assert.ok(remoteShowRef.includes('refs/heads/staging'));
+      assert.ok(remoteShowRef.includes('refs/heads/staging-foo'));
+      assert.ok(remoteShowRef.includes('refs/heads/live-foo'));
+    } finally {
+      if (remoteDir && existsSync(remoteDir)) rmSync(remoteDir, { recursive: true });
+      teardown();
+    }
+  });
 });
