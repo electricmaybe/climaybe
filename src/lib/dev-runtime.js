@@ -24,6 +24,10 @@ function writeTaggedChunk(tag, color, chunk, stream = process.stdout) {
   }
 }
 
+function printServeStartupHeader() {
+  console.log(pc.bold('\n  climaybe — serve startup\n'));
+}
+
 function getPackageDir() {
   return process.env.CLIMAYBE_PACKAGE_DIR || process.cwd();
 }
@@ -209,21 +213,22 @@ export function serveShopify({ cwd = process.cwd() } = {}) {
   const store = config.default_store || config.store || '';
   const args = ['theme', 'dev', '--theme-editor-sync'];
   if (store) args.push(`--store=${store}`);
-  return runShopify(args, {
-    cwd,
-    name: 'shopify',
-    stdio: 'pipe',
-    onStdout: (chunk) => writeTaggedChunk('shopify', pc.green, chunk, process.stdout),
-    onStderr: (chunk) => writeTaggedChunk('shopify', pc.green, chunk, process.stderr),
-  });
+  // Keep Shopify on inherited stdio so reconciliation prompts remain interactive.
+  return runShopify(args, { cwd, name: 'shopify' });
 }
 
 export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = {}) {
+  printServeStartupHeader();
   const env = { ...process.env, NODE_ENV: 'production' };
   const styleEntrypoint = join(cwd, '_styles', 'main.css');
   const tailwind = existsSync(styleEntrypoint)
     ? runTailwind(['-i', '_styles/main.css', '-o', 'assets/style.css', '--watch'], { cwd, env, name: 'tailwind' })
     : null;
+  if (!tailwind) {
+    writeTaggedLine('tailwind', pc.blue, 'skipped (missing _styles/main.css)');
+  } else {
+    writeTaggedLine('tailwind', pc.blue, 'watching _styles/main.css -> assets/style.css');
+  }
 
   // Optional dev MCP (non-blocking if missing)
   const devMcp = spawnLogged('npx', ['-y', '@shopify/dev-mcp@latest'], { name: 'dev-mcp', cwd });
@@ -236,6 +241,8 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
     } catch (err) {
       writeTaggedLine('scripts', pc.yellow, `initial build failed: ${err.message}`, process.stderr);
     }
+  } else {
+    writeTaggedLine('scripts', pc.yellow, 'skipped (missing _scripts/)');
   }
   const scriptsWatch = existsSync(scriptsDir)
     ? watchTree({
@@ -289,7 +296,10 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
       : null;
 
   if (includeThemeCheck) {
+    writeTaggedLine('theme-check', pc.red, 'running initial scan (errors only)');
     runThemeCheck();
+  } else {
+    writeTaggedLine('theme-check', pc.red, 'disabled');
   }
 
   const cleanup = () => {
@@ -303,12 +313,21 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
 }
 
 export function serveAll({ cwd = process.cwd(), includeThemeCheck = true } = {}) {
-  // Keep Shopify CLI in the foreground (real TTY), and run watchers in background.
+  // Start assets first, then bring up Shopify after a short delay.
   const assets = serveAssets({ cwd, includeThemeCheck });
-  const shopify = serveShopify({ cwd });
+  let shopify = null;
+  const shopifyStartDelayMs = 2500;
+  const shopifyTimer = setTimeout(() => {
+    shopify = serveShopify({ cwd });
+    shopify.on('exit', () => {
+      cleanup();
+    });
+  }, shopifyStartDelayMs);
+  console.log(pc.dim(`  Waiting ${shopifyStartDelayMs}ms before starting Shopify...`));
 
   const cleanup = () => {
-    assets.cleanup?.();
+    clearTimeout(shopifyTimer);
+    assets?.cleanup?.();
     safeKill(shopify);
   };
 
@@ -316,11 +335,7 @@ export function serveAll({ cwd = process.cwd(), includeThemeCheck = true } = {})
   process.once('SIGINT', handleSignal);
   process.once('SIGTERM', handleSignal);
 
-  shopify.on('exit', () => {
-    cleanup();
-  });
-
-  return { shopify, ...assets, cleanup };
+  return { cleanup };
 }
 
 export function lintAll({ cwd = process.cwd() } = {}) {
