@@ -1,6 +1,6 @@
 {
   "name": "climaybe",
-  "version": "3.0.6",
+  "version": "3.0.7",
   "description": "Shopify CLI by Electric Maybe for theme CI/CD workflows, branch orchestration, app setup, and dev tooling",
   "type": "module",
   "bin": {
