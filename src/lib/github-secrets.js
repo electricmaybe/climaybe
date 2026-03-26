@@ -1,6 +1,20 @@
 import { spawn, spawnSync, execSync } from 'node:child_process';
 import pc from 'picocolors';
 
+function resolveGhInvocation(cwd = process.cwd()) {
+  const direct = spawnSync('gh', ['--version'], { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+  if (direct.status === 0) return { command: 'gh', prefix: [] };
+
+  const viaNpx = spawnSync('npx', ['--yes', 'gh', '--version'], {
+    cwd,
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  if (viaNpx.status === 0) return { command: 'npx', prefix: ['--yes', 'gh'] };
+
+  return null;
+}
+
 /**
  * Secret/variable definitions for CI (GitHub Actions or GitLab CI).
  * condition: 'always' = required for core workflows; 'preview' | 'build' = only when that feature is enabled.
@@ -8,7 +22,7 @@ import pc from 'picocolors';
 export const SECRET_DEFINITIONS = [
   {
     name: 'GEMINI_API_KEY',
-    required: true,
+    required: false,
     condition: 'always',
     description: 'Google Gemini API key for AI-generated changelogs on release',
     whereToGet:
@@ -24,7 +38,7 @@ export const SECRET_DEFINITIONS = [
   },
   {
     name: 'SHOPIFY_THEME_ACCESS_TOKEN',
-    required: true,
+    required: false,
     condition: 'preview',
     description: 'Theme access token so CI can push preview themes (password from Shopify Theme Access app)',
     whereToGet:
@@ -60,8 +74,13 @@ export const SECRET_DEFINITIONS = [
  */
 export function isGhAvailable() {
   try {
-    execSync('gh auth status', { encoding: 'utf-8', stdio: 'pipe' });
-    return true;
+    const gh = resolveGhInvocation();
+    if (!gh) return false;
+    const result = spawnSync(gh.command, [...gh.prefix, 'auth', 'status'], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return result.status === 0;
   } catch {
     return false;
   }
@@ -99,10 +118,12 @@ export function getGitHubRepoSpec(cwd = process.cwd()) {
  */
 export function listGitHubSecrets(cwd = process.cwd()) {
   try {
+    const gh = resolveGhInvocation(cwd);
+    if (!gh) return [];
     const repo = getGitHubRepoSpec(cwd);
-    const args = ['secret', 'list', '--json', 'name'];
+    const args = [...gh.prefix, 'secret', 'list', '--json', 'name'];
     if (repo) args.push('-R', repo);
-    const result = spawnSync('gh', args, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    const result = spawnSync(gh.command, args, { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
     const out = (result.stdout || '').trim();
     const data = JSON.parse(out || '[]');
     return Array.isArray(data) ? data.map((s) => s.name).filter(Boolean) : [];
@@ -131,10 +152,15 @@ export function listGitLabVariables(cwd = process.cwd()) {
  */
 export function setSecret(name, value, cwd = process.cwd()) {
   return new Promise((resolve, reject) => {
+    const gh = resolveGhInvocation(cwd);
+    if (!gh) {
+      reject(new Error('GitHub CLI is not available (tried gh and npx gh)'));
+      return;
+    }
     const repo = getGitHubRepoSpec(cwd);
-    const args = ['secret', 'set', name];
+    const args = [...gh.prefix, 'secret', 'set', name];
     if (repo) args.push('-R', repo);
-    const child = spawn('gh', args, {
+    const child = spawn(gh.command, args, {
       stdio: ['pipe', 'inherit', 'inherit'],
       cwd,
     });
@@ -295,7 +321,7 @@ export function getSecretsToPrompt({ enablePreviewWorkflows, enableBuildWorkflow
       if (enablePreviewWorkflows) {
         list.push({
           name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
-          required: true,
+          required: false,
           description: `Store ${store.alias}: Theme access token (password from Theme Access app)`,
           whereToGet: 'Theme Access app in Shopify — the password it gives is the token for this store.',
         });
@@ -338,7 +364,7 @@ export function getSecretsToPromptForNewStore(store) {
   return [
     {
       name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
-      required: true,
+      required: false,
       description: `Store ${store.alias}: Theme access token (password from Theme Access app)`,
       whereToGet: 'Theme Access app in Shopify — the password it gives is the token for this store.',
     },

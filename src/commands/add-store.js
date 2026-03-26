@@ -88,7 +88,13 @@ export async function addStoreCommand() {
           : { check: isGlabAvailable, checkRemote: hasGitLabRemote, set: setGitLabVariable, name: 'GitLab' };
 
       if (!setter.check()) {
-        console.log(pc.yellow(`  ${setter.name} CLI is not installed or not logged in. Add secrets manually in repo Settings.`));
+        console.log(
+          pc.yellow(
+            ciHost === 'github'
+              ? '  GitHub CLI is not available (tried gh and npx gh) or not logged in. Add secrets manually in repo Settings.'
+              : `  ${setter.name} CLI is not installed or not logged in. Add secrets manually in repo Settings.`
+          )
+        );
       } else if (!setter.checkRemote()) {
         console.log(pc.yellow('  No ' + setter.name + ' remote (origin). Add secrets manually after pushing.'));
       } else {
@@ -116,22 +122,22 @@ export async function addStoreCommand() {
           }
         }
         const total = secretsToPrompt.length;
-        console.log(pc.cyan(`\n  Configure ${total} secret(s) for store "${store.alias}" (theme token required).\n`));
+        console.log(pc.cyan(`\n  Configure ${total} secret(s) for store "${store.alias}" (all optional).\n`));
         for (let i = 0; i < secretsToPrompt.length; i++) {
           const secret = secretsToPrompt[i];
           const isThemeToken = secret.name === 'SHOPIFY_THEME_ACCESS_TOKEN' || secret.name.startsWith('SHOPIFY_THEME_ACCESS_TOKEN_');
           if (isThemeToken && store.domain) {
-            // Theme tokens are required and must validate; keep prompting until valid + set.
+            // Theme tokens are optional; if provided, keep prompting until valid + set.
             while (true) {
               const value = await promptSecretValue(secret, i, total);
               if (!value) {
-                console.log(pc.red('  Theme access token is required.'));
-                continue;
+                console.log(pc.dim(`  Skipped ${secret.name}.`));
+                break;
               }
               const result = await validateThemeAccessToken(store.domain, value);
               if (!result.ok) {
                 console.log(pc.red(`  Token test failed: ${result.error}`));
-                console.log(pc.dim('  Please try again with a valid Theme Access token.'));
+                console.log(pc.dim('  Enter a valid token, or leave blank to skip.'));
                 continue;
               }
               console.log(pc.green('  Token validated against store.'));
@@ -142,7 +148,7 @@ export async function addStoreCommand() {
                 break;
               } catch (err) {
                 console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
-                console.log(pc.dim('  Please try entering the token again.'));
+                console.log(pc.dim('  Enter again to retry, or leave blank to skip.'));
               }
             }
             continue;

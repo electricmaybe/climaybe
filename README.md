@@ -304,14 +304,16 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 
 | Secret | Required | Description |
 |--------|----------|-------------|
-| `GEMINI_API_KEY` | Yes | Google Gemini API key for changelog generation |
+| `GEMINI_API_KEY` | Optional | Google Gemini API key for AI-generated release notes fallback |
 | `SHOPIFY_STORE_URL` | Set from config | Store URL is set automatically from the store domain(s) you add during init (no prompt). |
-| `SHOPIFY_THEME_ACCESS_TOKEN` | Yes* | Theme access token for preview workflows (required when preview is enabled). |
+| `SHOPIFY_THEME_ACCESS_TOKEN` | Optional* | Theme access token for preview workflows (needed only when you want preview theme publish/cleanup to run). |
 | `SHOP_ACCESS_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
 | `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
 | `SHOP_PASSWORD` | Optional | Used by Lighthouse action when your store requires password auth |
 
-**Store URL:** During `climaybe init` (or `add-store`), store URL secret(s) are set from your configured store domain(s); you are only prompted for the theme token.
+**Prompting behavior:** During `climaybe init` (or `add-store`), every GitHub/GitLab secret prompt is skippable. Add values later in CI settings if you prefer.
+
+**Store URL:** During `climaybe init` (or `add-store`), store URL secret(s) are set from your configured store domain(s); theme tokens are optional prompts.
 
 **Multi-store:** Per-store secrets `SHOPIFY_STORE_URL_<ALIAS>` and `SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>` — the URL is set from config; you must provide the theme token per store. `<ALIAS>` is uppercase with hyphens as underscores (e.g. `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`). Preview and cleanup: for PRs targeting **main**, **staging**, or **develop** the workflows use the **default store** (from `config.default_store` or first in `config.stores`); for PRs targeting **staging-&lt;alias&gt;** or **live-&lt;alias&gt;** they use that store’s credentials. Set either the plain `SHOPIFY_*` secrets or the `_<ALIAS>` pair for each store you use in preview.
 

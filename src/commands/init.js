@@ -223,7 +223,13 @@ async function runInitFlow() {
 
   if (!setter.check()) {
     const installUrl = ciHost === 'github' ? 'https://cli.github.com/' : 'https://gitlab.com/gitlab-org/cli';
-    console.log(pc.yellow(`  ${setter.name} CLI is not installed or not logged in.`));
+    console.log(
+      pc.yellow(
+        ciHost === 'github'
+          ? '  GitHub CLI is not available (tried gh and npx gh) or not logged in.'
+          : `  ${setter.name} CLI is not installed or not logged in.`
+      )
+    );
     console.log(pc.dim(`  Install: ${installUrl} — then run ${ciHost === 'github' ? 'gh' : 'glab'} auth login`));
     console.log(
       pc.dim(
@@ -283,23 +289,24 @@ async function runInitFlow() {
 
     if (isThemeToken) {
       if (!storeUrl) {
-        console.log(pc.red(`  Could not resolve store URL for required token ${secret.name}.`));
-        continue;
+        console.log(pc.yellow(`  Could not resolve store URL for ${secret.name}, skipping token validation.`));
       }
-      // Theme tokens are required and must validate; keep prompting until valid + set.
+      // Theme tokens are optional during setup; if provided, keep prompting until valid + set.
       while (true) {
         const value = await promptSecretValue(secret, i, totalToPrompt);
         if (!value) {
-          console.log(pc.red('  Theme access token is required.'));
-          continue;
+          console.log(pc.dim(`  Skipped ${secret.name}.`));
+          break;
         }
-        const result = await validateThemeAccessToken(storeUrl, value);
-        if (!result.ok) {
-          console.log(pc.red(`  Token test failed: ${result.error}`));
-          console.log(pc.dim('  Please try again with a valid Theme Access token.'));
-          continue;
+        if (storeUrl) {
+          const result = await validateThemeAccessToken(storeUrl, value);
+          if (!result.ok) {
+            console.log(pc.red(`  Token test failed: ${result.error}`));
+            console.log(pc.dim('  Enter a valid token, or leave blank to skip.'));
+            continue;
+          }
+          console.log(pc.green('  Token validated against store.'));
         }
-        console.log(pc.green('  Token validated against store.'));
         try {
           await setter.set(secret.name, value);
           console.log(pc.green(`  Set ${secret.name}.`));
@@ -307,7 +314,7 @@ async function runInitFlow() {
           break;
         } catch (err) {
           console.log(pc.red(`  Failed to set ${secret.name}: ${err.message}`));
-          console.log(pc.dim('  Please try entering the token again.'));
+          console.log(pc.dim('  Enter again to retry, or leave blank to skip.'));
         }
       }
       continue;
