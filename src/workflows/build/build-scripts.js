@@ -4,8 +4,11 @@ const ROOT_DIR = process.cwd();
 
 function extractImports(content) {
   const imports = [];
-  const fromImportRegex = /(^|\n)\s*import\s+[\s\S]*?\s+from\s+['"]([^'"]+)['"]\s*;?/g;
-  const sideEffectImportRegex = /(^|\n)\s*import\s+['"]([^'"]+)['"]\s*;?/g;
+  // Supports compact imports (import{a}from"./x"), multiline forms,
+  // and import attributes (with { type: "json" }).
+  const fromImportRegex =
+    /(^|\n)\s*import(?:\s+type)?\s*[\s\S]*?\s*\bfrom\b\s*['"]([^'"]+)['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g;
+  const sideEffectImportRegex = /(^|\n)\s*import\s*['"]([^'"]+)['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g;
   let match;
 
   while ((match = fromImportRegex.exec(content)) !== null) {
@@ -40,9 +43,12 @@ function processScriptFile(filePath, processedFiles = new Set()) {
     importedContent += processScriptFile(importPath, processedFiles);
   }
 
-  // Remove import statements (including multiline "import { ... } from '...'" forms).
-  content = content.replace(/(^|\n)\s*import\s+[\s\S]*?\s+from\s+['"][^'"]+['"]\s*;?/g, '$1');
-  content = content.replace(/(^|\n)\s*import\s+['"][^'"]+['"]\s*;?/g, '$1');
+  // Remove import statements (including multiline/compact forms and import attributes).
+  content = content.replace(
+    /(^|\n)\s*import(?:\s+type)?\s*[\s\S]*?\s*\bfrom\b\s*['"][^'"]+['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g,
+    '$1'
+  );
+  content = content.replace(/(^|\n)\s*import\s*['"][^'"]+['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g, '$1');
   content = content.replace(/^\s*export\s+default\s+/gm, '');
   content = content.replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, '');
   content = content.replace(/^\s*export\s+(?=(const|let|var|function|class)\b)/gm, '');

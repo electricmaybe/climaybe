@@ -129,4 +129,43 @@ console.log("main");
       teardown();
     }
   });
+
+  it('strips compact imports and import attributes from output bundle', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'main.js'),
+        `import{run}from"./helpers.js";
+import "./flags.js" with { type: "js" };
+console.log(run());
+`,
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, '_scripts', 'helpers.js'),
+        `export function run() { return "ok"; }
+`,
+        'utf-8'
+      );
+      writeFileSync(join(dir, '_scripts', 'flags.js'), 'console.log("flags");\n', 'utf-8');
+
+      const sourceScriptPath = join(process.cwd(), 'src', 'workflows', 'build', 'build-scripts.js');
+      const tempScriptPath = join(dir, 'build-scripts.js');
+      copyFileSync(sourceScriptPath, tempScriptPath);
+      const result = spawnSync(process.execPath, [tempScriptPath], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+
+      const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
+      assert.match(out, /\bfunction run\(\)/);
+      assert.match(out, /console\.log\("flags"\)/);
+      assert.match(out, /console\.log\(run\(\)\)/);
+    } finally {
+      teardown();
+    }
+  });
 });
