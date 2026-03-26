@@ -106,6 +106,24 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
       })
     : null;
 
+  let themeCheckRunning = false;
+  let themeCheckQueued = false;
+  const runThemeCheck = () => {
+    if (themeCheckRunning) {
+      themeCheckQueued = true;
+      return;
+    }
+    themeCheckRunning = true;
+    const child = runShopify(['theme', 'check'], { cwd, name: 'theme-check' });
+    child.on('exit', () => {
+      themeCheckRunning = false;
+      if (themeCheckQueued) {
+        themeCheckQueued = false;
+        runThemeCheck();
+      }
+    });
+  };
+
   const themeCheckWatch =
     includeThemeCheck
       ? watchTree({
@@ -118,10 +136,14 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = true } = 
             p.includes('/_styles/'),
           debounceMs: 800,
           onChange: () => {
-            runShopify(['theme', 'check'], { cwd, name: 'theme-check' });
+            runThemeCheck();
           },
         })
       : null;
+
+  if (includeThemeCheck) {
+    runThemeCheck();
+  }
 
   const cleanup = () => {
     safeClose(scriptsWatch);

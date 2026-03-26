@@ -36,20 +36,15 @@ export async function ensureBranchesCommand() {
   console.log(pc.dim(`  Mode: ${mode}-store (${aliases.length} store(s))\n`));
 
   ensureStagingBranch();
-
-  if (mode === 'multi') {
-    for (const alias of aliases) {
-      createStoreBranches(alias);
-    }
+  for (const alias of aliases) {
+    createStoreBranches(alias);
   }
 
   console.log(pc.bold(pc.green('\n  Branches ensured.\n')));
   console.log(pc.dim('  Push them so CI can run:'));
   console.log(pc.dim('    git push origin staging'));
-  if (mode === 'multi') {
-    for (const alias of aliases) {
-      console.log(pc.dim(`    git push origin staging-${alias} live-${alias}`));
-    }
+  for (const alias of aliases) {
+    console.log(pc.dim(`    git push origin staging-${alias} live-${alias}`));
   }
   console.log(pc.dim('  Or push all at once: git push origin --all\n'));
 }

@@ -30,6 +30,11 @@ describe('theme-dev-kit', () => {
       const pkg = readPkg(dir);
       assert.strictEqual(pkg.config, undefined);
       assert.strictEqual(pkg.scripts, undefined);
+      assert.strictEqual(
+        pkg.description,
+        'Customizable modular development environment for blazing-fast Shopify theme creation'
+      );
+      assert.strictEqual(pkg.author, 'Electric Maybe <hello@electricmaybe.com>');
       assert.ok(pkg.devDependencies);
       assert.ok(pkg.devDependencies.climaybe);
       assert.ok(pkg.devDependencies.tailwindcss);
@@ -38,8 +43,11 @@ describe('theme-dev-kit', () => {
       assert.strictEqual(cfg.project_type, 'theme');
       assert.strictEqual(cfg.default_store, 'demo.myshopify.com');
       assert.strictEqual(cfg.vscode_tasks, true);
+      const themeCheck = readFileSync(join(dir, '.theme-check.yml'), 'utf-8');
+      assert.ok(themeCheck.includes('extends: theme-check:recommended'));
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf-8');
       assert.ok(gitignore.includes('# climaybe: theme dev kit (managed)'));
+      assert.ok(gitignore.includes('node_modules/'));
     } finally {
       teardown();
     }

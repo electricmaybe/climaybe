@@ -60,7 +60,7 @@ describe('ensure-branches command', () => {
     }
   });
 
-  it('creates staging branch in single-store mode', async () => {
+  it('creates staging and store branches in single-store mode', async () => {
     setup();
     try {
       writeFileSync(
@@ -79,6 +79,8 @@ describe('ensure-branches command', () => {
       await ensureBranchesCommand();
 
       assert.strictEqual(branchExists('staging', cwd), true);
+      assert.strictEqual(branchExists('staging-foo', cwd), true);
+      assert.strictEqual(branchExists('live-foo', cwd), true);
     } finally {
       teardown();
     }

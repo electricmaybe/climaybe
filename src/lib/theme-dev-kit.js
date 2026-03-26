@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { readPkg, writePkg, writeClimaybeConfig } from './config.js';
+import { getLatestTagVersion } from './git.js';
 
 const DEV_KIT_FILES = {
   '.theme-check.yml': `root: .
 
-extends: :nothing
+extends: theme-check:recommended
 
 ignore:
   - node_modules/*
@@ -109,6 +110,7 @@ const VSCODE_TASKS_CONTENT = `{
 
 const GITIGNORE_BLOCK = `# climaybe: theme dev kit (managed)
 .vscode
+node_modules/
 assets/style.css
 assets/index.js
 .shopify
@@ -132,7 +134,23 @@ function mergeGitignore(cwd = process.cwd()) {
 }
 
 function mergePackageJson({ packageName = 'shopify-theme', cwd = process.cwd() } = {}) {
-  const pkg = readPkg(cwd) || { name: packageName, version: '1.0.0', private: true };
+  let pkg = readPkg(cwd);
+  if (!pkg) {
+    let version = '0.1.0';
+    try {
+      const fromTags = getLatestTagVersion(cwd);
+      if (fromTags) version = fromTags;
+    } catch {
+      // not a git repo or no semver tags found
+    }
+    pkg = { name: packageName, version, private: true };
+  }
+  if (!pkg.description) {
+    pkg.description = 'Customizable modular development environment for blazing-fast Shopify theme creation';
+  }
+  if (!pkg.author) {
+    pkg.author = 'Electric Maybe <hello@electricmaybe.com>';
+  }
   pkg.devDependencies = { ...(pkg.devDependencies || {}) };
 
   // Ensure teammates can run climaybe + Tailwind after plain npm install.

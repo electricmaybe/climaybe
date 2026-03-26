@@ -1,5 +1,6 @@
 import prompts from 'prompts';
 import pc from 'picocolors';
+import { execSync } from 'node:child_process';
 import {
   promptStoreLoop,
   promptPreviewWorkflows,
@@ -36,11 +37,25 @@ import {
   setGitLabVariable,
 } from '../lib/github-secrets.js';
 
+function installThemeDependencies(cwd = process.cwd()) {
+  try {
+    execSync('npm install', { cwd, stdio: 'inherit' });
+    console.log(pc.green('  Installed theme dependencies (npm install).'));
+    return true;
+  } catch (err) {
+    console.log(pc.yellow(`  npm install failed or skipped: ${err.message}`));
+    return false;
+  }
+}
+
 /**
  * Run the full init flow: prompts, config write, git, branches, workflows.
  * Used by both init (when not already inited or user confirms reinit) and reinit.
  */
 async function runInitFlow() {
+  const hasPackageJson = !!readPkg();
+  const projectName = !hasPackageJson ? await promptProjectName() : undefined;
+
   // 1. Collect stores from user
   const stores = await promptStoreLoop();
   const mode = stores.length > 1 ? 'multi' : 'single';
@@ -48,7 +63,6 @@ async function runInitFlow() {
   const enableBuildWorkflows = await promptBuildWorkflows();
   const enableDevKit = await promptDevKit();
   const enableVSCodeTasks = enableDevKit ? await promptVSCodeDevTasks() : false;
-  const projectName = enableDevKit && !readPkg() ? await promptProjectName() : undefined;
   const enableCommitlint = await promptCommitlint();
   const enableCursorSkills = await promptCursorSkills();
 
@@ -111,6 +125,7 @@ async function runInitFlow() {
   // 5. Create branches
   if (mode === 'single') {
     ensureStagingBranch();
+    createStoreBranches(stores[0].alias);
   } else {
     // Multi-store: staging branch + per-store branches
     ensureStagingBranch();
@@ -158,6 +173,7 @@ async function runInitFlow() {
       packageName: projectName || undefined,
     });
     console.log(pc.green('  Theme dev kit installed (local config + ignore defaults).'));
+    installThemeDependencies();
   }
 
   // Done
@@ -165,6 +181,7 @@ async function runInitFlow() {
 
   if (mode === 'single') {
     console.log(pc.dim('  Branches: main, staging'));
+    console.log(pc.dim(`    staging-${stores[0].alias}, live-${stores[0].alias}`));
     console.log(pc.dim('  Workflow: staging → main with versioning + nightly hotfix tagging'));
   } else {
     console.log(pc.dim('  Branches: main, staging'));
