@@ -1,6 +1,8 @@
 import { execSync } from 'node:child_process';
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import pc from 'picocolors';
 
 const NPM_REGISTRY_BASE = 'https://registry.npmjs.org';
@@ -43,8 +45,40 @@ function canPromptForUpdate() {
   return Boolean(input.isTTY && output.isTTY && process.env.CI !== 'true');
 }
 
-function runGlobalUpdate(packageName) {
-  execSync(`npm install -g ${packageName}@latest`, { stdio: 'inherit' });
+export function resolveInstallScope({ packageDir, cwd = process.cwd() } = {}) {
+  try {
+    const globalRoot = execSync('npm root -g', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+    if (packageDir && resolve(packageDir).startsWith(resolve(globalRoot))) return 'global';
+  } catch {
+    // ignore and fallback to local checks
+  }
+
+  if (existsSync(join(cwd, 'package.json'))) return 'local';
+  return 'global';
+}
+
+function getLocalInstallFlag({ packageName, cwd = process.cwd() } = {}) {
+  try {
+    const pkgPath = join(cwd, 'package.json');
+    if (!existsSync(pkgPath)) return '--save-dev';
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    if (pkg?.dependencies?.[packageName]) return '--save';
+    if (pkg?.devDependencies?.[packageName]) return '--save-dev';
+    return '--save-dev';
+  } catch {
+    return '--save-dev';
+  }
+}
+
+function runUpdate(packageName, { packageDir, cwd = process.cwd() } = {}) {
+  const scope = resolveInstallScope({ packageDir, cwd });
+  if (scope === 'global') {
+    execSync(`npm install -g ${packageName}@latest`, { stdio: 'inherit' });
+    return 'global';
+  }
+  const flag = getLocalInstallFlag({ packageName, cwd });
+  execSync(`npm install ${packageName}@latest ${flag}`, { cwd, stdio: 'inherit' });
+  return 'local';
 }
 
 export async function maybeOfferCliUpdate({
@@ -68,8 +102,8 @@ export async function maybeOfferCliUpdate({
     if (!shouldUpdate) return;
 
     try {
-      runGlobalUpdate(packageName);
-      console.log(pc.green(`Updated ${packageName} to latest. Restarting command...`));
+      const updatedScope = runUpdate(packageName, { packageDir, cwd: process.cwd() });
+      console.log(pc.green(`Updated ${packageName} (${updatedScope}) to latest. Restarting command...`));
       process.chdir(packageDir || process.cwd());
     } catch (err) {
       console.log(pc.red('Update failed. Continuing with current version.'));

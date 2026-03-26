@@ -35,8 +35,9 @@ describe('theme-dev-kit', () => {
         'Customizable modular development environment for blazing-fast Shopify theme creation'
       );
       assert.strictEqual(pkg.author, 'Electric Maybe <hello@electricmaybe.com>');
+      assert.ok(pkg.dependencies);
+      assert.ok(pkg.dependencies.climaybe);
       assert.ok(pkg.devDependencies);
-      assert.ok(pkg.devDependencies.climaybe);
       assert.ok(pkg.devDependencies.tailwindcss);
       const cfg = readClimaybeConfig(dir);
       assert.ok(cfg);
@@ -60,6 +61,25 @@ describe('theme-dev-kit', () => {
       writeFileSync(join(dir, '.vscode', 'tasks.json'), '{}\n', 'utf-8');
       const existing = getDevKitExistingFiles({ includeVSCodeTasks: true, cwd: dir });
       assert.ok(existing.includes('.vscode/tasks.json'));
+    } finally {
+      teardown();
+    }
+  });
+
+  it('updates existing managed gitignore block on rerun', () => {
+    const dir = setup();
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'theme', version: '1.0.0' }), 'utf-8');
+      writeFileSync(
+        join(dir, '.gitignore'),
+        ['# climaybe: theme dev kit (managed)', '.vscode', 'assets/style.css', 'assets/index.js', '.shopify', '.vercel', ''].join('\n'),
+        'utf-8'
+      );
+
+      scaffoldThemeDevKit({ includeVSCodeTasks: false, defaultStoreDomain: 'demo.myshopify.com', cwd: dir });
+      const gitignore = readFileSync(join(dir, '.gitignore'), 'utf-8');
+      assert.ok(gitignore.includes('node_modules/'));
+      assert.strictEqual((gitignore.match(/# climaybe: theme dev kit \(managed\)/g) || []).length, 1);
     } finally {
       teardown();
     }

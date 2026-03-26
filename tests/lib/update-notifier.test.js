@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { isVersionGreater } from '../../src/lib/update-notifier.js';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { isVersionGreater, resolveInstallScope } from '../../src/lib/update-notifier.js';
 
 describe('update-notifier', () => {
   describe('isVersionGreater', () => {
@@ -25,6 +28,23 @@ describe('update-notifier', () => {
     it('returns false for invalid versions', () => {
       assert.strictEqual(isVersionGreater('latest', '1.0.0'), false);
       assert.strictEqual(isVersionGreater('1.0.0', 'not-semver'), false);
+    });
+  });
+
+  describe('resolveInstallScope', () => {
+    it('prefers local when package.json exists in cwd', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'climaybe-update-notifier-'));
+      try {
+        writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'theme' }), 'utf-8');
+        assert.strictEqual(resolveInstallScope({ packageDir: '/tmp/somewhere', cwd: dir }), 'local');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('falls back to global when local project does not exist', () => {
+      const dir = join(tmpdir(), `climaybe-update-notifier-missing-${Date.now()}`);
+      assert.strictEqual(resolveInstallScope({ packageDir: '/tmp/somewhere', cwd: dir }), 'global');
     });
   });
 });

@@ -128,8 +128,21 @@ function mergeGitignore(cwd = process.cwd()) {
     return;
   }
   const current = readFileSync(path, 'utf-8');
-  if (current.includes('# climaybe: theme dev kit (managed)')) return;
-  const next = `${current.trimEnd()}\n\n${GITIGNORE_BLOCK}`;
+  const marker = '# climaybe: theme dev kit (managed)';
+  if (current.includes(marker)) {
+    const lines = current.split('\n');
+    const start = lines.findIndex((line) => line.trim() === marker);
+    if (start >= 0) {
+      let end = start + 1;
+      while (end < lines.length && lines[end].trim() !== '') end += 1;
+      const before = lines.slice(0, start).join('\n').trimEnd();
+      const after = lines.slice(end).join('\n').trim();
+      const segments = [before, GITIGNORE_BLOCK.trimEnd(), after].filter(Boolean);
+      writeFileSync(path, `${segments.join('\n\n')}\n`, 'utf-8');
+      return;
+    }
+  }
+  const next = `${current.trimEnd()}\n\n${GITIGNORE_BLOCK.trimEnd()}`;
   writeFileSync(path, `${next}\n`, 'utf-8');
 }
 
@@ -151,12 +164,14 @@ function mergePackageJson({ packageName = 'shopify-theme', cwd = process.cwd() }
   if (!pkg.author) {
     pkg.author = 'Electric Maybe <hello@electricmaybe.com>';
   }
+  pkg.dependencies = { ...(pkg.dependencies || {}) };
   pkg.devDependencies = { ...(pkg.devDependencies || {}) };
 
   // Ensure teammates can run climaybe + Tailwind after plain npm install.
   const cliVersion = process.env.CLIMAYBE_PACKAGE_VERSION;
   const climaybeRange = /^\d+\.\d+\.\d+/.test(String(cliVersion || '')) ? `^${cliVersion}` : 'latest';
-  if (!pkg.devDependencies.climaybe) pkg.devDependencies.climaybe = climaybeRange;
+  if (!pkg.dependencies.climaybe) pkg.dependencies.climaybe = climaybeRange;
+  if (pkg.devDependencies.climaybe) delete pkg.devDependencies.climaybe;
   if (!pkg.devDependencies.tailwindcss) pkg.devDependencies.tailwindcss = 'latest';
 
   writePkg(pkg, cwd);
