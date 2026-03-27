@@ -60,7 +60,7 @@ describe('ensure-branches command', () => {
     }
   });
 
-  it('creates staging and store branches in single-store mode', async () => {
+  it('creates only staging branch in single-store mode', async () => {
     setup();
     try {
       writeFileSync(
@@ -79,8 +79,8 @@ describe('ensure-branches command', () => {
       await ensureBranchesCommand();
 
       assert.strictEqual(branchExists('staging', cwd), true);
-      assert.strictEqual(branchExists('staging-foo', cwd), true);
-      assert.strictEqual(branchExists('live-foo', cwd), true);
+      assert.strictEqual(branchExists('staging-foo', cwd), false);
+      assert.strictEqual(branchExists('live-foo', cwd), false);
     } finally {
       teardown();
     }
@@ -144,8 +144,8 @@ describe('ensure-branches command', () => {
 
       const remoteShowRef = exec(`git --git-dir "${remoteDir}" show-ref`, cwd);
       assert.ok(remoteShowRef.includes('refs/heads/staging'));
-      assert.ok(remoteShowRef.includes('refs/heads/staging-foo'));
-      assert.ok(remoteShowRef.includes('refs/heads/live-foo'));
+      assert.ok(!remoteShowRef.includes('refs/heads/staging-foo'));
+      assert.ok(!remoteShowRef.includes('refs/heads/live-foo'));
     } finally {
       if (remoteDir && existsSync(remoteDir)) rmSync(remoteDir, { recursive: true });
       teardown();

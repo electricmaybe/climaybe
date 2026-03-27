@@ -11,8 +11,8 @@ import {
 } from '../lib/git.js';
 
 /**
- * Create missing staging and per-store branches from current HEAD.
- * Use when the repo only has main (e.g. after clone) so the main → staging-<store> sync can run.
+ * Create missing staging (single-store) or staging + per-store branches (multi-store) from current HEAD.
+ * Use when the repo only has main (e.g. after clone) so the mode-appropriate sync flow can run.
  */
 export async function ensureBranchesCommand() {
   console.log(pc.bold('\n  climaybe — Ensure Branches\n'));
@@ -39,9 +39,11 @@ export async function ensureBranchesCommand() {
 
   ensureStagingBranch();
   const branchesToPush = ['staging'];
-  for (const alias of aliases) {
-    createStoreBranches(alias);
-    branchesToPush.push(`staging-${alias}`, `live-${alias}`);
+  if (mode === 'multi') {
+    for (const alias of aliases) {
+      createStoreBranches(alias);
+      branchesToPush.push(`staging-${alias}`, `live-${alias}`);
+    }
   }
 
   console.log(pc.bold(pc.green('\n  Branches ensured.\n')));

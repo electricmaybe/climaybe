@@ -108,7 +108,7 @@ If no alias is given, syncs to the default store.
 
 ### `climaybe ensure-branches` / `climaybe theme ensure-branches`
 
-Create missing `staging` and per-store branches (`staging-<alias>`, `live-<alias>`) from your current branch (usually `main`). Use when the repo only has `main` (e.g. after a fresh clone) so the main → staging-&lt;store&gt; sync can run.
+Create missing branches from your current branch (usually `main`). In single-store mode, this creates `staging` only. In multi-store mode, this creates `staging` plus per-store branches (`staging-<alias>`, `live-<alias>`). Use when the repo only has `main` (e.g. after a fresh clone) so the configured sync flow can run.
 
 ```bash
 npx climaybe ensure-branches
@@ -246,7 +246,7 @@ When enabled, builds are **resilient**:
 - On `live-<alias>` branches only, script bundles are minified and overwrite `assets/*.js`; `main` and `staging-*` keep readable built JS.
 - Live minified `assets/*` changes are intentionally excluded from hotfix backports to `main` (no branch-specific `.gitignore` split required).
 
-Build workflows run bundling via `npx -y climaybe@latest build-scripts` and Tailwind via `npx -y climaybe@latest build` (no per-repo build script is installed).
+Build workflows install deps with `npm ci` and run `npx --no-install climaybe build-scripts` plus `npx --no-install climaybe build`, so CI uses lockfile-pinned versions (no `@latest` drift).
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|

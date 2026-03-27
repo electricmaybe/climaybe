@@ -23,6 +23,14 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Install dependencies from lockfile
+        run: |
+          if [ ! -f "package-lock.json" ]; then
+            echo "package-lock.json is required for deterministic build workflow installs."
+            exit 1
+          fi
+          npm ci
+
       - name: Detect build entrypoints
         id: detect
         run: |
@@ -47,16 +55,16 @@ jobs:
         if: steps.detect.outputs.has_scripts == 'true'
         run: |
           if [ "${{ steps.detect.outputs.scripts_minify }}" = "true" ]; then
-            npx -y climaybe@latest build-scripts --minify
+            npx --no-install climaybe build-scripts --minify
           else
-            npx -y climaybe@latest build-scripts
+            npx --no-install climaybe build-scripts
           fi
 
       - name: Run Tailwind build
         id: build
         run: |
           if [ "${{ steps.detect.outputs.has_styles }}" = "true" ]; then
-            NODE_ENV=production npx -y climaybe@latest build
+            NODE_ENV=production npx --no-install climaybe build
           else
             echo "No _styles/main.css found; skipping Tailwind build."
           fi

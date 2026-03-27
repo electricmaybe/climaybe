@@ -144,7 +144,9 @@ describe('workflows', () => {
         assert.ok(hasBuild, 'expected at least one build workflow');
         const reusableBuild = readFileSync(join(workflowsDir, 'reusable-build.yml'), 'utf-8');
         assert.match(reusableBuild, /Detect build entrypoints/);
-        assert.match(reusableBuild, /npx -y climaybe@latest build-scripts/);
+        assert.match(reusableBuild, /Install dependencies from lockfile/);
+        assert.match(reusableBuild, /npm ci/);
+        assert.match(reusableBuild, /npx --no-install climaybe build-scripts/);
         assert.match(reusableBuild, /scripts_minify=true/);
         assert.match(reusableBuild, /build-scripts --minify/);
         assert.match(reusableBuild, /No _styles\/main\.css found; skipping Tailwind build/);

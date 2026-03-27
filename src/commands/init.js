@@ -125,7 +125,6 @@ async function runInitFlow() {
   // 5. Create branches
   if (mode === 'single') {
     ensureStagingBranch();
-    createStoreBranches(stores[0].alias);
   } else {
     // Multi-store: staging branch + per-store branches
     ensureStagingBranch();
@@ -181,7 +180,6 @@ async function runInitFlow() {
 
   if (mode === 'single') {
     console.log(pc.dim('  Branches: main, staging'));
-    console.log(pc.dim(`    staging-${stores[0].alias}, live-${stores[0].alias}`));
     console.log(pc.dim('  Workflow: staging → main with versioning + nightly hotfix tagging'));
   } else {
     console.log(pc.dim('  Branches: main, staging'));

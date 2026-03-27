@@ -33,7 +33,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 
 ## Build workflows (optional)
 
-- Build workflows run `npx -y climaybe@latest build-scripts` (scripts) and `npx -y climaybe@latest build` (Tailwind).
+- Build workflows install dependencies via `npm ci` and run `npx --no-install climaybe build-scripts` (scripts) and `npx --no-install climaybe build` (Tailwind), so CI uses versions pinned in `package-lock.json`.
 - If `_scripts/*.js` or `_styles/main.css` are missing, the build workflow **skips** the missing step(s) and continues (so builds don’t block other workflows on repos that don’t use these entrypoints yet).
 - Script bundling preserves comments/spacing and only emits root bundles; top-level `_scripts/*.js` files imported by other top-level scripts are inlined instead of emitted as separate assets.
 - Build workflow minifies scripts only on `live-<alias>` branches (overwriting `assets/*.js` there); non-live branches keep readable built scripts.
@@ -80,8 +80,9 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 ## Branch setup
 
 - **main** is the default branch (created by Git when you init or by the host when you create a repo).
-- **staging** and per-store branches are created by `climaybe init` or `climaybe ensure-branches`.
-- If the repo only has `main` (e.g. after clone), run `climaybe ensure-branches` then `git push origin --all` so **main-to-staging-stores** can merge `main` into each `staging-<alias>`.
+- **Single-store**: `climaybe init` / `climaybe ensure-branches` creates `staging` (no `staging-<alias>` / `live-<alias>` branches).
+- **Multi-store**: `climaybe init` / `climaybe ensure-branches` creates `staging` and per-store branches (`staging-<alias>`, `live-<alias>`).
+- If the repo only has `main` (e.g. after clone), run `climaybe ensure-branches` then `git push origin --all` so the mode-appropriate sync workflows can run.
 
 ## Custom steps and optional paths
 
