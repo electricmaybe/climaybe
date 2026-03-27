@@ -67,13 +67,6 @@ function processScriptFile(filePath, processedFiles = new Set()) {
 
   content = stripModuleSyntax(content);
 
-  if (process.env.NODE_ENV === 'production') {
-    content = content.replace(/\/\*\*[\s\S]*?\*\//g, '');
-    content = content.replace(/^\s*\*.*$/gm, '');
-    content = content.replace(/console\.(log|warn|error)\([^)]*\);?\s*/g, '');
-    content = content.replace(/^\s*\n/gm, '');
-  }
-
   return importedContent + '\n' + content;
 }
 

@@ -35,6 +35,9 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 
 - Build workflows run `npx -y climaybe@latest build-scripts` (scripts) and `npx -y climaybe@latest build` (Tailwind).
 - If `_scripts/*.js` or `_styles/main.css` are missing, the build workflow **skips** the missing step(s) and continues (so builds don’t block other workflows on repos that don’t use these entrypoints yet).
+- Script bundling preserves comments/spacing and only emits root bundles; top-level `_scripts/*.js` files imported by other top-level scripts are inlined instead of emitted as separate assets.
+- Build workflow minifies scripts only on `live-<alias>` branches (overwriting `assets/*.js` there); non-live branches keep readable built scripts.
+- Hotfix backport logic excludes `assets/` commits (including `chore(assets)` minify commits) from `live-*` backports to `main`.
 
 ## Hotfix flow (multi-store)
 

@@ -74,7 +74,11 @@ function registerThemeCommands(cmd) {
   cmd.command('lint').description('Run theme linting (liquid, js, css)').action(() => lintAll());
 
   cmd.command('build').description('Build assets (Tailwind + scripts build)').action(() => buildAll());
-  cmd.command('build-scripts').description('Build _scripts → assets/index.js').action(buildScriptsCommand);
+  cmd
+    .command('build-scripts')
+    .description('Build _scripts → assets/index.js')
+    .option('--minify', 'Minify output bundles')
+    .action(buildScriptsCommand);
   cmd
     .command('create-entrypoints')
     .description('Create _scripts/main.js and _styles/main.css (optional)')

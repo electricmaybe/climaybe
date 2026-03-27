@@ -92,11 +92,12 @@ jobs:
             exit 0
           fi
 
-          # Default store: commits outside stores/ (root + code) trigger backport.
+          # Default store: commits outside stores/ and assets/ trigger backport.
+          # Live-branch minified assets should never backport into main.
           # Non-default store: only commits under stores/<alias>/ trigger backport; root JSON must not overwrite main.
           if [ -n "$DEFAULT_ALIAS" ] && [ "$SOURCE_ALIAS" = "$DEFAULT_ALIAS" ]; then
-            COMMITS=$(git log --oneline ${MERGE_BASE}..origin/$SOURCE -- . ':!stores/' 2>/dev/null | \
-              grep -v "\[stores-to-root\]" | grep -v "\[root-to-stores\]" | grep -v "chore(release)" || true)
+            COMMITS=$(git log --oneline ${MERGE_BASE}..origin/$SOURCE -- . ':!stores/' ':!assets/' 2>/dev/null | \
+              grep -v "\[stores-to-root\]" | grep -v "\[root-to-stores\]" | grep -v "chore(release)" | grep -v "chore(assets)" || true)
           else
             COMMITS=$(git log --oneline ${MERGE_BASE}..origin/$SOURCE -- "stores/${SOURCE_ALIAS}/" 2>/dev/null | \
               grep -v "\[stores-to-root\]" | grep -v "\[root-to-stores\]" | grep -v "chore(release)" || true)

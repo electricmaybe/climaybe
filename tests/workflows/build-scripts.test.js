@@ -228,4 +228,82 @@ import "./electric-variant-link-converter.js"
       teardown();
     }
   });
+
+  it('does not emit separate bundles for files imported by another top-level entrypoint', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("main");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'deferred.js'), 'import "./footer-newsletter.js";\nconsole.log("deferred");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'footer-newsletter.js'), 'console.log("newsletter");\n', 'utf-8');
+
+      buildScripts({ cwd: dir });
+
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'deferred.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'footer-newsletter.js')));
+      assert.match(readFileSync(join(dir, 'assets', 'deferred.js'), 'utf-8'), /newsletter/);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('preserves script comments in production mode', () => {
+    const dir = setup();
+    const originalNodeEnv = process.env.NODE_ENV;
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'main.js'),
+        `/** Keep this banner */
+// Keep this inline comment
+console.log("main");
+`,
+        'utf-8'
+      );
+
+      process.env.NODE_ENV = 'production';
+      buildScripts({ cwd: dir });
+
+      const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      assert.match(out, /Keep this banner/);
+      assert.match(out, /Keep this inline comment/);
+      assert.match(out, /console\.log\(["']main["']\)/);
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      teardown();
+    }
+  });
+
+  it('minifies output only when minify option is enabled', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'main.js'),
+        `/** Keep this banner */
+// Keep this inline comment
+const value = 42;
+console.log(value);
+`,
+        'utf-8'
+      );
+
+      buildScripts({ cwd: dir, minify: true });
+
+      const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      assert.doesNotMatch(out, /Keep this banner/);
+      assert.doesNotMatch(out, /Keep this inline comment/);
+      assert.match(out, /const value=42;/);
+      assert.match(out, /console\.log\(value\);/);
+    } finally {
+      teardown();
+    }
+  });
 });

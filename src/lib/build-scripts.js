@@ -41,7 +41,24 @@ function stripModuleSyntax(content) {
   return cleaned;
 }
 
-function processScriptFile({ scriptsDir, filePath, processedFiles }) {
+function minifyScriptContent(content) {
+  let minified = content;
+  // Strip block comments first so line-level processing is simpler.
+  minified = minified.replace(/\/\*[\s\S]*?\*\//g, '');
+  // Strip line comments and trim lines.
+  minified = minified
+    .split('\n')
+    .map((line) => line.replace(/\/\/.*$/g, '').trim())
+    .filter(Boolean)
+    .join('\n');
+  // Collapse excessive whitespace around common tokens.
+  minified = minified.replace(/\s*([{}();,:=+\-*/<>[\]])\s*/g, '$1');
+  // Keep one space where token concatenation could break identifiers.
+  minified = minified.replace(/\b(const|let|var|function|class|return|if|for|while|switch|case|new)\s+/g, '$1 ');
+  return minified;
+}
+
+function processScriptFile({ scriptsDir, filePath, processedFiles, minify = false }) {
   if (processedFiles.has(filePath)) return '';
   processedFiles.add(filePath);
 
@@ -61,17 +78,11 @@ function processScriptFile({ scriptsDir, filePath, processedFiles }) {
   for (const importPath of imports) {
     const resolvedImport = resolveImportPath(filePath, importPath);
     if (!resolvedImport) continue;
-    importedContent += processScriptFile({ scriptsDir, filePath: resolvedImport, processedFiles });
+    importedContent += processScriptFile({ scriptsDir, filePath: resolvedImport, processedFiles, minify });
   }
 
   content = stripModuleSyntax(content);
-
-  if (process.env.NODE_ENV === 'production') {
-    content = content.replace(/\/\*\*[\s\S]*?\*\//g, '');
-    content = content.replace(/^\s*\*.*$/gm, '');
-    content = content.replace(/console\.(log|warn|error)\([^)]*\);?\s*/g, '');
-    content = content.replace(/^\s*\n/gm, '');
-  }
+  if (minify) content = minifyScriptContent(content);
 
   return importedContent + '\n' + content;
 }
@@ -115,7 +126,7 @@ function outputNameForEntrypoint(entryFile) {
   return basename(entryFile);
 }
 
-function buildSingleEntrypoint({ cwd, entryFile }) {
+function buildSingleEntrypoint({ cwd, entryFile, minify = false }) {
   const scriptsDir = join(cwd, '_scripts');
   const entryPath = join(scriptsDir, entryFile);
   if (!existsSync(entryPath)) {
@@ -123,8 +134,9 @@ function buildSingleEntrypoint({ cwd, entryFile }) {
   }
 
   const processedFiles = new Set();
-  let finalContent = processScriptFile({ scriptsDir, filePath: entryFile, processedFiles });
+  let finalContent = processScriptFile({ scriptsDir, filePath: entryFile, processedFiles, minify });
   finalContent = stripModuleSyntax(finalContent);
+  if (minify) finalContent = minifyScriptContent(finalContent);
 
   const assetsDir = join(cwd, 'assets');
   mkdirSync(assetsDir, { recursive: true });
@@ -136,18 +148,28 @@ function buildSingleEntrypoint({ cwd, entryFile }) {
   return { entryFile, fileCount: processedFiles.size, outputPath };
 }
 
-export function buildScripts({ cwd = process.cwd(), entry = null } = {}) {
+export function buildScripts({ cwd = process.cwd(), entry = null, minify = false } = {}) {
   const scriptsDir = join(cwd, '_scripts');
   let entrypoints = entry ? [entry.endsWith('.js') ? entry : `${entry}.js`] : listTopLevelEntrypoints(scriptsDir);
-  if (!entry && entrypoints.includes('main.js')) {
-    const importedByMain = collectImportedFiles({ scriptsDir, entryFile: 'main.js' });
-    importedByMain.delete('main.js');
-    entrypoints = entrypoints.filter((ep) => ep === 'main.js' || !importedByMain.has(ep));
+  if (!entry && entrypoints.length > 1) {
+    // Emit only root top-level scripts. If one top-level file is imported by another
+    // top-level file, it is bundled into the importer and should not be emitted alone.
+    const importedByTopLevel = new Set();
+    for (const ep of entrypoints) {
+      const imported = collectImportedFiles({ scriptsDir, entryFile: ep });
+      imported.delete(ep);
+      for (const file of imported) importedByTopLevel.add(file);
+    }
+
+    const rootEntrypoints = entrypoints.filter((ep) => !importedByTopLevel.has(ep));
+    if (rootEntrypoints.length > 0) {
+      entrypoints = rootEntrypoints;
+    }
   }
   if (entrypoints.length === 0) {
     return { bundles: [] };
   }
-  const bundles = entrypoints.map((entryFile) => buildSingleEntrypoint({ cwd, entryFile }));
+  const bundles = entrypoints.map((entryFile) => buildSingleEntrypoint({ cwd, entryFile, minify }));
   return { bundles };
 }
 

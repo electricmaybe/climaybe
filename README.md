@@ -242,6 +242,9 @@ Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`; defa
 When enabled, builds are **resilient**:
 - If `_scripts/*.js` or `_styles/main.css` are missing, the build workflow **skips** those steps and continues.
 - `init` may offer to create entrypoints; **default answer is No**.
+- Script bundling preserves comments/spacing and emits bundles only for root entry files (files imported by other top-level `_scripts/*.js` are inlined, not emitted separately).
+- On `live-<alias>` branches only, script bundles are minified and overwrite `assets/*.js`; `main` and `staging-*` keep readable built JS.
+- Live minified `assets/*` changes are intentionally excluded from hotfix backports to `main` (no branch-specific `.gitignore` split required).
 
 Build workflows run bundling via `npx -y climaybe@latest build-scripts` and Tailwind via `npx -y climaybe@latest build` (no per-repo build script is installed).
 

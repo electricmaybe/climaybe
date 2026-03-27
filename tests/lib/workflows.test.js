@@ -93,6 +93,20 @@ describe('workflows', () => {
       }
     });
 
+    it('keeps live minified assets out of main hotfix backports', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('multi', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'multistore-hotfix-to-main.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+
+        assert.match(workflow, /':!assets\/'/);
+        assert.match(workflow, /grep -v "chore\(assets\)"/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('ignores no-op commits in nightly hotfix tagging', () => {
       const dir = setup();
       try {
@@ -131,6 +145,8 @@ describe('workflows', () => {
         const reusableBuild = readFileSync(join(workflowsDir, 'reusable-build.yml'), 'utf-8');
         assert.match(reusableBuild, /Detect build entrypoints/);
         assert.match(reusableBuild, /npx -y climaybe@latest build-scripts/);
+        assert.match(reusableBuild, /scripts_minify=true/);
+        assert.match(reusableBuild, /build-scripts --minify/);
         assert.match(reusableBuild, /No _styles\/main\.css found; skipping Tailwind build/);
         assert.match(reusableBuild, /git add -f assets\/\*\.js/);
       } finally {
