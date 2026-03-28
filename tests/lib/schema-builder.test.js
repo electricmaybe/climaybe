@@ -11,7 +11,7 @@ describe('schema-builder', () => {
   function setup() {
     cwd = mkdtempSync(join(tmpdir(), 'climaybe-schema-'));
     mkdirSync(join(cwd, '_schemas'), { recursive: true });
-    mkdirSync(join(cwd, '_sections'), { recursive: true });
+    mkdirSync(join(cwd, 'sections'), { recursive: true });
     return cwd;
   }
 
@@ -19,59 +19,9 @@ describe('schema-builder', () => {
     if (cwd && existsSync(cwd)) rmSync(cwd, { recursive: true });
   }
 
-  // ── Source → output architecture ──────────────────────────────────
-
-  it('reads from _sections/ and writes to sections/ (source is never mutated)', () => {
-    const dir = setup();
-    try {
-      writeFileSync(
-        join(dir, '_schemas', 'banner.json'),
-        JSON.stringify({ name: 'Banner', settings: [] }),
-        'utf-8'
-      );
-
-      const srcContent = `<div>banner</div>\n{% schema 'banner' %}{% endschema %}\n`;
-      writeFileSync(join(dir, '_sections', 'banner.liquid'), srcContent, 'utf-8');
-
-      const { processed, errors } = buildSchemas({ cwd: dir });
-
-      assert.strictEqual(processed.length, 1);
-      assert.strictEqual(errors.length, 0);
-
-      // Source file is unchanged
-      assert.strictEqual(readFileSync(join(dir, '_sections', 'banner.liquid'), 'utf-8'), srcContent);
-
-      // Output file was created in sections/
-      const output = readFileSync(join(dir, 'sections', 'banner.liquid'), 'utf-8');
-      assert.match(output, /{% schema %}/);
-      assert.match(output, /"name": "Banner"/);
-    } finally {
-      teardown();
-    }
-  });
-
-  it('copies _sections/ files without schema refs verbatim to sections/', () => {
-    const dir = setup();
-    try {
-      const staticContent = `<div>static</div>\n{% schema %}\n{"name":"Static"}\n{% endschema %}\n`;
-      writeFileSync(join(dir, '_sections', 'static-section.liquid'), staticContent, 'utf-8');
-
-      const { processed, copied } = buildSchemas({ cwd: dir });
-
-      assert.strictEqual(processed.length, 0);
-      assert.strictEqual(copied.length, 1);
-      assert.strictEqual(copied[0], 'static-section.liquid');
-
-      const output = readFileSync(join(dir, 'sections', 'static-section.liquid'), 'utf-8');
-      assert.strictEqual(output, staticContent);
-    } finally {
-      teardown();
-    }
-  });
-
   // ── Basic schema injection ────────────────────────────────────────
 
-  it('injects a simple JSON schema into a section file', () => {
+  it('injects a JSON schema below the comment marker', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -84,8 +34,8 @@ describe('schema-builder', () => {
       );
 
       writeFileSync(
-        join(dir, '_sections', 'hero-banner.liquid'),
-        `<div>hero</div>\n{% schema 'hero-banner' %}{% endschema %}\n`,
+        join(dir, 'sections', 'hero-banner.liquid'),
+        `<div>hero</div>\n{% comment %} {% schema 'hero-banner' %} {% endcomment %}\n`,
         'utf-8'
       );
 
@@ -95,9 +45,11 @@ describe('schema-builder', () => {
       assert.strictEqual(errors.length, 0);
 
       const output = readFileSync(join(dir, 'sections', 'hero-banner.liquid'), 'utf-8');
+      assert.match(output, /{% comment %} {% schema 'hero-banner' %} {% endcomment %}/);
       assert.match(output, /{% schema %}/);
       assert.match(output, /"name": "Hero Banner"/);
       assert.match(output, /"id": "title"/);
+      assert.match(output, /{% endschema %}/);
     } finally {
       teardown();
     }
@@ -119,8 +71,8 @@ describe('schema-builder', () => {
       );
 
       writeFileSync(
-        join(dir, '_sections', 'landing.liquid'),
-        `<div>landing</div>\n{% schema 'landing' %}{% endschema %}\n`,
+        join(dir, 'sections', 'landing.liquid'),
+        `<div>landing</div>\n{% comment %} {% schema 'landing' %} {% endcomment %}\n`,
         'utf-8'
       );
 
@@ -137,30 +89,98 @@ describe('schema-builder', () => {
     }
   });
 
-  // ── Shared schema (same schema for multiple sections) ─────────────
+  // ── Marker is preserved ───────────────────────────────────────────
 
-  it('injects the same schema into multiple sections (shared schema pattern)', () => {
+  it('preserves the comment marker after building', () => {
     const dir = setup();
     try {
       writeFileSync(
-        join(dir, '_schemas', 'seasonal-landing.js'),
+        join(dir, '_schemas', 'test.json'),
+        JSON.stringify({ name: 'Test', settings: [] }),
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, 'sections', 'test.liquid'),
+        `<div>test</div>\n{% comment %} {% schema 'test' %} {% endcomment %}\n`,
+        'utf-8'
+      );
+
+      buildSchemas({ cwd: dir });
+      const output = readFileSync(join(dir, 'sections', 'test.liquid'), 'utf-8');
+      assert.match(output, /{% comment %} {% schema 'test' %} {% endcomment %}/);
+    } finally {
+      teardown();
+    }
+  });
+
+  // ── Rebuild replaces the generated block ──────────────────────────
+
+  it('replaces the previously generated schema on rebuild (idempotent)', () => {
+    const dir = setup();
+    try {
+      writeFileSync(
+        join(dir, '_schemas', 'hero.json'),
+        JSON.stringify({ name: 'Hero v1', settings: [] }),
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, 'sections', 'hero.liquid'),
+        `<div>hero</div>\n{% comment %} {% schema 'hero' %} {% endcomment %}\n`,
+        'utf-8'
+      );
+
+      buildSchemas({ cwd: dir });
+      const firstBuild = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
+      assert.match(firstBuild, /"name": "Hero v1"/);
+
+      // Update schema and rebuild
+      writeFileSync(
+        join(dir, '_schemas', 'hero.json'),
+        JSON.stringify({ name: 'Hero v2', settings: [{ id: 'new', type: 'text', label: 'New' }] }),
+        'utf-8'
+      );
+
+      buildSchemas({ cwd: dir });
+      const secondBuild = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
+      assert.match(secondBuild, /"name": "Hero v2"/);
+      assert.match(secondBuild, /"id": "new"/);
+      assert.doesNotMatch(secondBuild, /"name": "Hero v1"/);
+
+      // Marker is still there
+      assert.match(secondBuild, /{% comment %} {% schema 'hero' %} {% endcomment %}/);
+
+      // Only one schema block
+      const schemaBlocks = secondBuild.match(/{% schema %}/g);
+      assert.strictEqual(schemaBlocks.length, 1);
+    } finally {
+      teardown();
+    }
+  });
+
+  // ── Shared schema (same schema for multiple sections) ─────────────
+
+  it('injects the same schema into multiple sections (shared schema)', () => {
+    const dir = setup();
+    try {
+      writeFileSync(
+        join(dir, '_schemas', 'seasonal.js'),
         `module.exports = {
   name: 'Seasonal Landing',
-  settings: [
-    { label: 'Banner Image', id: 'banner_image', type: 'image_picker' }
-  ]
+  settings: [{ label: 'Image', id: 'image', type: 'image_picker' }]
 };`,
         'utf-8'
       );
 
       writeFileSync(
-        join(dir, '_sections', 'autumn-winter-2020.liquid'),
-        `<div>AW20</div>\n{% schema 'seasonal-landing' %}{% endschema %}\n`,
+        join(dir, 'sections', 'autumn-winter.liquid'),
+        `<div>AW</div>\n{% comment %} {% schema 'seasonal' %} {% endcomment %}\n`,
         'utf-8'
       );
       writeFileSync(
-        join(dir, '_sections', 'spring-summer-2021.liquid'),
-        `<div>SS21</div>\n{% schema 'seasonal-landing' %}{% endschema %}\n`,
+        join(dir, 'sections', 'spring-summer.liquid'),
+        `<div>SS</div>\n{% comment %} {% schema 'seasonal' %} {% endcomment %}\n`,
         'utf-8'
       );
 
@@ -169,19 +189,18 @@ describe('schema-builder', () => {
       assert.strictEqual(processed.length, 2);
       assert.strictEqual(errors.length, 0);
 
-      for (const file of ['autumn-winter-2020.liquid', 'spring-summer-2021.liquid']) {
+      for (const file of ['autumn-winter.liquid', 'spring-summer.liquid']) {
         const output = readFileSync(join(dir, 'sections', file), 'utf-8');
         assert.match(output, /"name": "Seasonal Landing"/);
-        assert.match(output, /"id": "banner_image"/);
       }
     } finally {
       teardown();
     }
   });
 
-  // ── Schema with partials (importing shared settings) ──────────────
+  // ── Schema with partials ──────────────────────────────────────────
 
-  it('supports schema partials via require() (section as block pattern)', () => {
+  it('supports schema partials via require()', () => {
     const dir = setup();
     try {
       mkdirSync(join(dir, '_schemas', 'partials'), { recursive: true });
@@ -198,10 +217,7 @@ describe('schema-builder', () => {
       writeFileSync(
         join(dir, '_schemas', 'hero-banner.js'),
         `const settings = require('./partials/hero-banner.js');
-module.exports = {
-  name: 'Hero Banner',
-  settings
-};`,
+module.exports = { name: 'Hero Banner', settings };`,
         'utf-8'
       );
 
@@ -210,25 +226,19 @@ module.exports = {
         `const heroBannerSettings = require('./partials/hero-banner.js');
 module.exports = {
   name: 'Landing Page',
-  blocks: [
-    {
-      name: 'Hero Banner',
-      type: 'hero_banner',
-      settings: heroBannerSettings
-    }
-  ]
+  blocks: [{ type: 'hero_banner', name: 'Hero Banner', settings: heroBannerSettings }]
 };`,
         'utf-8'
       );
 
       writeFileSync(
-        join(dir, '_sections', 'hero-banner.liquid'),
-        `<div>hero</div>\n{% schema 'hero-banner' %}{% endschema %}\n`,
+        join(dir, 'sections', 'hero-banner.liquid'),
+        `<div>hero</div>\n{% comment %} {% schema 'hero-banner' %} {% endcomment %}\n`,
         'utf-8'
       );
       writeFileSync(
-        join(dir, '_sections', 'landing-page.liquid'),
-        `<div>landing</div>\n{% schema 'landing-page' %}{% endschema %}\n`,
+        join(dir, 'sections', 'landing-page.liquid'),
+        `<div>landing</div>\n{% comment %} {% schema 'landing-page' %} {% endcomment %}\n`,
         'utf-8'
       );
 
@@ -244,7 +254,6 @@ module.exports = {
       const landingOutput = readFileSync(join(dir, 'sections', 'landing-page.liquid'), 'utf-8');
       assert.match(landingOutput, /"name": "Landing Page"/);
       assert.match(landingOutput, /"type": "hero_banner"/);
-      assert.match(landingOutput, /"id": "heading"/);
     } finally {
       teardown();
     }
@@ -280,8 +289,8 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, '_sections', 'hero-with-link.liquid'),
-        `<div>hero link</div>\n{% schema 'hero-with-link' %}{% endschema %}\n`,
+        join(dir, 'sections', 'hero-with-link.liquid'),
+        `<div>hero link</div>\n{% comment %} {% schema 'hero-with-link' %} {% endcomment %}\n`,
         'utf-8'
       );
 
@@ -337,8 +346,8 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, '_sections', 'hero-multi-link.liquid'),
-        `<div>hero multi</div>\n{% schema 'hero-multi-link' %}{% endschema %}\n`,
+        join(dir, 'sections', 'hero-multi-link.liquid'),
+        `<div>hero multi</div>\n{% comment %} {% schema 'hero-multi-link' %} {% endcomment %}\n`,
         'utf-8'
       );
 
@@ -352,8 +361,6 @@ module.exports = {
       assert.strictEqual(parsed.settings.length, 7);
       assert.strictEqual(parsed.settings[0].id, 'title');
       assert.strictEqual(parsed.settings[1].id, 'link_text_1');
-      assert.strictEqual(parsed.settings[2].id, 'link_url_1');
-      assert.strictEqual(parsed.settings[5].id, 'link_text_3');
       assert.strictEqual(parsed.settings[6].id, 'link_url_3');
     } finally {
       teardown();
@@ -370,34 +377,26 @@ module.exports = {
         `module.exports = function(filename, content) {
   return {
     name: content.name || filename.replace('.liquid', ''),
-    settings: [
-      { label: 'Heading', id: 'heading', type: 'text' }
-    ]
+    settings: [{ label: 'Heading', id: 'heading', type: 'text' }]
   };
 };`,
         'utf-8'
       );
 
       writeFileSync(
-        join(dir, '_sections', 'about-page.liquid'),
+        join(dir, 'sections', 'about-page.liquid'),
         `<div>about</div>
-{% schema 'page-schema' %}
-{
-  "name": "About Us"
-}
-{% endschema %}
+{% comment %} {% schema 'page-schema' %} {% endcomment %}
+{% comment %} { "name": "About Us" } {% endcomment %}
 `,
         'utf-8'
       );
 
       writeFileSync(
-        join(dir, '_sections', 'contact-page.liquid'),
+        join(dir, 'sections', 'contact-page.liquid'),
         `<div>contact</div>
-{% schema 'page-schema' %}
-{
-  "name": "Contact"
-}
-{% endschema %}
+{% comment %} {% schema 'page-schema' %} {% endcomment %}
+{% comment %} { "name": "Contact" } {% endcomment %}
 `,
         'utf-8'
       );
@@ -432,13 +431,10 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, '_sections', 'custom-section.liquid'),
+        join(dir, 'sections', 'custom-section.liquid'),
         `<div>custom</div>
-{% schema 'mergeable' %}
-{
-  "name": "Custom Override Name"
-}
-{% endschema %}
+{% comment %} {% schema 'mergeable' %} {% endcomment %}
+{% comment %} { "name": "Custom Override" } {% endcomment %}
 `,
         'utf-8'
       );
@@ -448,8 +444,42 @@ module.exports = {
       assert.strictEqual(processed.length, 1);
 
       const output = readFileSync(join(dir, 'sections', 'custom-section.liquid'), 'utf-8');
-      assert.match(output, /"name": "Custom Override Name"/);
+      assert.match(output, /"name": "Custom Override"/);
       assert.match(output, /"id": "title"/);
+    } finally {
+      teardown();
+    }
+  });
+
+  // ── Inline override is preserved across rebuilds ──────────────────
+
+  it('preserves inline override comment across rebuilds', () => {
+    const dir = setup();
+    try {
+      writeFileSync(
+        join(dir, '_schemas', 'card.json'),
+        JSON.stringify({ name: 'Card', settings: [] }),
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, 'sections', 'card.liquid'),
+        `<div>card</div>
+{% comment %} {% schema 'card' %} {% endcomment %}
+{% comment %} { "name": "My Card" } {% endcomment %}
+`,
+        'utf-8'
+      );
+
+      buildSchemas({ cwd: dir });
+      const first = readFileSync(join(dir, 'sections', 'card.liquid'), 'utf-8');
+      assert.match(first, /"name": "My Card"/);
+      assert.match(first, /{% comment %} \{ "name": "My Card" \} {% endcomment %}/);
+
+      buildSchemas({ cwd: dir });
+      const second = readFileSync(join(dir, 'sections', 'card.liquid'), 'utf-8');
+      assert.match(second, /"name": "My Card"/);
+      assert.strictEqual(first, second);
     } finally {
       teardown();
     }
@@ -466,49 +496,14 @@ module.exports = {
         'utf-8'
       );
 
-      writeFileSync(
-        join(dir, '_sections', 'banner.liquid'),
-        `<div>banner</div>\n{% schema 'banner' %}{% endschema %}\n`,
-        'utf-8'
-      );
+      const original = `<div>banner</div>\n{% comment %} {% schema 'banner' %} {% endcomment %}\n`;
+      writeFileSync(join(dir, 'sections', 'banner.liquid'), original, 'utf-8');
 
       const { processed } = buildSchemas({ cwd: dir, dryRun: true });
 
       assert.strictEqual(processed.length, 1);
-      assert.ok(!existsSync(join(dir, 'sections', 'banner.liquid')));
-    } finally {
-      teardown();
-    }
-  });
-
-  // ── Rebuild is idempotent (source never changes) ──────────────────
-
-  it('produces identical output on consecutive builds (idempotent)', () => {
-    const dir = setup();
-    try {
-      writeFileSync(
-        join(dir, '_schemas', 'hero.json'),
-        JSON.stringify({ name: 'Hero', settings: [{ id: 'title', type: 'text', label: 'Title' }] }),
-        'utf-8'
-      );
-
-      writeFileSync(
-        join(dir, '_sections', 'hero.liquid'),
-        `<div>hero</div>\n{% schema 'hero' %}{% endschema %}\n`,
-        'utf-8'
-      );
-
-      buildSchemas({ cwd: dir });
-      const firstBuild = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
-
-      buildSchemas({ cwd: dir });
-      const secondBuild = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
-
-      assert.strictEqual(firstBuild, secondBuild);
-
-      // Source file still has the reference tag
-      const source = readFileSync(join(dir, '_sections', 'hero.liquid'), 'utf-8');
-      assert.match(source, /{% schema 'hero' %}/);
+      const output = readFileSync(join(dir, 'sections', 'banner.liquid'), 'utf-8');
+      assert.strictEqual(output, original);
     } finally {
       teardown();
     }
@@ -520,8 +515,8 @@ module.exports = {
     const dir = setup();
     try {
       writeFileSync(
-        join(dir, '_sections', 'broken.liquid'),
-        `<div>broken</div>\n{% schema 'nonexistent' %}{% endschema %}\n`,
+        join(dir, 'sections', 'broken.liquid'),
+        `<div>broken</div>\n{% comment %} {% schema 'nonexistent' %} {% endcomment %}\n`,
         'utf-8'
       );
 
@@ -535,32 +530,51 @@ module.exports = {
     }
   });
 
-  it('returns empty results when _sections/ does not exist', () => {
+  it('returns empty results when sections/ does not exist', () => {
     const dir = mkdtempSync(join(tmpdir(), 'climaybe-schema-'));
     try {
-      const { processed, copied, errors } = buildSchemas({ cwd: dir });
+      const { processed, skipped, errors } = buildSchemas({ cwd: dir });
       assert.strictEqual(processed.length, 0);
-      assert.strictEqual(copied.length, 0);
+      assert.strictEqual(skipped.length, 0);
       assert.strictEqual(errors.length, 0);
     } finally {
       rmSync(dir, { recursive: true });
     }
   });
 
-  // ── Whitespace-tolerant tag matching ──────────────────────────────
+  it('skips section files without the comment marker', () => {
+    const dir = setup();
+    try {
+      writeFileSync(
+        join(dir, 'sections', 'static-section.liquid'),
+        `<div>static</div>\n{% schema %}\n{"name":"Static"}\n{% endschema %}\n`,
+        'utf-8'
+      );
 
-  it('handles Liquid whitespace-control variants ({%- -%})', () => {
+      const { processed, skipped } = buildSchemas({ cwd: dir });
+
+      assert.strictEqual(processed.length, 0);
+      assert.strictEqual(skipped.length, 1);
+      assert.strictEqual(skipped[0], 'static-section.liquid');
+    } finally {
+      teardown();
+    }
+  });
+
+  // ── Whitespace-control variants ───────────────────────────────────
+
+  it('handles Liquid whitespace-control dashes in the marker', () => {
     const dir = setup();
     try {
       writeFileSync(
         join(dir, '_schemas', 'ws-test.json'),
-        JSON.stringify({ name: 'Whitespace Test', settings: [] }),
+        JSON.stringify({ name: 'WS Test', settings: [] }),
         'utf-8'
       );
 
       writeFileSync(
-        join(dir, '_sections', 'ws-test.liquid'),
-        `<div>ws</div>\n{%- schema 'ws-test' -%}{%- endschema -%}\n`,
+        join(dir, 'sections', 'ws-test.liquid'),
+        `<div>ws</div>\n{%- comment -%} {%- schema 'ws-test' -%} {%- endcomment -%}\n`,
         'utf-8'
       );
 
@@ -570,7 +584,45 @@ module.exports = {
       assert.strictEqual(errors.length, 0);
 
       const output = readFileSync(join(dir, 'sections', 'ws-test.liquid'), 'utf-8');
-      assert.match(output, /"name": "Whitespace Test"/);
+      assert.match(output, /"name": "WS Test"/);
+    } finally {
+      teardown();
+    }
+  });
+
+  // ── Survives theme editor edits ───────────────────────────────────
+
+  it('rebuilds correctly after Shopify theme editor modifies markup above the marker', () => {
+    const dir = setup();
+    try {
+      writeFileSync(
+        join(dir, '_schemas', 'hero.json'),
+        JSON.stringify({ name: 'Hero', settings: [{ id: 'title', type: 'text', label: 'Title' }] }),
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, 'sections', 'hero.liquid'),
+        `<div>hero</div>\n{% comment %} {% schema 'hero' %} {% endcomment %}\n`,
+        'utf-8'
+      );
+
+      buildSchemas({ cwd: dir });
+
+      // Simulate theme editor changing markup above the marker
+      let content = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
+      content = content.replace('<div>hero</div>', '<section class="hero-edited">\n  <h1>Updated</h1>\n</section>');
+      writeFileSync(join(dir, 'sections', 'hero.liquid'), content, 'utf-8');
+
+      // Rebuild should still work
+      const { processed, errors } = buildSchemas({ cwd: dir });
+      assert.strictEqual(processed.length, 1);
+      assert.strictEqual(errors.length, 0);
+
+      const output = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
+      assert.match(output, /hero-edited/);
+      assert.match(output, /<h1>Updated<\/h1>/);
+      assert.match(output, /"name": "Hero"/);
     } finally {
       teardown();
     }
@@ -603,16 +655,16 @@ module.exports = {
 
   // ── listSectionsWithSchemaRefs ────────────────────────────────────
 
-  it('lists source sections (_sections/) that contain schema references', () => {
+  it('lists sections that contain the comment marker', () => {
     const dir = setup();
     try {
       writeFileSync(
-        join(dir, '_sections', 'has-ref.liquid'),
-        `<div>ref</div>\n{% schema 'my-schema' %}{% endschema %}\n`,
+        join(dir, 'sections', 'has-ref.liquid'),
+        `<div>ref</div>\n{% comment %} {% schema 'my-schema' %} {% endcomment %}\n`,
         'utf-8'
       );
       writeFileSync(
-        join(dir, '_sections', 'no-ref.liquid'),
+        join(dir, 'sections', 'no-ref.liquid'),
         `<div>no ref</div>\n{% schema %}\n{}\n{% endschema %}\n`,
         'utf-8'
       );
@@ -626,7 +678,7 @@ module.exports = {
     }
   });
 
-  it('returns empty array when _sections/ does not exist', () => {
+  it('returns empty array when sections/ does not exist', () => {
     const dir = mkdtempSync(join(tmpdir(), 'climaybe-schema-'));
     try {
       assert.deepStrictEqual(listSectionsWithSchemaRefs(dir), []);

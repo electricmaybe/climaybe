@@ -1,52 +1,54 @@
 # Schema Builder Examples
 
-Complete, working examples for every pattern supported by `climaybe build-schemas`. Each example shows the source files you create and the output the builder produces.
+Complete, working examples for every pattern supported by `climaybe build-schemas`.
 
-## How the build works
+## How it works
 
-Shopify reads sections from `sections/`. The schema builder treats that folder as **build output**, not source.
+Everything happens in the same `sections/` folder Shopify reads. No separate source folder, no sync issues with the theme editor.
 
-- **`_sections/`** — your source section files (Liquid + schema references). You edit these.
-- **`_schemas/`** — schema definitions as JS or JSON. Partials go in `_schemas/partials/`.
-- **`sections/`** — build output. The builder copies each `_sections/*.liquid` file here, resolving any `{% schema 'name' %}` references and injecting the JSON. Sections without schema references are copied verbatim.
+1. Add a **comment marker** at the end of any section file:
 
-Your source files are never modified, so builds are always repeatable.
+```liquid
+{% comment %} {% schema 'hero-banner' %} {% endcomment %}
+```
+
+2. Create the schema definition in `_schemas/hero-banner.js` (or `.json`).
+
+3. Run `npx climaybe build-schemas`. The builder writes the generated `{% schema %}...{% endschema %}` block directly below the marker. The marker itself is never touched.
+
+On subsequent builds, the generated block is **replaced** — the marker survives edits from the Shopify theme editor, direct file changes, git merges, whatever.
+
+**Directory layout:**
 
 ```
 your-theme/
-├── _sections/             ← source files (you edit these)
+├── sections/              ← section files with comment markers
 │   ├── hero-banner.liquid
 │   ├── landing-page.liquid
-│   ├── about-page.liquid
-│   └── static-section.liquid
+│   └── static-section.liquid  (no marker — left alone)
 ├── _schemas/              ← schema definitions (JS or JSON)
 │   ├── partials/          ← shared settings, fieldsets, helpers
 │   │   ├── link.js
 │   │   ├── create-links.js
-│   │   └── hero-banner.js
+│   │   └── spacing.js
 │   ├── hero-banner.js
 │   ├── landing-page.js
 │   └── page-schema.js
-├── sections/              ← build output (Shopify reads this)
-│   ├── hero-banner.liquid      ← generated with JSON schema injected
-│   ├── landing-page.liquid     ← generated
-│   ├── about-page.liquid       ← generated
-│   └── static-section.liquid   ← copied verbatim (no schema ref)
 ```
 
-Run the builder:
+**Commands:**
 
 ```bash
-npx climaybe build-schemas              # build _sections/ → sections/
+npx climaybe build-schemas              # generate schemas in sections/
 npx climaybe build-schemas --dry-run    # preview without writing files
-npx climaybe build-schemas --list       # list schema files and references
+npx climaybe build-schemas --list       # list schema files and markers
 ```
 
 ---
 
 ## 1. Basic JSON Schema
 
-The simplest case — define a static schema in a `.json` file.
+The simplest case — a static `.json` file.
 
 **`_schemas/announcement-bar.json`**
 
@@ -70,34 +72,29 @@ The simplest case — define a static schema in a `.json` file.
       "id": "background_color",
       "label": "Background color",
       "default": "#000000"
-    },
-    {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text color",
-      "default": "#ffffff"
     }
   ]
 }
 ```
 
-**`_sections/announcement-bar.liquid`** (source — you edit this)
+**`sections/announcement-bar.liquid`** (before build)
 
 ```liquid
-<div class="announcement-bar" style="background: {{ section.settings.background_color }}; color: {{ section.settings.text_color }};">
+<div class="announcement-bar" style="background: {{ section.settings.background_color }};">
   <a href="{{ section.settings.link }}">{{ section.settings.message }}</a>
 </div>
 
-{% schema 'announcement-bar' %}{% endschema %}
+{% comment %} {% schema 'announcement-bar' %} {% endcomment %}
 ```
 
-**`sections/announcement-bar.liquid`** (build output — Shopify reads this)
+**After `npx climaybe build-schemas`:**
 
 ```liquid
-<div class="announcement-bar" style="background: {{ section.settings.background_color }}; color: {{ section.settings.text_color }};">
+<div class="announcement-bar" style="background: {{ section.settings.background_color }};">
   <a href="{{ section.settings.link }}">{{ section.settings.message }}</a>
 </div>
 
+{% comment %} {% schema 'announcement-bar' %} {% endcomment %}
 {% schema %}
 {
   "name": "Announcement Bar",
@@ -118,23 +115,19 @@ The simplest case — define a static schema in a `.json` file.
       "id": "background_color",
       "label": "Background color",
       "default": "#000000"
-    },
-    {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text color",
-      "default": "#ffffff"
     }
   ]
 }
 {% endschema %}
 ```
 
+The marker stays. Only the `{% schema %}...{% endschema %}` block below it is managed by the builder.
+
 ---
 
 ## 2. Basic JS Schema (CommonJS)
 
-Use a `.js` file when you want to add comments, compute values, or keep things readable.
+Use a `.js` file when you need comments, computation, or imports.
 
 **`_schemas/hero-banner.js`**
 
@@ -172,29 +165,25 @@ module.exports = {
       default: 'center',
     },
   ],
-  presets: [
-    {
-      name: 'Hero Banner',
-    },
-  ],
+  presets: [{ name: 'Hero Banner' }],
 };
 ```
 
-**`_sections/hero-banner.liquid`**
+**`sections/hero-banner.liquid`**
 
 ```liquid
 <section class="hero-banner">
   <!-- hero markup -->
 </section>
 
-{% schema 'hero-banner' %}{% endschema %}
+{% comment %} {% schema 'hero-banner' %} {% endcomment %}
 ```
 
 ---
 
 ## 3. Shared Schema (Same Schema, Multiple Sections)
 
-One schema file reused across multiple section files. Change the schema once, rebuild, every section updates.
+One schema file, multiple section files. Change the schema once, rebuild, every section updates.
 
 **`_schemas/seasonal-landing.js`**
 
@@ -203,21 +192,9 @@ module.exports = {
   name: 'Seasonal Landing',
   max_blocks: 12,
   settings: [
-    {
-      type: 'image_picker',
-      id: 'hero_image',
-      label: 'Hero image',
-    },
-    {
-      type: 'text',
-      id: 'headline',
-      label: 'Headline',
-    },
-    {
-      type: 'richtext',
-      id: 'description',
-      label: 'Description',
-    },
+    { type: 'image_picker', id: 'hero_image', label: 'Hero image' },
+    { type: 'text', id: 'headline', label: 'Headline' },
+    { type: 'richtext', id: 'description', label: 'Description' },
   ],
   blocks: [
     {
@@ -228,85 +205,45 @@ module.exports = {
         { type: 'text', id: 'custom_label', label: 'Custom label' },
       ],
     },
-    {
-      type: 'banner',
-      name: 'Promo Banner',
-      settings: [
-        { type: 'image_picker', id: 'banner_image', label: 'Image' },
-        { type: 'url', id: 'banner_link', label: 'Link' },
-      ],
-    },
   ],
 };
 ```
 
-Both source sections reference the same schema:
-
-**`_sections/autumn-winter-2024.liquid`**
+**`sections/autumn-winter-2024.liquid`**
 
 ```liquid
-<div class="seasonal-landing">
-  <!-- autumn/winter landing markup -->
-</div>
+<div class="seasonal-landing"><!-- AW markup --></div>
 
-{% schema 'seasonal-landing' %}{% endschema %}
+{% comment %} {% schema 'seasonal-landing' %} {% endcomment %}
 ```
 
-**`_sections/spring-summer-2025.liquid`**
+**`sections/spring-summer-2025.liquid`**
 
 ```liquid
-<div class="seasonal-landing">
-  <!-- spring/summer landing markup -->
-</div>
+<div class="seasonal-landing"><!-- SS markup --></div>
 
-{% schema 'seasonal-landing' %}{% endschema %}
+{% comment %} {% schema 'seasonal-landing' %} {% endcomment %}
 ```
 
-After `npx climaybe build-schemas`, both `sections/autumn-winter-2024.liquid` and `sections/spring-summer-2025.liquid` contain identical schema JSON. Update `_schemas/seasonal-landing.js` once and rebuild — both stay in sync.
+Both get identical schema JSON after build. Update `_schemas/seasonal-landing.js` and rebuild to sync both.
 
 ---
 
 ## 4. Partials — Reusing Settings (Section as Block)
 
-Extract a section's settings into a partial so they can be imported as section settings in one schema and block settings in another.
+Extract settings into a partial, import them as section settings in one schema and block settings in another.
 
 **`_schemas/partials/hero-banner.js`**
 
 ```js
 module.exports = [
-  {
-    type: 'image_picker',
-    id: 'image',
-    label: 'Background image',
-  },
-  {
-    type: 'text',
-    id: 'heading',
-    label: 'Heading',
-  },
-  {
-    type: 'richtext',
-    id: 'subheading',
-    label: 'Subheading',
-  },
-  {
-    type: 'select',
-    id: 'overlay_opacity',
-    label: 'Overlay opacity',
-    options: [
-      { value: '0', label: 'None' },
-      { value: '25', label: '25%' },
-      { value: '50', label: '50%' },
-      { value: '75', label: '75%' },
-    ],
-    default: '0',
-  },
+  { type: 'image_picker', id: 'image', label: 'Background image' },
+  { type: 'text', id: 'heading', label: 'Heading' },
+  { type: 'richtext', id: 'subheading', label: 'Subheading' },
 ];
 ```
 
-Use the partial as section settings:
-
-**`_schemas/hero-banner.js`**
+**`_schemas/hero-banner.js`** — uses partial as section settings:
 
 ```js
 const settings = require('./partials/hero-banner.js');
@@ -318,9 +255,7 @@ module.exports = {
 };
 ```
 
-Reuse the same partial as a block type in another section:
-
-**`_schemas/landing-page.js`**
+**`_schemas/landing-page.js`** — uses same partial as a block:
 
 ```js
 const heroBannerSettings = require('./partials/hero-banner.js');
@@ -336,48 +271,34 @@ module.exports = {
     {
       type: 'rich_text',
       name: 'Rich Text',
-      settings: [
-        { type: 'richtext', id: 'content', label: 'Content' },
-      ],
+      settings: [{ type: 'richtext', id: 'content', label: 'Content' }],
     },
   ],
 };
 ```
 
-**`_sections/hero-banner.liquid`**
-
 ```liquid
-{% schema 'hero-banner' %}{% endschema %}
+<!-- sections/hero-banner.liquid -->
+{% comment %} {% schema 'hero-banner' %} {% endcomment %}
 ```
 
-**`_sections/landing-page.liquid`**
-
 ```liquid
-{% schema 'landing-page' %}{% endschema %}
+<!-- sections/landing-page.liquid -->
+{% comment %} {% schema 'landing-page' %} {% endcomment %}
 ```
-
-The hero banner settings array is defined once and lives in both output schemas after build.
 
 ---
 
 ## 5. Common Fieldsets with Spread
 
-Extract repeated field groups (like links, buttons, spacing) into partials, then spread them into any schema's settings array.
+Reusable field groups spread into any schema's settings.
 
 **`_schemas/partials/link.js`**
 
 ```js
 module.exports = [
-  {
-    type: 'text',
-    id: 'link_text',
-    label: 'Link text',
-  },
-  {
-    type: 'url',
-    id: 'link_url',
-    label: 'Link URL',
-  },
+  { type: 'text', id: 'link_text', label: 'Link text' },
+  { type: 'url', id: 'link_url', label: 'Link URL' },
 ];
 ```
 
@@ -385,26 +306,8 @@ module.exports = [
 
 ```js
 module.exports = [
-  {
-    type: 'range',
-    id: 'padding_top',
-    label: 'Padding top',
-    min: 0,
-    max: 100,
-    step: 4,
-    unit: 'px',
-    default: 40,
-  },
-  {
-    type: 'range',
-    id: 'padding_bottom',
-    label: 'Padding bottom',
-    min: 0,
-    max: 100,
-    step: 4,
-    unit: 'px',
-    default: 40,
-  },
+  { type: 'range', id: 'padding_top', label: 'Padding top', min: 0, max: 100, step: 4, unit: 'px', default: 40 },
+  { type: 'range', id: 'padding_bottom', label: 'Padding bottom', min: 0, max: 100, step: 4, unit: 'px', default: 40 },
 ];
 ```
 
@@ -417,26 +320,9 @@ const spacingSettings = require('./partials/spacing.js');
 module.exports = {
   name: 'Featured Collection',
   settings: [
-    {
-      type: 'text',
-      id: 'title',
-      label: 'Heading',
-      default: 'Featured Collection',
-    },
-    {
-      type: 'collection',
-      id: 'collection',
-      label: 'Collection',
-    },
-    {
-      type: 'range',
-      id: 'products_to_show',
-      label: 'Products to show',
-      min: 2,
-      max: 12,
-      step: 1,
-      default: 4,
-    },
+    { type: 'text', id: 'title', label: 'Heading', default: 'Featured Collection' },
+    { type: 'collection', id: 'collection', label: 'Collection' },
+    { type: 'range', id: 'products_to_show', label: 'Products to show', min: 2, max: 12, step: 1, default: 4 },
     ...linkSettings,
     ...spacingSettings,
   ],
@@ -444,13 +330,13 @@ module.exports = {
 };
 ```
 
-After build, the `settings` array contains 7 fields: `title`, `collection`, `products_to_show`, `link_text`, `link_url`, `padding_top`, `padding_bottom`. Add a field to either partial and every schema using it picks it up on next build.
+Result: 7 settings. Add a field to either partial — every schema using it picks it up.
 
 ---
 
 ## 6. Looping Fieldsets via Factory Functions
 
-When a section needs multiple instances of the same field group (e.g. 3 links, 5 slides), use a factory function.
+Generate multiple instances of a field group.
 
 **`_schemas/partials/create-links.js`**
 
@@ -460,49 +346,8 @@ module.exports = function createLinks(total) {
   return new Array(total).fill(null).flatMap(function (_, index) {
     var n = index + 1;
     return [
-      {
-        type: 'text',
-        id: 'link_text_' + n,
-        label: 'Link text ' + n,
-      },
-      {
-        type: 'url',
-        id: 'link_url_' + n,
-        label: 'Link URL ' + n,
-      },
-    ];
-  });
-};
-```
-
-**`_schemas/partials/create-slides.js`**
-
-```js
-module.exports = function createSlides(total) {
-  total = total || 1;
-  return new Array(total).fill(null).flatMap(function (_, index) {
-    var n = index + 1;
-    return [
-      {
-        type: 'image_picker',
-        id: 'slide_image_' + n,
-        label: 'Slide ' + n + ' image',
-      },
-      {
-        type: 'text',
-        id: 'slide_heading_' + n,
-        label: 'Slide ' + n + ' heading',
-      },
-      {
-        type: 'textarea',
-        id: 'slide_text_' + n,
-        label: 'Slide ' + n + ' text',
-      },
-      {
-        type: 'url',
-        id: 'slide_link_' + n,
-        label: 'Slide ' + n + ' link',
-      },
+      { type: 'text', id: 'link_text_' + n, label: 'Link text ' + n },
+      { type: 'url', id: 'link_url_' + n, label: 'Link URL ' + n },
     ];
   });
 };
@@ -512,121 +357,79 @@ module.exports = function createSlides(total) {
 
 ```js
 const createLinks = require('./partials/create-links.js');
-const createSlides = require('./partials/create-slides.js');
 
 module.exports = {
   name: 'Hero Slideshow',
   settings: [
-    {
-      type: 'checkbox',
-      id: 'autoplay',
-      label: 'Auto-rotate slides',
-      default: true,
-    },
-    {
-      type: 'range',
-      id: 'speed',
-      label: 'Change slides every',
-      min: 3,
-      max: 10,
-      step: 1,
-      unit: 's',
-      default: 5,
-    },
-    ...createSlides(5),
-    ...createLinks(2),
+    { type: 'checkbox', id: 'autoplay', label: 'Auto-rotate', default: true },
+    ...createLinks(3),
   ],
   presets: [{ name: 'Hero Slideshow' }],
 };
 ```
 
-After build the schema has 2 global settings + 20 slide fields (4 per slide x 5) + 4 link fields (2 per link x 2) = **26 settings**, all generated from two function calls.
+Result: 1 checkbox + 6 link fields (2 per link x 3) = 7 settings from one function call.
 
 ---
 
 ## 7. Section-Specific Overrides (Function Export)
 
-Export a function instead of an object. The function receives `(filename, inlineContent)` — use this to customise the schema per section without duplicating it.
+Export a function instead of an object. It receives `(filename, inlineContent)`.
 
 **`_schemas/page-schema.js`**
 
 ```js
-const spacingSettings = require('./partials/spacing.js');
-
 module.exports = function (filename, content) {
   return {
     name: content.name || filename.replace('.liquid', ''),
     tag: 'section',
     class: content.class || 'page-section',
     settings: [
-      {
-        type: 'richtext',
-        id: 'body',
-        label: 'Page content',
-      },
-      {
-        type: 'image_picker',
-        id: 'featured_image',
-        label: 'Featured image',
-      },
-      ...spacingSettings,
+      { type: 'richtext', id: 'body', label: 'Page content' },
+      { type: 'image_picker', id: 'featured_image', label: 'Featured image' },
     ],
   };
 };
 ```
 
-Each source section provides its own name and optional class via inline JSON:
+Each section provides overrides via a second comment block:
 
-**`_sections/about-page.liquid`**
+**`sections/about-page.liquid`**
 
 ```liquid
-<section class="page-section {{ section.settings.class }}">
-  {{ section.settings.body }}
-</section>
+<section class="page-section">{{ section.settings.body }}</section>
 
-{% schema 'page-schema' %}
-{
-  "name": "About Us",
-  "class": "about-page"
-}
-{% endschema %}
+{% comment %} {% schema 'page-schema' %} {% endcomment %}
+{% comment %} { "name": "About Us", "class": "about-page" } {% endcomment %}
 ```
 
-**`_sections/contact-page.liquid`**
+**`sections/contact-page.liquid`**
 
 ```liquid
-<section class="page-section {{ section.settings.class }}">
-  {{ section.settings.body }}
-</section>
+<section class="page-section">{{ section.settings.body }}</section>
 
-{% schema 'page-schema' %}
-{
-  "name": "Contact",
-  "class": "contact-page"
-}
-{% endschema %}
+{% comment %} {% schema 'page-schema' %} {% endcomment %}
+{% comment %} { "name": "Contact" } {% endcomment %}
 ```
 
-**`_sections/faq-page.liquid`** (no inline JSON — falls back to filename)
+**`sections/faq-page.liquid`** (no override — falls back to filename)
 
 ```liquid
-<section class="page-section">
-  {{ section.settings.body }}
-</section>
+<section class="page-section">{{ section.settings.body }}</section>
 
-{% schema 'page-schema' %}{% endschema %}
+{% comment %} {% schema 'page-schema' %} {% endcomment %}
 ```
 
 After build:
-- `sections/about-page.liquid` gets `"name": "About Us"`, `"class": "about-page"`
-- `sections/contact-page.liquid` gets `"name": "Contact"`, `"class": "contact-page"`
-- `sections/faq-page.liquid` gets `"name": "faq-page"`, `"class": "page-section"` (defaults)
+- `about-page.liquid` → `"name": "About Us"`
+- `contact-page.liquid` → `"name": "Contact"`
+- `faq-page.liquid` → `"name": "faq-page"` (from filename)
 
 ---
 
 ## 8. Inline JSON Merging (Static Export)
 
-When the schema export is an **object** (not a function), any inline JSON between the tags is **shallow-merged** on top. Inline properties win.
+For **object** exports (not functions), inline JSON is **shallow-merged** on top. Inline wins.
 
 **`_schemas/newsletter.json`**
 
@@ -634,82 +437,42 @@ When the schema export is an **object** (not a function), any inline JSON betwee
 {
   "name": "Newsletter",
   "settings": [
-    {
-      "type": "text",
-      "id": "heading",
-      "label": "Heading",
-      "default": "Subscribe to our newsletter"
-    },
-    {
-      "type": "text",
-      "id": "button_text",
-      "label": "Button text",
-      "default": "Subscribe"
-    }
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Subscribe" },
+    { "type": "text", "id": "button_text", "label": "Button text", "default": "Submit" }
   ],
-  "presets": [
-    { "name": "Newsletter" }
-  ]
+  "presets": [{ "name": "Newsletter" }]
 }
 ```
 
-**`_sections/newsletter.liquid`** (no inline — gets the default name)
+**`sections/newsletter.liquid`** (no override)
 
 ```liquid
-{% schema 'newsletter' %}{% endschema %}
+{% comment %} {% schema 'newsletter' %} {% endcomment %}
 ```
 
-**`_sections/footer-newsletter.liquid`** (overrides name via inline JSON)
+**`sections/footer-newsletter.liquid`** (overrides name)
 
 ```liquid
-{% schema 'newsletter' %}
-{
-  "name": "Footer Newsletter"
-}
-{% endschema %}
+{% comment %} {% schema 'newsletter' %} {% endcomment %}
+{% comment %} { "name": "Footer Newsletter" } {% endcomment %}
 ```
 
 After build:
-- `sections/newsletter.liquid` gets `"name": "Newsletter"` (unchanged)
-- `sections/footer-newsletter.liquid` gets `"name": "Footer Newsletter"` (overridden), but keeps the same `settings` and `presets`
+- `newsletter.liquid` → `"name": "Newsletter"`
+- `footer-newsletter.liquid` → `"name": "Footer Newsletter"` (same settings, overridden name)
 
 ---
 
 ## 9. Combined Real-World Pattern
 
-A full theme example pulling everything together.
-
-### File structure
-
-```
-_schemas/
-├── partials/
-│   ├── link.js               ← common link fieldset
-│   ├── create-links.js       ← looping link factory
-│   ├── spacing.js            ← padding top/bottom
-│   ├── color-scheme.js       ← reusable color scheme picker
-│   └── hero-settings.js      ← hero section settings as a partial
-├── hero-banner.js            ← uses hero-settings partial
-├── featured-collection.js    ← uses link + spacing partials
-├── promotional-grid.js       ← uses create-links factory + color-scheme
-└── page-template.js          ← function export for per-page overrides
-
-_sections/
-├── hero-banner.liquid
-├── featured-collection.liquid
-├── promotional-grid.liquid
-├── shipping-policy.liquid
-└── returns-policy.liquid
-```
+Everything together in a full theme.
 
 ### `_schemas/partials/color-scheme.js`
 
 ```js
 module.exports = [
   {
-    type: 'select',
-    id: 'color_scheme',
-    label: 'Color scheme',
+    type: 'select', id: 'color_scheme', label: 'Color scheme',
     options: [
       { value: 'light', label: 'Light' },
       { value: 'dark', label: 'Dark' },
@@ -717,37 +480,6 @@ module.exports = [
     ],
     default: 'light',
   },
-];
-```
-
-### `_schemas/partials/hero-settings.js`
-
-```js
-const colorScheme = require('./color-scheme.js');
-
-module.exports = [
-  {
-    type: 'image_picker',
-    id: 'image',
-    label: 'Background image',
-  },
-  {
-    type: 'video_url',
-    id: 'video_url',
-    label: 'Background video URL',
-    accept: ['youtube', 'vimeo'],
-  },
-  {
-    type: 'text',
-    id: 'heading',
-    label: 'Heading',
-  },
-  {
-    type: 'richtext',
-    id: 'subheading',
-    label: 'Subheading',
-  },
-  ...colorScheme,
 ];
 ```
 
@@ -761,20 +493,8 @@ const spacingSettings = require('./partials/spacing.js');
 module.exports = {
   name: 'Promotional Grid',
   settings: [
-    {
-      type: 'text',
-      id: 'heading',
-      label: 'Section heading',
-    },
-    {
-      type: 'range',
-      id: 'columns',
-      label: 'Columns per row',
-      min: 2,
-      max: 4,
-      step: 1,
-      default: 3,
-    },
+    { type: 'text', id: 'heading', label: 'Section heading' },
+    { type: 'range', id: 'columns', label: 'Columns', min: 2, max: 4, step: 1, default: 3 },
     ...colorScheme,
     ...spacingSettings,
   ],
@@ -783,34 +503,14 @@ module.exports = {
       type: 'promo_card',
       name: 'Promo Card',
       settings: [
-        {
-          type: 'image_picker',
-          id: 'image',
-          label: 'Card image',
-        },
-        {
-          type: 'text',
-          id: 'title',
-          label: 'Card title',
-        },
-        {
-          type: 'textarea',
-          id: 'description',
-          label: 'Card description',
-        },
+        { type: 'image_picker', id: 'image', label: 'Image' },
+        { type: 'text', id: 'title', label: 'Title' },
         ...createLinks(1),
       ],
     },
   ],
   presets: [
-    {
-      name: 'Promotional Grid',
-      blocks: [
-        { type: 'promo_card' },
-        { type: 'promo_card' },
-        { type: 'promo_card' },
-      ],
-    },
+    { name: 'Promotional Grid', blocks: [{ type: 'promo_card' }, { type: 'promo_card' }, { type: 'promo_card' }] },
   ],
 };
 ```
@@ -823,24 +523,13 @@ const colorScheme = require('./partials/color-scheme.js');
 
 module.exports = function (filename, content) {
   var baseName = filename.replace('.liquid', '');
-
   return {
-    name: content.name || baseName.replace(/-/g, ' ').replace(/\b\w/g, function (c) {
-      return c.toUpperCase();
-    }),
+    name: content.name || baseName.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }),
     tag: 'section',
     class: content.class || baseName,
     settings: [
-      {
-        type: 'richtext',
-        id: 'body',
-        label: 'Content',
-      },
-      {
-        type: 'image_picker',
-        id: 'featured_image',
-        label: 'Featured image',
-      },
+      { type: 'richtext', id: 'body', label: 'Content' },
+      { type: 'image_picker', id: 'featured_image', label: 'Featured image' },
       ...colorScheme,
       ...spacingSettings,
     ],
@@ -848,61 +537,50 @@ module.exports = function (filename, content) {
 };
 ```
 
-### Source section files
+### Section files
 
-**`_sections/promotional-grid.liquid`**
+**`sections/promotional-grid.liquid`**
 
 ```liquid
 <section class="promo-grid">
   {% for block in section.blocks %}
-    <div class="promo-card" {{ block.shopify_attributes }}>
-      <!-- card markup -->
-    </div>
+    <div class="promo-card" {{ block.shopify_attributes }}><!-- card --></div>
   {% endfor %}
 </section>
 
-{% schema 'promotional-grid' %}{% endschema %}
+{% comment %} {% schema 'promotional-grid' %} {% endcomment %}
 ```
 
-**`_sections/shipping-policy.liquid`** (uses function export, custom name)
+**`sections/shipping-policy.liquid`**
 
 ```liquid
-<section class="page-section">
-  {{ section.settings.body }}
-</section>
+<section class="page-section">{{ section.settings.body }}</section>
 
-{% schema 'page-template' %}
-{
-  "name": "Shipping Policy"
-}
-{% endschema %}
+{% comment %} {% schema 'page-template' %} {% endcomment %}
+{% comment %} { "name": "Shipping Policy" } {% endcomment %}
 ```
 
-**`_sections/returns-policy.liquid`** (uses function export, auto-generates name)
+**`sections/returns-policy.liquid`** (auto-generates name from filename)
 
 ```liquid
-<section class="page-section">
-  {{ section.settings.body }}
-</section>
+<section class="page-section">{{ section.settings.body }}</section>
 
-{% schema 'page-template' %}{% endschema %}
+{% comment %} {% schema 'page-template' %} {% endcomment %}
 ```
 
 After `npx climaybe build-schemas`:
-- `sections/promotional-grid.liquid` gets the full schema with looped link fields inside each block, shared color scheme and spacing
-- `sections/shipping-policy.liquid` gets `"name": "Shipping Policy"` from inline JSON
-- `sections/returns-policy.liquid` gets `"name": "Returns Policy"` auto-generated from the filename
+- `promotional-grid.liquid` — full schema with link fields in blocks, color scheme, spacing
+- `shipping-policy.liquid` — `"name": "Shipping Policy"` from inline override
+- `returns-policy.liquid` — `"name": "Returns Policy"` auto-generated from filename
 
 ---
 
 ## Tips
 
-- **`_sections/` is source, `sections/` is output.** Edit files in `_sections/`, never in `sections/` directly (they get overwritten on build). Sections that don't use dynamic schemas can stay in `sections/` and won't be touched.
-- **JS over JSON** for schemas that benefit from comments, imports, or computation. JSON for simple static schemas.
-- **Partials go in `_schemas/partials/`** by convention — they are not directly referenced by sections, only imported by other schema files.
-- **Rebuild after changes**: run `npx climaybe build-schemas` after editing `_sections/` or `_schemas/` files.
-- **Use `--dry-run`** to verify output before writing.
-- **Use `--list`** to see which source sections reference which schemas.
-- **Whitespace control**: the builder matches both `{% schema 'x' %}` and `{%- schema 'x' -%}` variants.
-- **Cache busting**: the builder clears the Node require cache before each load, so changes are picked up without restarting.
-- **`.gitignore`**: consider adding `sections/` to `.gitignore` if all your sections use the builder (generated output). If some sections are static and some are built, only put the built ones in `_sections/`.
+- **No separate source folder.** Everything stays in `sections/`. The comment marker is invisible to Shopify.
+- **Theme editor safe.** The marker survives any edit to the markup above it. Rebuild after pulling theme editor changes.
+- **Inline overrides** use a second `{% comment %}...{% endcomment %}` block between the marker and the generated schema. This is also invisible to Shopify.
+- **Sections without markers** are completely ignored by the builder.
+- **JS over JSON** for schemas that need comments, imports, or computation.
+- **Partials** go in `_schemas/partials/` by convention.
+- **`--dry-run`** to verify before writing, **`--list`** to see markers and references.

@@ -272,21 +272,24 @@ If these files already exist, `init` warns that they will be replaced.
 
 ### Section schema builder
 
-Build Shopify section schemas dynamically from JavaScript or JSON files using `climaybe build-schemas`.
+Build Shopify section schemas dynamically from JavaScript or JSON files using `climaybe build-schemas`. Works directly in `sections/` — no separate source folder, no sync issues with the theme editor.
 
-**How it works:** Source section files live in `_sections/` (your working files). Schema definitions live in `_schemas/` as JS or JSON. The builder reads `_sections/*.liquid`, resolves `{% schema 'name' %}` references against `_schemas/`, injects the JSON, and writes the result to `sections/` — the folder Shopify actually reads. Your source files in `_sections/` are never modified, so rebuilds are always repeatable.
-
-```
-_sections/hero-banner.liquid  ──┐
-                                ├──▶  sections/hero-banner.liquid  (with JSON injected)
-_schemas/hero-banner.js       ──┘
-```
-
-Reference a schema in `_sections/*.liquid`:
+**How it works:** Add a comment marker at the end of any `sections/*.liquid` file. The builder finds the marker, resolves the schema from `_schemas/`, and writes the generated `{% schema %}...{% endschema %}` block below it. The marker is never removed, so rebuilds always work — even after Shopify theme editor edits.
 
 ```liquid
-{% schema 'hero-banner' %}{% endschema %}
+<!-- your section markup -->
+<section class="hero">{{ section.settings.title }}</section>
+
+{% comment %} {% schema 'hero-banner' %} {% endcomment %}
+{% schema %}
+{
+  "name": "Hero Banner",
+  "settings": [...]
+}
+{% endschema %}
 ```
+
+The comment is invisible to Shopify. The generated `{% schema %}` block below it is what Shopify reads. On rebuild, only the generated block is replaced.
 
 **Supported patterns:**
 
@@ -295,12 +298,12 @@ Reference a schema in `_sections/*.liquid`:
 - **Common fieldsets** — spread partial arrays into settings (`...linkSettings`)
 - **Looping fieldsets** — factory functions that generate repeated field groups
 - **Section-specific overrides** — export a function receiving `(filename, inlineContent)` to customise per section
-- **Inline JSON merging** — JSON between the schema tags merges with the exported object (inline wins)
+- **Inline JSON merging** — add a second comment block with JSON overrides
 
 ```bash
-npx climaybe build-schemas              # build _sections/ → sections/
+npx climaybe build-schemas              # generate schemas in sections/
 npx climaybe build-schemas --dry-run    # preview without writing files
-npx climaybe build-schemas --list       # list schema files and references
+npx climaybe build-schemas --list       # list schema files and markers
 ```
 
 Example `_schemas/hero-banner.js`:
@@ -317,7 +320,7 @@ module.exports = {
 };
 ```
 
-**Full examples:** See **[Schema Builder Examples](docs/SCHEMA_BUILDER_EXAMPLES.md)** for working code covering every pattern — basic JSON/JS, shared schemas, partials, fieldset factories, function exports, inline merging, and a combined real-world theme setup.
+**Full examples:** See **[Schema Builder Examples](docs/SCHEMA_BUILDER_EXAMPLES.md)** for working code covering every pattern.
 
 You can install/update this later with:
 
@@ -391,9 +394,7 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 │       ├── config/settings_data.json
 │       ├── templates/*.json
 │       └── sections/*.json
-├── _sections/           (optional: section source files for schema builder)
-│   └── hero-banner.liquid
-├── _schemas/            (optional: JS/JSON schema definitions)
+├── _schemas/            (optional: JS/JSON schema definitions for build-schemas)
 │   ├── hero-banner.js
 │   └── partials/
 │       └── link.js

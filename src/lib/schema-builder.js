@@ -1,17 +1,30 @@
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SCHEMA_DIR = '_schemas';
-const SECTIONS_SRC_DIR = '_sections';
-const SECTIONS_OUT_DIR = 'sections';
 
-const SCHEMA_REF_REGEX =
-  /\{%-?\s*schema\s+['"]([^'"]+)['"]\s*-?%\}([\s\S]*?)\{%-?\s*endschema\s*-?%\}/g;
+// Matches: {% comment %} {% schema 'name' %} {% endcomment %}
+// with optional whitespace-control dashes and flexible spacing.
+const MARKER_REGEX =
+  /\{%-?\s*comment\s*-?%\}\s*\{%-?\s*schema\s+['"]([^'"]+)['"]\s*-?%\}\s*\{%-?\s*endcomment\s*-?%\}/;
+
+// Matches the marker followed by an optional inline-override block and then
+// an optional existing generated {% schema %}...{% endschema %} block.
+// Group 1: schema name
+// Group 2: everything between the marker and the generated block (inline overrides or empty)
+// Group 3: the existing generated block (if present)
+const MARKER_WITH_OUTPUT_REGEX =
+  /(\{%-?\s*comment\s*-?%\}\s*\{%-?\s*schema\s+['"]([^'"]+)['"]\s*-?%\}\s*\{%-?\s*endcomment\s*-?%\})([\s\S]*?)(\{%-?\s*schema\s*-?%\}[\s\S]*?\{%-?\s*endschema\s*-?%\})?\s*$/;
+
+// Separate regex to detect inline override JSON between comment-marker and
+// generated block. Looks for {% comment %} ... {% endcomment %} blocks that
+// contain JSON.
+const INLINE_OVERRIDE_REGEX =
+  /\{%-?\s*comment\s*-?%\}\s*(\{[\s\S]*?\})\s*\{%-?\s*endcomment\s*-?%\}/;
 
 /**
  * Resolve a schema source file (.js or .json) from the schemas directory.
- * Returns the absolute path or null when not found.
  */
 function resolveSchemaFile(schemasDir, name) {
   const jsPath = join(schemasDir, `${name}.js`);
@@ -38,8 +51,7 @@ function loadSchemaModule(schemasDir, absolutePath) {
 }
 
 /**
- * Parse optional inline JSON between the schema tags.
- * Returns an empty object when the content is blank or invalid.
+ * Parse optional inline JSON.
  */
 function parseInlineContent(raw) {
   const trimmed = (raw || '').trim();
@@ -55,9 +67,8 @@ function parseInlineContent(raw) {
  * Evaluate the schema export.
  *
  * - **Function exports** receive `(filename, inlineContent)` and must return
- *   the schema object — this covers the "section-specific overrides" pattern.
- * - **Object exports** are merged with any inline content (inline wins) so
- *   individual sections can override fields like `name`.
+ *   the schema object.
+ * - **Object exports** are merged with any inline content (inline wins).
  */
 function evaluateSchema(schemaExport, sectionFilename, inlineContent) {
   const raw = schemaExport?.default ?? schemaExport;
@@ -74,61 +85,55 @@ function evaluateSchema(schemaExport, sectionFilename, inlineContent) {
 /**
  * Build section schemas for a Shopify theme project.
  *
- * Source files live in `_sections/*.liquid` (never shipped to Shopify).
- * Schema definitions live in `_schemas/` as JS or JSON files.
+ * Scans `sections/*.liquid` for a comment-based marker:
  *
- * The builder reads each `_sections/*.liquid` file, resolves any
- * `{% schema 'name' %}...{% endschema %}` references against `_schemas/`,
- * injects the resulting JSON, and writes the output to `sections/` — the
- * folder Shopify actually reads. The source tag in `_sections/` is preserved
- * so the build is always repeatable.
+ *   {% comment %} {% schema 'name' %} {% endcomment %}
  *
- * Sections without schema references are copied verbatim to `sections/`.
+ * When found, resolves `_schemas/name.js` (or `.json`), evaluates it, and
+ * writes (or replaces) the generated `{% schema %}...{% endschema %}` block
+ * directly below the marker in the same file. The marker is never removed,
+ * so subsequent rebuilds always work.
+ *
+ * Optional inline overrides can be placed in a second comment block between
+ * the marker and the generated schema:
+ *
+ *   {% comment %} {% schema 'name' %} {% endcomment %}
+ *   {% comment %} { "name": "Custom Name" } {% endcomment %}
+ *   {% schema %}...{% endschema %}
  *
  * @param {object}  options
  * @param {string}  [options.cwd]    Theme project root (default `process.cwd()`).
  * @param {boolean} [options.dryRun] When true, compute schemas without writing files.
- * @returns {{ processed: Array<{section: string, schema: string}>, copied: string[], errors: Array<{section: string, schema: string, error: string}> }}
+ * @returns {{ processed: Array<{section: string, schemaName: string}>, skipped: string[], errors: Array<{section: string, schema: string, error: string}> }}
  */
 export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
   const schemasDir = join(cwd, SCHEMA_DIR);
-  const srcDir = join(cwd, SECTIONS_SRC_DIR);
-  const outDir = join(cwd, SECTIONS_OUT_DIR);
+  const sectionsDir = join(cwd, 'sections');
 
-  if (!existsSync(srcDir)) {
-    return { processed: [], copied: [], errors: [] };
+  if (!existsSync(sectionsDir)) {
+    return { processed: [], skipped: [], errors: [] };
   }
 
-  const sectionFiles = readdirSync(srcDir, { withFileTypes: true })
+  const sectionFiles = readdirSync(sectionsDir, { withFileTypes: true })
     .filter((d) => d.isFile() && d.name.endsWith('.liquid'))
     .map((d) => d.name)
     .sort();
 
   if (sectionFiles.length === 0) {
-    return { processed: [], copied: [], errors: [] };
-  }
-
-  if (!dryRun) {
-    mkdirSync(outDir, { recursive: true });
+    return { processed: [], skipped: [], errors: [] };
   }
 
   const processed = [];
-  const copied = [];
+  const skipped = [];
   const errors = [];
 
   for (const sectionFile of sectionFiles) {
-    const srcPath = join(srcDir, sectionFile);
-    const outPath = join(outDir, sectionFile);
-    const source = readFileSync(srcPath, 'utf-8');
+    const sectionPath = join(sectionsDir, sectionFile);
+    const content = readFileSync(sectionPath, 'utf-8');
 
-    const re = new RegExp(SCHEMA_REF_REGEX.source, SCHEMA_REF_REGEX.flags);
-    const hasRef = re.test(source);
-
-    if (!hasRef) {
-      if (!dryRun) {
-        writeFileSync(outPath, source, 'utf-8');
-      }
-      copied.push(sectionFile);
+    // Check for the comment-based marker
+    if (!MARKER_REGEX.test(content)) {
+      skipped.push(sectionFile);
       continue;
     }
 
@@ -136,52 +141,73 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
       errors.push({
         section: sectionFile,
         schema: '(unknown)',
-        error: '_schemas/ directory not found — cannot resolve schema references',
+        error: '_schemas/ directory not found',
       });
       continue;
     }
 
-    let output = source;
-    let hasError = false;
+    const fullMatch = content.match(MARKER_WITH_OUTPUT_REGEX);
+    if (!fullMatch) {
+      skipped.push(sectionFile);
+      continue;
+    }
 
-    output = output.replace(SCHEMA_REF_REGEX, (_match, schemaName, inlineJson) => {
-      const schemaFile = resolveSchemaFile(schemasDir, schemaName);
-      if (!schemaFile) {
-        errors.push({
-          section: sectionFile,
-          schema: schemaName,
-          error: `Schema file not found: _schemas/${schemaName}.js or .json`,
-        });
-        hasError = true;
-        return _match;
+    const marker = fullMatch[1];
+    const schemaName = fullMatch[2];
+    const betweenContent = fullMatch[3] || '';
+    // fullMatch[4] is the existing generated block (may be undefined)
+
+    const schemaFile = resolveSchemaFile(schemasDir, schemaName);
+    if (!schemaFile) {
+      errors.push({
+        section: sectionFile,
+        schema: schemaName,
+        error: `Schema file not found: _schemas/${schemaName}.js or .json`,
+      });
+      continue;
+    }
+
+    try {
+      const schemaExport = loadSchemaModule(schemasDir, schemaFile);
+
+      // Look for inline override JSON in a comment block between marker and output
+      let inlineContent = {};
+      const inlineMatch = betweenContent.match(INLINE_OVERRIDE_REGEX);
+      if (inlineMatch) {
+        inlineContent = parseInlineContent(inlineMatch[1]);
       }
 
-      try {
-        const schemaExport = loadSchemaModule(schemasDir, schemaFile);
-        const inlineContent = parseInlineContent(inlineJson);
-        const schema = evaluateSchema(schemaExport, sectionFile, inlineContent);
-        const json = JSON.stringify(schema, null, 2);
-        return `{% schema %}\n${json}\n{% endschema %}`;
-      } catch (err) {
-        errors.push({
-          section: sectionFile,
-          schema: schemaName,
-          error: err.message,
-        });
-        hasError = true;
-        return _match;
-      }
-    });
+      const schema = evaluateSchema(schemaExport, sectionFile, inlineContent);
+      const json = JSON.stringify(schema, null, 2);
+      const generatedBlock = `{% schema %}\n${json}\n{% endschema %}`;
 
-    if (!hasError) {
+      // Build new file content: everything before the marker, the marker,
+      // any inline-override comment blocks, then the new generated block.
+      const markerIndex = content.indexOf(marker);
+      const beforeMarker = content.substring(0, markerIndex);
+
+      // Preserve inline-override comment blocks (if any) between marker and output
+      let inlineOverrideBlock = '';
+      if (inlineMatch) {
+        inlineOverrideBlock = '\n' + inlineMatch[0];
+      }
+
+      const newContent = beforeMarker + marker + inlineOverrideBlock + '\n' + generatedBlock + '\n';
+
       if (!dryRun) {
-        writeFileSync(outPath, output, 'utf-8');
+        writeFileSync(sectionPath, newContent, 'utf-8');
       }
-      processed.push({ section: sectionFile, schema: output });
+      processed.push({ section: sectionFile, schemaName });
+    } catch (err) {
+      errors.push({
+        section: sectionFile,
+        schema: schemaName,
+        error: err.message,
+      });
     }
   }
 
-  return { processed, copied, errors };
+  return { processed, skipped, errors };
 }
 
 /**
@@ -197,26 +223,21 @@ export function listSchemaFiles(cwd = process.cwd()) {
 }
 
 /**
- * List source section files in `_sections/` that contain schema references.
+ * List section files that contain the comment-based schema marker.
  */
 export function listSectionsWithSchemaRefs(cwd = process.cwd()) {
-  const srcDir = join(cwd, SECTIONS_SRC_DIR);
-  if (!existsSync(srcDir)) return [];
+  const sectionsDir = join(cwd, 'sections');
+  if (!existsSync(sectionsDir)) return [];
 
   const results = [];
-  const files = readdirSync(srcDir, { withFileTypes: true })
+  const files = readdirSync(sectionsDir, { withFileTypes: true })
     .filter((d) => d.isFile() && d.name.endsWith('.liquid'));
 
   for (const file of files) {
-    const content = readFileSync(join(srcDir, file.name), 'utf-8');
-    const refs = [];
-    let m;
-    const re = new RegExp(SCHEMA_REF_REGEX.source, SCHEMA_REF_REGEX.flags);
-    while ((m = re.exec(content)) !== null) {
-      refs.push(m[1]);
-    }
-    if (refs.length > 0) {
-      results.push({ section: file.name, schemas: refs });
+    const content = readFileSync(join(sectionsDir, file.name), 'utf-8');
+    const match = content.match(MARKER_REGEX);
+    if (match) {
+      results.push({ section: file.name, schemas: [match[1]] });
     }
   }
   return results;

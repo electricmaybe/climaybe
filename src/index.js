@@ -87,7 +87,7 @@ function registerThemeCommands(cmd) {
 
   cmd
     .command('build-schemas')
-    .description('Build section schemas from _schemas/ JS/JSON into sections/*.liquid')
+    .description('Generate section schemas from _schemas/ JS/JSON into sections/*.liquid (uses comment markers)')
     .option('--dry-run', 'Show what would be injected without writing files')
     .option('--list', 'List available schema files and section references')
     .action(buildSchemasCommand);
