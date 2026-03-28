@@ -213,6 +213,14 @@ export function isCommitlintEnabled(cwd = process.cwd()) {
 }
 
 /**
+ * Whether optional Liquid performance profile workflows are enabled.
+ */
+export function isProfileWorkflowsEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.profile_workflows === true;
+}
+
+/**
  * Whether bundled Cursor rules, skills, and subagents were installed (init or add-cursor).
  */
 export function isCursorSkillsEnabled(cwd = process.cwd()) {

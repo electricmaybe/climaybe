@@ -13,6 +13,7 @@ import {
   getMode,
   isPreviewWorkflowsEnabled,
   isBuildWorkflowsEnabled,
+  isProfileWorkflowsEnabled,
   isCommitlintEnabled,
   isCursorSkillsEnabled,
   addStoreToConfig,
@@ -315,6 +316,28 @@ describe('config', () => {
       try {
         writeConfig({ stores: {}, build_workflows: true }, dir);
         assert.strictEqual(isBuildWorkflowsEnabled(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('isProfileWorkflowsEnabled', () => {
+    it('returns false when not set or false', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {} }, dir);
+        assert.strictEqual(isProfileWorkflowsEnabled(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns true when profile_workflows is true', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {}, profile_workflows: true }, dir);
+        assert.strictEqual(isProfileWorkflowsEnabled(dir), true);
       } finally {
         teardown();
       }
