@@ -12,6 +12,7 @@ import { appInitCommand } from './commands/app-init.js';
 import { migrateLegacyConfigCommand } from './commands/migrate-legacy-config.js';
 import { buildScriptsCommand } from './commands/build-scripts.js';
 import { createEntrypointsCommand } from './commands/create-entrypoints.js';
+import { buildSchemasCommand } from './commands/build-schemas.js';
 import { serveAll, serveAssets, serveShopify, lintAll, buildAll } from './lib/dev-runtime.js';
 
 /**
@@ -83,6 +84,13 @@ function registerThemeCommands(cmd) {
     .command('create-entrypoints')
     .description('Create _scripts/main.js and _styles/main.css (optional)')
     .action(createEntrypointsCommand);
+
+  cmd
+    .command('build-schemas')
+    .description('Build section schemas from _schemas/ JS/JSON into sections/*.liquid')
+    .option('--dry-run', 'Show what would be injected without writing files')
+    .option('--list', 'List available schema files and section references')
+    .action(buildSchemasCommand);
 
   cmd
     .command('update')
