@@ -21,7 +21,7 @@ describe('schema-builder', () => {
 
   // ── Basic schema injection ────────────────────────────────────────
 
-  it('injects a JSON schema below the comment marker', () => {
+  it('injects a JSON schema below the inline-comment marker', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -35,7 +35,7 @@ describe('schema-builder', () => {
 
       writeFileSync(
         join(dir, 'sections', 'hero-banner.liquid'),
-        `<div>hero</div>\n{% comment %} {% schema 'hero-banner' %} {% endcomment %}\n`,
+        `<div>hero</div>\n{% # schema 'hero-banner' %}\n`,
         'utf-8'
       );
 
@@ -45,7 +45,7 @@ describe('schema-builder', () => {
       assert.strictEqual(errors.length, 0);
 
       const output = readFileSync(join(dir, 'sections', 'hero-banner.liquid'), 'utf-8');
-      assert.match(output, /{% comment %} {% schema 'hero-banner' %} {% endcomment %}/);
+      assert.match(output, /{% # schema 'hero-banner' %}/);
       assert.match(output, /{% schema %}/);
       assert.match(output, /"name": "Hero Banner"/);
       assert.match(output, /"id": "title"/);
@@ -62,9 +62,7 @@ describe('schema-builder', () => {
         join(dir, '_schemas', 'landing.js'),
         `module.exports = {
   name: 'Landing Page',
-  settings: [
-    { label: 'Heading', id: 'heading', type: 'text' }
-  ],
+  settings: [{ label: 'Heading', id: 'heading', type: 'text' }],
   blocks: []
 };`,
         'utf-8'
@@ -72,7 +70,7 @@ describe('schema-builder', () => {
 
       writeFileSync(
         join(dir, 'sections', 'landing.liquid'),
-        `<div>landing</div>\n{% comment %} {% schema 'landing' %} {% endcomment %}\n`,
+        `<div>landing</div>\n{% # schema 'landing' %}\n`,
         'utf-8'
       );
 
@@ -91,7 +89,7 @@ describe('schema-builder', () => {
 
   // ── Marker is preserved ───────────────────────────────────────────
 
-  it('preserves the comment marker after building', () => {
+  it('preserves the inline-comment marker after building', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -102,13 +100,13 @@ describe('schema-builder', () => {
 
       writeFileSync(
         join(dir, 'sections', 'test.liquid'),
-        `<div>test</div>\n{% comment %} {% schema 'test' %} {% endcomment %}\n`,
+        `<div>test</div>\n{% # schema 'test' %}\n`,
         'utf-8'
       );
 
       buildSchemas({ cwd: dir });
       const output = readFileSync(join(dir, 'sections', 'test.liquid'), 'utf-8');
-      assert.match(output, /{% comment %} {% schema 'test' %} {% endcomment %}/);
+      assert.match(output, /{% # schema 'test' %}/);
     } finally {
       teardown();
     }
@@ -127,7 +125,7 @@ describe('schema-builder', () => {
 
       writeFileSync(
         join(dir, 'sections', 'hero.liquid'),
-        `<div>hero</div>\n{% comment %} {% schema 'hero' %} {% endcomment %}\n`,
+        `<div>hero</div>\n{% # schema 'hero' %}\n`,
         'utf-8'
       );
 
@@ -135,7 +133,6 @@ describe('schema-builder', () => {
       const firstBuild = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
       assert.match(firstBuild, /"name": "Hero v1"/);
 
-      // Update schema and rebuild
       writeFileSync(
         join(dir, '_schemas', 'hero.json'),
         JSON.stringify({ name: 'Hero v2', settings: [{ id: 'new', type: 'text', label: 'New' }] }),
@@ -148,10 +145,8 @@ describe('schema-builder', () => {
       assert.match(secondBuild, /"id": "new"/);
       assert.doesNotMatch(secondBuild, /"name": "Hero v1"/);
 
-      // Marker is still there
-      assert.match(secondBuild, /{% comment %} {% schema 'hero' %} {% endcomment %}/);
+      assert.match(secondBuild, /{% # schema 'hero' %}/);
 
-      // Only one schema block
       const schemaBlocks = secondBuild.match(/{% schema %}/g);
       assert.strictEqual(schemaBlocks.length, 1);
     } finally {
@@ -159,9 +154,9 @@ describe('schema-builder', () => {
     }
   });
 
-  // ── Shared schema (same schema for multiple sections) ─────────────
+  // ── Shared schema ─────────────────────────────────────────────────
 
-  it('injects the same schema into multiple sections (shared schema)', () => {
+  it('injects the same schema into multiple sections (shared)', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -175,12 +170,12 @@ describe('schema-builder', () => {
 
       writeFileSync(
         join(dir, 'sections', 'autumn-winter.liquid'),
-        `<div>AW</div>\n{% comment %} {% schema 'seasonal' %} {% endcomment %}\n`,
+        `<div>AW</div>\n{% # schema 'seasonal' %}\n`,
         'utf-8'
       );
       writeFileSync(
         join(dir, 'sections', 'spring-summer.liquid'),
-        `<div>SS</div>\n{% comment %} {% schema 'seasonal' %} {% endcomment %}\n`,
+        `<div>SS</div>\n{% # schema 'seasonal' %}\n`,
         'utf-8'
       );
 
@@ -233,12 +228,12 @@ module.exports = {
 
       writeFileSync(
         join(dir, 'sections', 'hero-banner.liquid'),
-        `<div>hero</div>\n{% comment %} {% schema 'hero-banner' %} {% endcomment %}\n`,
+        `<div>hero</div>\n{% # schema 'hero-banner' %}\n`,
         'utf-8'
       );
       writeFileSync(
         join(dir, 'sections', 'landing-page.liquid'),
-        `<div>landing</div>\n{% comment %} {% schema 'landing-page' %} {% endcomment %}\n`,
+        `<div>landing</div>\n{% # schema 'landing-page' %}\n`,
         'utf-8'
       );
 
@@ -290,7 +285,7 @@ module.exports = {
 
       writeFileSync(
         join(dir, 'sections', 'hero-with-link.liquid'),
-        `<div>hero link</div>\n{% comment %} {% schema 'hero-with-link' %} {% endcomment %}\n`,
+        `<div>hero link</div>\n{% # schema 'hero-with-link' %}\n`,
         'utf-8'
       );
 
@@ -347,7 +342,7 @@ module.exports = {
 
       writeFileSync(
         join(dir, 'sections', 'hero-multi-link.liquid'),
-        `<div>hero multi</div>\n{% comment %} {% schema 'hero-multi-link' %} {% endcomment %}\n`,
+        `<div>hero multi</div>\n{% # schema 'hero-multi-link' %}\n`,
         'utf-8'
       );
 
@@ -367,9 +362,9 @@ module.exports = {
     }
   });
 
-  // ── Section-specific overrides via function export ─────────────────
+  // ── Function exports with inline overrides ────────────────────────
 
-  it('supports function exports for section-specific overrides', () => {
+  it('supports function exports with inline-comment overrides', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -386,8 +381,8 @@ module.exports = {
       writeFileSync(
         join(dir, 'sections', 'about-page.liquid'),
         `<div>about</div>
-{% comment %} {% schema 'page-schema' %} {% endcomment %}
-{% comment %} { "name": "About Us" } {% endcomment %}
+{% # schema 'page-schema' %}
+{% # { "name": "About Us" } %}
 `,
         'utf-8'
       );
@@ -395,8 +390,8 @@ module.exports = {
       writeFileSync(
         join(dir, 'sections', 'contact-page.liquid'),
         `<div>contact</div>
-{% comment %} {% schema 'page-schema' %} {% endcomment %}
-{% comment %} { "name": "Contact" } {% endcomment %}
+{% # schema 'page-schema' %}
+{% # { "name": "Contact" } %}
 `,
         'utf-8'
       );
@@ -416,7 +411,7 @@ module.exports = {
     }
   });
 
-  // ── Inline content merges with static exports ─────────────────────
+  // ── Inline merging with static exports ────────────────────────────
 
   it('merges inline JSON with static schema exports (inline wins)', () => {
     const dir = setup();
@@ -433,8 +428,8 @@ module.exports = {
       writeFileSync(
         join(dir, 'sections', 'custom-section.liquid'),
         `<div>custom</div>
-{% comment %} {% schema 'mergeable' %} {% endcomment %}
-{% comment %} { "name": "Custom Override" } {% endcomment %}
+{% # schema 'mergeable' %}
+{% # { "name": "Custom Override" } %}
 `,
         'utf-8'
       );
@@ -451,9 +446,9 @@ module.exports = {
     }
   });
 
-  // ── Inline override is preserved across rebuilds ──────────────────
+  // ── Inline override preserved across rebuilds ─────────────────────
 
-  it('preserves inline override comment across rebuilds', () => {
+  it('preserves inline override across rebuilds', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -465,8 +460,8 @@ module.exports = {
       writeFileSync(
         join(dir, 'sections', 'card.liquid'),
         `<div>card</div>
-{% comment %} {% schema 'card' %} {% endcomment %}
-{% comment %} { "name": "My Card" } {% endcomment %}
+{% # schema 'card' %}
+{% # { "name": "My Card" } %}
 `,
         'utf-8'
       );
@@ -474,18 +469,17 @@ module.exports = {
       buildSchemas({ cwd: dir });
       const first = readFileSync(join(dir, 'sections', 'card.liquid'), 'utf-8');
       assert.match(first, /"name": "My Card"/);
-      assert.match(first, /{% comment %} \{ "name": "My Card" \} {% endcomment %}/);
+      assert.match(first, /{% # \{ "name": "My Card" \} %}/);
 
       buildSchemas({ cwd: dir });
       const second = readFileSync(join(dir, 'sections', 'card.liquid'), 'utf-8');
-      assert.match(second, /"name": "My Card"/);
       assert.strictEqual(first, second);
     } finally {
       teardown();
     }
   });
 
-  // ── Dry run mode ──────────────────────────────────────────────────
+  // ── Dry run ───────────────────────────────────────────────────────
 
   it('does not write files in dry run mode', () => {
     const dir = setup();
@@ -496,7 +490,7 @@ module.exports = {
         'utf-8'
       );
 
-      const original = `<div>banner</div>\n{% comment %} {% schema 'banner' %} {% endcomment %}\n`;
+      const original = `<div>banner</div>\n{% # schema 'banner' %}\n`;
       writeFileSync(join(dir, 'sections', 'banner.liquid'), original, 'utf-8');
 
       const { processed } = buildSchemas({ cwd: dir, dryRun: true });
@@ -516,7 +510,7 @@ module.exports = {
     try {
       writeFileSync(
         join(dir, 'sections', 'broken.liquid'),
-        `<div>broken</div>\n{% comment %} {% schema 'nonexistent' %} {% endcomment %}\n`,
+        `<div>broken</div>\n{% # schema 'nonexistent' %}\n`,
         'utf-8'
       );
 
@@ -542,7 +536,7 @@ module.exports = {
     }
   });
 
-  it('skips section files without the comment marker', () => {
+  it('skips section files without the marker', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -563,7 +557,7 @@ module.exports = {
 
   // ── Whitespace-control variants ───────────────────────────────────
 
-  it('handles Liquid whitespace-control dashes in the marker', () => {
+  it('handles whitespace-control dashes in the marker', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -574,7 +568,7 @@ module.exports = {
 
       writeFileSync(
         join(dir, 'sections', 'ws-test.liquid'),
-        `<div>ws</div>\n{%- comment -%} {%- schema 'ws-test' -%} {%- endcomment -%}\n`,
+        `<div>ws</div>\n{%- # schema 'ws-test' -%}\n`,
         'utf-8'
       );
 
@@ -590,9 +584,33 @@ module.exports = {
     }
   });
 
-  // ── Survives theme editor edits ───────────────────────────────────
+  it('supports double-quoted schema names', () => {
+    const dir = setup();
+    try {
+      writeFileSync(
+        join(dir, '_schemas', 'dq-test.json'),
+        JSON.stringify({ name: 'DQ Test', settings: [] }),
+        'utf-8'
+      );
 
-  it('rebuilds correctly after Shopify theme editor modifies markup above the marker', () => {
+      writeFileSync(
+        join(dir, 'sections', 'dq-test.liquid'),
+        `<div>dq</div>\n{% # schema "dq-test" %}\n`,
+        'utf-8'
+      );
+
+      const { processed, errors } = buildSchemas({ cwd: dir });
+
+      assert.strictEqual(processed.length, 1);
+      assert.strictEqual(errors.length, 0);
+    } finally {
+      teardown();
+    }
+  });
+
+  // ── Theme editor survival ─────────────────────────────────────────
+
+  it('rebuilds correctly after theme editor modifies markup above the marker', () => {
     const dir = setup();
     try {
       writeFileSync(
@@ -603,18 +621,16 @@ module.exports = {
 
       writeFileSync(
         join(dir, 'sections', 'hero.liquid'),
-        `<div>hero</div>\n{% comment %} {% schema 'hero' %} {% endcomment %}\n`,
+        `<div>hero</div>\n{% # schema 'hero' %}\n`,
         'utf-8'
       );
 
       buildSchemas({ cwd: dir });
 
-      // Simulate theme editor changing markup above the marker
       let content = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
       content = content.replace('<div>hero</div>', '<section class="hero-edited">\n  <h1>Updated</h1>\n</section>');
       writeFileSync(join(dir, 'sections', 'hero.liquid'), content, 'utf-8');
 
-      // Rebuild should still work
       const { processed, errors } = buildSchemas({ cwd: dir });
       assert.strictEqual(processed.length, 1);
       assert.strictEqual(errors.length, 0);
@@ -655,12 +671,12 @@ module.exports = {
 
   // ── listSectionsWithSchemaRefs ────────────────────────────────────
 
-  it('lists sections that contain the comment marker', () => {
+  it('lists sections that contain the inline-comment marker', () => {
     const dir = setup();
     try {
       writeFileSync(
         join(dir, 'sections', 'has-ref.liquid'),
-        `<div>ref</div>\n{% comment %} {% schema 'my-schema' %} {% endcomment %}\n`,
+        `<div>ref</div>\n{% # schema 'my-schema' %}\n`,
         'utf-8'
       );
       writeFileSync(

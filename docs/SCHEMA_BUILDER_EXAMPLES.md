@@ -4,25 +4,19 @@ Complete, working examples for every pattern supported by `climaybe build-schema
 
 ## How it works
 
-Everything happens in the same `sections/` folder Shopify reads. No separate source folder, no sync issues with the theme editor.
-
-1. Add a **comment marker** at the end of any section file:
+Add an inline-comment marker to any `sections/*.liquid` file:
 
 ```liquid
-{% comment %} {% schema 'hero-banner' %} {% endcomment %}
+{% # schema 'hero-banner' %}
 ```
 
-2. Create the schema definition in `_schemas/hero-banner.js` (or `.json`).
-
-3. Run `npx climaybe build-schemas`. The builder writes the generated `{% schema %}...{% endschema %}` block directly below the marker. The marker itself is never touched.
-
-On subsequent builds, the generated block is **replaced** — the marker survives edits from the Shopify theme editor, direct file changes, git merges, whatever.
+Shopify treats `{% # ... %}` as a comment and ignores it. The builder finds the marker, resolves `_schemas/hero-banner.js` (or `.json`), and writes the generated `{% schema %}...{% endschema %}` block directly below it. On subsequent builds, only the generated block is replaced — the marker and everything above it (including theme editor changes) are preserved.
 
 **Directory layout:**
 
 ```
 your-theme/
-├── sections/              ← section files with comment markers
+├── sections/              ← your section files (with inline-comment markers)
 │   ├── hero-banner.liquid
 │   ├── landing-page.liquid
 │   └── static-section.liquid  (no marker — left alone)
@@ -84,7 +78,7 @@ The simplest case — a static `.json` file.
   <a href="{{ section.settings.link }}">{{ section.settings.message }}</a>
 </div>
 
-{% comment %} {% schema 'announcement-bar' %} {% endcomment %}
+{% # schema 'announcement-bar' %}
 ```
 
 **After `npx climaybe build-schemas`:**
@@ -94,7 +88,7 @@ The simplest case — a static `.json` file.
   <a href="{{ section.settings.link }}">{{ section.settings.message }}</a>
 </div>
 
-{% comment %} {% schema 'announcement-bar' %} {% endcomment %}
+{% # schema 'announcement-bar' %}
 {% schema %}
 {
   "name": "Announcement Bar",
@@ -176,7 +170,7 @@ module.exports = {
   <!-- hero markup -->
 </section>
 
-{% comment %} {% schema 'hero-banner' %} {% endcomment %}
+{% # schema 'hero-banner' %}
 ```
 
 ---
@@ -214,7 +208,7 @@ module.exports = {
 ```liquid
 <div class="seasonal-landing"><!-- AW markup --></div>
 
-{% comment %} {% schema 'seasonal-landing' %} {% endcomment %}
+{% # schema 'seasonal-landing' %}
 ```
 
 **`sections/spring-summer-2025.liquid`**
@@ -222,10 +216,10 @@ module.exports = {
 ```liquid
 <div class="seasonal-landing"><!-- SS markup --></div>
 
-{% comment %} {% schema 'seasonal-landing' %} {% endcomment %}
+{% # schema 'seasonal-landing' %}
 ```
 
-Both get identical schema JSON after build. Update `_schemas/seasonal-landing.js` and rebuild to sync both.
+Both get identical schema JSON after build.
 
 ---
 
@@ -279,12 +273,12 @@ module.exports = {
 
 ```liquid
 <!-- sections/hero-banner.liquid -->
-{% comment %} {% schema 'hero-banner' %} {% endcomment %}
+{% # schema 'hero-banner' %}
 ```
 
 ```liquid
 <!-- sections/landing-page.liquid -->
-{% comment %} {% schema 'landing-page' %} {% endcomment %}
+{% # schema 'landing-page' %}
 ```
 
 ---
@@ -392,15 +386,15 @@ module.exports = function (filename, content) {
 };
 ```
 
-Each section provides overrides via a second comment block:
+Each section provides overrides via a second inline comment:
 
 **`sections/about-page.liquid`**
 
 ```liquid
 <section class="page-section">{{ section.settings.body }}</section>
 
-{% comment %} {% schema 'page-schema' %} {% endcomment %}
-{% comment %} { "name": "About Us", "class": "about-page" } {% endcomment %}
+{% # schema 'page-schema' %}
+{% # { "name": "About Us", "class": "about-page" } %}
 ```
 
 **`sections/contact-page.liquid`**
@@ -408,8 +402,8 @@ Each section provides overrides via a second comment block:
 ```liquid
 <section class="page-section">{{ section.settings.body }}</section>
 
-{% comment %} {% schema 'page-schema' %} {% endcomment %}
-{% comment %} { "name": "Contact" } {% endcomment %}
+{% # schema 'page-schema' %}
+{% # { "name": "Contact" } %}
 ```
 
 **`sections/faq-page.liquid`** (no override — falls back to filename)
@@ -417,7 +411,7 @@ Each section provides overrides via a second comment block:
 ```liquid
 <section class="page-section">{{ section.settings.body }}</section>
 
-{% comment %} {% schema 'page-schema' %} {% endcomment %}
+{% # schema 'page-schema' %}
 ```
 
 After build:
@@ -447,14 +441,14 @@ For **object** exports (not functions), inline JSON is **shallow-merged** on top
 **`sections/newsletter.liquid`** (no override)
 
 ```liquid
-{% comment %} {% schema 'newsletter' %} {% endcomment %}
+{% # schema 'newsletter' %}
 ```
 
 **`sections/footer-newsletter.liquid`** (overrides name)
 
 ```liquid
-{% comment %} {% schema 'newsletter' %} {% endcomment %}
-{% comment %} { "name": "Footer Newsletter" } {% endcomment %}
+{% # schema 'newsletter' %}
+{% # { "name": "Footer Newsletter" } %}
 ```
 
 After build:
@@ -548,7 +542,7 @@ module.exports = function (filename, content) {
   {% endfor %}
 </section>
 
-{% comment %} {% schema 'promotional-grid' %} {% endcomment %}
+{% # schema 'promotional-grid' %}
 ```
 
 **`sections/shipping-policy.liquid`**
@@ -556,8 +550,8 @@ module.exports = function (filename, content) {
 ```liquid
 <section class="page-section">{{ section.settings.body }}</section>
 
-{% comment %} {% schema 'page-template' %} {% endcomment %}
-{% comment %} { "name": "Shipping Policy" } {% endcomment %}
+{% # schema 'page-template' %}
+{% # { "name": "Shipping Policy" } %}
 ```
 
 **`sections/returns-policy.liquid`** (auto-generates name from filename)
@@ -565,7 +559,7 @@ module.exports = function (filename, content) {
 ```liquid
 <section class="page-section">{{ section.settings.body }}</section>
 
-{% comment %} {% schema 'page-template' %} {% endcomment %}
+{% # schema 'page-template' %}
 ```
 
 After `npx climaybe build-schemas`:
@@ -577,9 +571,9 @@ After `npx climaybe build-schemas`:
 
 ## Tips
 
-- **No separate source folder.** Everything stays in `sections/`. The comment marker is invisible to Shopify.
-- **Theme editor safe.** The marker survives any edit to the markup above it. Rebuild after pulling theme editor changes.
-- **Inline overrides** use a second `{% comment %}...{% endcomment %}` block between the marker and the generated schema. This is also invisible to Shopify.
+- **No separate source folder.** Everything stays in `sections/`. `{% # ... %}` is an inline comment — Shopify ignores it.
+- **Theme editor safe.** Edits above the marker are preserved. Just rebuild after pulling theme editor changes.
+- **Inline overrides** use a second `{% # { ... } %}` tag below the marker.
 - **Sections without markers** are completely ignored by the builder.
 - **JS over JSON** for schemas that need comments, imports, or computation.
 - **Partials** go in `_schemas/partials/` by convention.

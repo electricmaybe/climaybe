@@ -4,24 +4,24 @@ import { join } from 'node:path';
 
 const SCHEMA_DIR = '_schemas';
 
-// Matches: {% comment %} {% schema 'name' %} {% endcomment %}
-// with optional whitespace-control dashes and flexible spacing.
+// Matches the inline-comment marker: {% # schema 'name' %}
+// Supports whitespace-control dashes and single or double quotes.
 const MARKER_REGEX =
-  /\{%-?\s*comment\s*-?%\}\s*\{%-?\s*schema\s+['"]([^'"]+)['"]\s*-?%\}\s*\{%-?\s*endcomment\s*-?%\}/;
+  /\{%-?\s*#\s*schema\s+['"]([^'"]+)['"]\s*-?%\}/;
 
-// Matches the marker followed by an optional inline-override block and then
-// an optional existing generated {% schema %}...{% endschema %} block.
-// Group 1: schema name
-// Group 2: everything between the marker and the generated block (inline overrides or empty)
-// Group 3: the existing generated block (if present)
+// Matches the marker, then an optional inline-override marker, then an
+// optional existing generated {% schema %}...{% endschema %} block, all the
+// way to end-of-file.
+// Group 1: full marker tag
+// Group 2: schema name
+// Group 3: content between marker and generated block (may contain override)
+// Group 4: existing generated block (may be undefined on first build)
 const MARKER_WITH_OUTPUT_REGEX =
-  /(\{%-?\s*comment\s*-?%\}\s*\{%-?\s*schema\s+['"]([^'"]+)['"]\s*-?%\}\s*\{%-?\s*endcomment\s*-?%\})([\s\S]*?)(\{%-?\s*schema\s*-?%\}[\s\S]*?\{%-?\s*endschema\s*-?%\})?\s*$/;
+  /(\{%-?\s*#\s*schema\s+['"]([^'"]+)['"]\s*-?%\})([\s\S]*?)(\{%-?\s*schema\s*-?%\}[\s\S]*?\{%-?\s*endschema\s*-?%\})?\s*$/;
 
-// Separate regex to detect inline override JSON between comment-marker and
-// generated block. Looks for {% comment %} ... {% endcomment %} blocks that
-// contain JSON.
+// Matches an inline-comment override: {% # { "name": "Custom" } %}
 const INLINE_OVERRIDE_REGEX =
-  /\{%-?\s*comment\s*-?%\}\s*(\{[\s\S]*?\})\s*\{%-?\s*endcomment\s*-?%\}/;
+  /\{%-?\s*#\s*(\{[\s\S]*?\})\s*-?%\}/;
 
 /**
  * Resolve a schema source file (.js or .json) from the schemas directory.
@@ -36,7 +36,7 @@ function resolveSchemaFile(schemasDir, name) {
 
 /**
  * Load a schema module. CommonJS `.js` files are loaded via `createRequire`;
- * `.json` files are parsed directly. Each load busts the require cache so
+ * `.json` files are parsed directly. Cache is busted on every load so
  * rebuilds pick up changes without restarting the process.
  */
 function loadSchemaModule(schemasDir, absolutePath) {
@@ -68,7 +68,7 @@ function parseInlineContent(raw) {
  *
  * - **Function exports** receive `(filename, inlineContent)` and must return
  *   the schema object.
- * - **Object exports** are merged with any inline content (inline wins).
+ * - **Object exports** are shallow-merged with any inline content (inline wins).
  */
 function evaluateSchema(schemaExport, sectionFilename, inlineContent) {
   const raw = schemaExport?.default ?? schemaExport;
@@ -85,20 +85,19 @@ function evaluateSchema(schemaExport, sectionFilename, inlineContent) {
 /**
  * Build section schemas for a Shopify theme project.
  *
- * Scans `sections/*.liquid` for a comment-based marker:
+ * Scans `sections/*.liquid` for an inline-comment marker:
  *
- *   {% comment %} {% schema 'name' %} {% endcomment %}
+ *   {% # schema 'hero-banner' %}
  *
- * When found, resolves `_schemas/name.js` (or `.json`), evaluates it, and
- * writes (or replaces) the generated `{% schema %}...{% endschema %}` block
- * directly below the marker in the same file. The marker is never removed,
- * so subsequent rebuilds always work.
+ * When found, resolves `_schemas/hero-banner.js` (or `.json`), evaluates it,
+ * and writes (or replaces) the generated `{% schema %}...{% endschema %}`
+ * block directly below the marker. The marker is never removed, so rebuilds
+ * always work — even after Shopify theme editor edits.
  *
- * Optional inline overrides can be placed in a second comment block between
- * the marker and the generated schema:
+ * Optional per-section overrides use a second inline comment:
  *
- *   {% comment %} {% schema 'name' %} {% endcomment %}
- *   {% comment %} { "name": "Custom Name" } {% endcomment %}
+ *   {% # schema 'name' %}
+ *   {% # { "name": "Custom Name" } %}
  *   {% schema %}...{% endschema %}
  *
  * @param {object}  options
@@ -131,7 +130,6 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
     const sectionPath = join(sectionsDir, sectionFile);
     const content = readFileSync(sectionPath, 'utf-8');
 
-    // Check for the comment-based marker
     if (!MARKER_REGEX.test(content)) {
       skipped.push(sectionFile);
       continue;
@@ -155,7 +153,6 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
     const marker = fullMatch[1];
     const schemaName = fullMatch[2];
     const betweenContent = fullMatch[3] || '';
-    // fullMatch[4] is the existing generated block (may be undefined)
 
     const schemaFile = resolveSchemaFile(schemasDir, schemaName);
     if (!schemaFile) {
@@ -170,7 +167,6 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
     try {
       const schemaExport = loadSchemaModule(schemasDir, schemaFile);
 
-      // Look for inline override JSON in a comment block between marker and output
       let inlineContent = {};
       const inlineMatch = betweenContent.match(INLINE_OVERRIDE_REGEX);
       if (inlineMatch) {
@@ -181,12 +177,9 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
       const json = JSON.stringify(schema, null, 2);
       const generatedBlock = `{% schema %}\n${json}\n{% endschema %}`;
 
-      // Build new file content: everything before the marker, the marker,
-      // any inline-override comment blocks, then the new generated block.
       const markerIndex = content.indexOf(marker);
       const beforeMarker = content.substring(0, markerIndex);
 
-      // Preserve inline-override comment blocks (if any) between marker and output
       let inlineOverrideBlock = '';
       if (inlineMatch) {
         inlineOverrideBlock = '\n' + inlineMatch[0];
@@ -223,7 +216,7 @@ export function listSchemaFiles(cwd = process.cwd()) {
 }
 
 /**
- * List section files that contain the comment-based schema marker.
+ * List section files that contain the inline-comment schema marker.
  */
 export function listSectionsWithSchemaRefs(cwd = process.cwd()) {
   const sectionsDir = join(cwd, 'sections');

@@ -48,7 +48,7 @@ export async function buildSchemasCommand(opts = {}) {
 
     if (processed.length === 0 && errors.length === 0) {
       console.log(pc.yellow('  No schema markers found in sections/*.liquid.'));
-      console.log(pc.dim("  Add a marker to a section file:  {% comment %} {% schema 'name' %} {% endcomment %}"));
+      console.log(pc.dim("  Add a marker to a section file:  {% # schema 'name' %}"));
       return;
     }
 

@@ -274,13 +274,12 @@ If these files already exist, `init` warns that they will be replaced.
 
 Build Shopify section schemas dynamically from JavaScript or JSON files using `climaybe build-schemas`. Works directly in `sections/` — no separate source folder, no sync issues with the theme editor.
 
-**How it works:** Add a comment marker at the end of any `sections/*.liquid` file. The builder finds the marker, resolves the schema from `_schemas/`, and writes the generated `{% schema %}...{% endschema %}` block below it. The marker is never removed, so rebuilds always work — even after Shopify theme editor edits.
+**How it works:** Add an inline-comment marker at the end of any `sections/*.liquid` file. Shopify treats `{% # ... %}` as a comment and ignores it. The builder finds the marker, resolves the schema from `_schemas/`, and writes the generated `{% schema %}...{% endschema %}` block below it. The marker is never removed, so rebuilds always work — even after Shopify theme editor edits.
 
 ```liquid
-<!-- your section markup -->
 <section class="hero">{{ section.settings.title }}</section>
 
-{% comment %} {% schema 'hero-banner' %} {% endcomment %}
+{% # schema 'hero-banner' %}
 {% schema %}
 {
   "name": "Hero Banner",
@@ -289,7 +288,7 @@ Build Shopify section schemas dynamically from JavaScript or JSON files using `c
 {% endschema %}
 ```
 
-The comment is invisible to Shopify. The generated `{% schema %}` block below it is what Shopify reads. On rebuild, only the generated block is replaced.
+On rebuild, only the generated `{% schema %}` block is replaced. Everything above the marker (including theme editor changes) is preserved.
 
 **Supported patterns:**
 
@@ -298,7 +297,7 @@ The comment is invisible to Shopify. The generated `{% schema %}` block below it
 - **Common fieldsets** — spread partial arrays into settings (`...linkSettings`)
 - **Looping fieldsets** — factory functions that generate repeated field groups
 - **Section-specific overrides** — export a function receiving `(filename, inlineContent)` to customise per section
-- **Inline JSON merging** — add a second comment block with JSON overrides
+- **Inline JSON overrides** — add `{% # { "name": "Custom" } %}` below the marker
 
 ```bash
 npx climaybe build-schemas              # generate schemas in sections/
