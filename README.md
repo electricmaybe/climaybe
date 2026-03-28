@@ -305,6 +305,8 @@ npx climaybe build-schemas --dry-run    # preview without writing files
 npx climaybe build-schemas --list       # list schema files and markers
 ```
 
+Schemas also rebuild automatically during `climaybe serve` and `climaybe serve:assets` — the watcher monitors `_schemas/` and rebuilds on change, tagged `[schema]` in the console. `climaybe build` includes schemas alongside scripts and Tailwind.
+
 Example `_schemas/hero-banner.js`:
 
 ```js

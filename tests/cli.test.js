@@ -62,6 +62,18 @@ describe('CLI', () => {
     assert.ok(program.commands.some((c) => c.name() === 'create-entrypoints'));
   });
 
+  it('registers build-schemas on theme and root with --dry-run and --list options', () => {
+    const program = createProgram();
+    const theme = program.commands.find((c) => c.name() === 'theme');
+    const themeBuildSchemas = theme.commands.find((c) => c.name() === 'build-schemas');
+    const rootBuildSchemas = program.commands.find((c) => c.name() === 'build-schemas');
+    assert.ok(themeBuildSchemas);
+    assert.ok(rootBuildSchemas);
+    const themeFlags = themeBuildSchemas.options.map((o) => o.long);
+    assert.ok(themeFlags.includes('--dry-run'));
+    assert.ok(themeFlags.includes('--list'));
+  });
+
   it('registers app init', () => {
     const program = createProgram();
     const app = program.commands.find((c) => c.name() === 'app');

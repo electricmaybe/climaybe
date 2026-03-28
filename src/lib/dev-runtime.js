@@ -5,6 +5,7 @@ import { isAbsolute, join, relative } from 'node:path';
 import pc from 'picocolors';
 import { readConfig } from './config.js';
 import { buildScripts } from './build-scripts.js';
+import { buildSchemas } from './schema-builder.js';
 import { runShopify } from './shopify-cli.js';
 
 function tagLabel(tag, color = (s) => s) {
@@ -260,6 +261,49 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
       })
     : null;
 
+  const schemasDir = join(cwd, '_schemas');
+  const hasSchemas = existsSync(schemasDir);
+  if (hasSchemas) {
+    try {
+      const result = buildSchemas({ cwd });
+      if (result.processed.length > 0) {
+        writeTaggedLine('schema', pc.green, `built ${result.processed.length} section(s) (initial)`);
+      }
+      if (result.errors.length > 0) {
+        for (const e of result.errors) {
+          writeTaggedLine('schema', pc.green, `error: ${e.section} — ${e.error}`, process.stderr);
+        }
+      }
+    } catch (err) {
+      writeTaggedLine('schema', pc.green, `initial build failed: ${err.message}`, process.stderr);
+    }
+  } else {
+    writeTaggedLine('schema', pc.green, 'skipped (missing _schemas/)');
+  }
+
+  const schemasWatch = hasSchemas
+    ? watchTree({
+        rootDir: schemasDir,
+        ignore: (p) => p.includes('node_modules') || p.includes('/.git/'),
+        debounceMs: 300,
+        onChange: () => {
+          try {
+            const result = buildSchemas({ cwd });
+            if (result.processed.length > 0) {
+              writeTaggedLine('schema', pc.green, `rebuilt ${result.processed.length} section(s)`);
+            }
+            if (result.errors.length > 0) {
+              for (const e of result.errors) {
+                writeTaggedLine('schema', pc.green, `error: ${e.section} — ${e.error}`, process.stderr);
+              }
+            }
+          } catch (err) {
+            writeTaggedLine('schema', pc.green, `build failed: ${err.message}`, process.stderr);
+          }
+        },
+      })
+    : null;
+
   let themeCheckRunning = false;
   let themeCheckQueued = false;
   const runThemeCheck = () => {
@@ -287,7 +331,8 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
             p.includes('/assets/') ||
             p.includes('/.git/') ||
             p.includes('/_scripts/') ||
-            p.includes('/_styles/'),
+            p.includes('/_styles/') ||
+            p.includes('/_schemas/'),
           debounceMs: 800,
           onChange: () => {
             runThemeCheck();
@@ -304,12 +349,13 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
 
   const cleanup = () => {
     safeClose(scriptsWatch);
+    safeClose(schemasWatch);
     safeClose(themeCheckWatch);
     safeKill(tailwind);
     safeKill(devMcp);
   };
 
-  return { tailwind, devMcp, scriptsWatch, themeCheckWatch, cleanup };
+  return { tailwind, devMcp, scriptsWatch, schemasWatch, themeCheckWatch, cleanup };
 }
 
 export function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
@@ -355,6 +401,24 @@ export function lintAll({ cwd = process.cwd() } = {}) {
 
 export function buildAll({ cwd = process.cwd() } = {}) {
   const env = { ...process.env, NODE_ENV: 'production' };
+
+  let schemasOk = true;
+  try {
+    const schemaResult = buildSchemas({ cwd });
+    if (schemaResult.processed.length > 0) {
+      writeTaggedLine('schema', pc.green, `built ${schemaResult.processed.length} section(s)`);
+    }
+    if (schemaResult.errors.length > 0) {
+      for (const e of schemaResult.errors) {
+        writeTaggedLine('schema', pc.green, `error: ${e.section} — ${e.error}`, process.stderr);
+      }
+      schemasOk = false;
+    }
+  } catch (err) {
+    console.log(pc.red(`\n  build-schemas failed: ${err.message}\n`));
+    schemasOk = false;
+  }
+
   let scriptsOk = true;
   try {
     buildScripts({ cwd });
@@ -367,6 +431,6 @@ export function buildAll({ cwd = process.cwd() } = {}) {
     env,
     name: 'tailwind',
   });
-  return { scriptsOk, tailwind };
+  return { schemasOk, scriptsOk, tailwind };
 }
 
