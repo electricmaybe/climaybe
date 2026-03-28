@@ -270,6 +270,45 @@ You can create optional build entrypoints later with:
 
 If these files already exist, `init` warns that they will be replaced.
 
+### Section schema builder
+
+Build Shopify section schemas dynamically from JavaScript or JSON files using `climaybe build-schemas`. Define schemas in `_schemas/` and reference them in `sections/*.liquid`:
+
+```liquid
+{% schema 'hero-banner' %}{% endschema %}
+```
+
+The builder resolves the referenced `_schemas/hero-banner.js` (or `.json`), evaluates it, and injects the resulting JSON into the section file.
+
+**Supported patterns:**
+
+- **Shared schemas** — one schema file reused across multiple sections
+- **Partials** — `require()` shared settings arrays into multiple schemas
+- **Common fieldsets** — spread partial arrays into settings (`...linkSettings`)
+- **Looping fieldsets** — factory functions that generate repeated field groups
+- **Section-specific overrides** — export a function receiving `(filename, inlineContent)` to customise per section
+- **Inline JSON merging** — JSON between the schema tags merges with the exported object (inline wins)
+
+```bash
+npx climaybe build-schemas              # inject schemas into sections/*.liquid
+npx climaybe build-schemas --dry-run    # preview without writing files
+npx climaybe build-schemas --list       # list schema files and references
+```
+
+Example `_schemas/hero-banner.js`:
+
+```js
+const createLinks = require('./partials/create-links');
+
+module.exports = {
+  name: 'Hero Banner',
+  settings: [
+    { label: 'Title', id: 'title', type: 'text' },
+    ...createLinks(2)
+  ]
+};
+```
+
 You can install/update this later with:
 
 `climaybe add-dev-kit` (or `climaybe theme add-dev-kit`)
@@ -342,6 +381,10 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 │       ├── config/settings_data.json
 │       ├── templates/*.json
 │       └── sections/*.json
+├── _schemas/            (optional: JS/JSON schema source files)
+│   ├── hero-banner.js
+│   └── partials/
+│       └── link.js
 ├── package.json
 └── .github/workflows/
 ```
