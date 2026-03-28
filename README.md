@@ -309,6 +309,8 @@ module.exports = {
 };
 ```
 
+**Full examples:** See **[Schema Builder Examples](docs/SCHEMA_BUILDER_EXAMPLES.md)** for working code covering every pattern — basic JSON/JS, shared schemas, partials, fieldset factories, function exports, inline merging, and a combined real-world theme setup.
+
 You can install/update this later with:
 
 `climaybe add-dev-kit` (or `climaybe theme add-dev-kit`)
