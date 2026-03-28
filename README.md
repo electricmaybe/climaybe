@@ -272,13 +272,21 @@ If these files already exist, `init` warns that they will be replaced.
 
 ### Section schema builder
 
-Build Shopify section schemas dynamically from JavaScript or JSON files using `climaybe build-schemas`. Define schemas in `_schemas/` and reference them in `sections/*.liquid`:
+Build Shopify section schemas dynamically from JavaScript or JSON files using `climaybe build-schemas`.
+
+**How it works:** Source section files live in `_sections/` (your working files). Schema definitions live in `_schemas/` as JS or JSON. The builder reads `_sections/*.liquid`, resolves `{% schema 'name' %}` references against `_schemas/`, injects the JSON, and writes the result to `sections/` — the folder Shopify actually reads. Your source files in `_sections/` are never modified, so rebuilds are always repeatable.
+
+```
+_sections/hero-banner.liquid  ──┐
+                                ├──▶  sections/hero-banner.liquid  (with JSON injected)
+_schemas/hero-banner.js       ──┘
+```
+
+Reference a schema in `_sections/*.liquid`:
 
 ```liquid
 {% schema 'hero-banner' %}{% endschema %}
 ```
-
-The builder resolves the referenced `_schemas/hero-banner.js` (or `.json`), evaluates it, and injects the resulting JSON into the section file.
 
 **Supported patterns:**
 
@@ -290,7 +298,7 @@ The builder resolves the referenced `_schemas/hero-banner.js` (or `.json`), eval
 - **Inline JSON merging** — JSON between the schema tags merges with the exported object (inline wins)
 
 ```bash
-npx climaybe build-schemas              # inject schemas into sections/*.liquid
+npx climaybe build-schemas              # build _sections/ → sections/
 npx climaybe build-schemas --dry-run    # preview without writing files
 npx climaybe build-schemas --list       # list schema files and references
 ```
@@ -383,7 +391,9 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 │       ├── config/settings_data.json
 │       ├── templates/*.json
 │       └── sections/*.json
-├── _schemas/            (optional: JS/JSON schema source files)
+├── _sections/           (optional: section source files for schema builder)
+│   └── hero-banner.liquid
+├── _schemas/            (optional: JS/JSON schema definitions)
 │   ├── hero-banner.js
 │   └── partials/
 │       └── link.js

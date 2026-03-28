@@ -2,11 +2,24 @@
 
 Complete, working examples for every pattern supported by `climaybe build-schemas`. Each example shows the source files you create and the output the builder produces.
 
-**Directory convention:**
+## How the build works
+
+Shopify reads sections from `sections/`. The schema builder treats that folder as **build output**, not source.
+
+- **`_sections/`** — your source section files (Liquid + schema references). You edit these.
+- **`_schemas/`** — schema definitions as JS or JSON. Partials go in `_schemas/partials/`.
+- **`sections/`** — build output. The builder copies each `_sections/*.liquid` file here, resolving any `{% schema 'name' %}` references and injecting the JSON. Sections without schema references are copied verbatim.
+
+Your source files are never modified, so builds are always repeatable.
 
 ```
 your-theme/
-├── _schemas/              ← schema source files (JS or JSON)
+├── _sections/             ← source files (you edit these)
+│   ├── hero-banner.liquid
+│   ├── landing-page.liquid
+│   ├── about-page.liquid
+│   └── static-section.liquid
+├── _schemas/              ← schema definitions (JS or JSON)
 │   ├── partials/          ← shared settings, fieldsets, helpers
 │   │   ├── link.js
 │   │   ├── create-links.js
@@ -14,16 +27,17 @@ your-theme/
 │   ├── hero-banner.js
 │   ├── landing-page.js
 │   └── page-schema.js
-├── sections/              ← Liquid section files
-│   ├── hero-banner.liquid
-│   ├── landing-page.liquid
-│   └── about-page.liquid
+├── sections/              ← build output (Shopify reads this)
+│   ├── hero-banner.liquid      ← generated with JSON schema injected
+│   ├── landing-page.liquid     ← generated
+│   ├── about-page.liquid       ← generated
+│   └── static-section.liquid   ← copied verbatim (no schema ref)
 ```
 
 Run the builder:
 
 ```bash
-npx climaybe build-schemas              # inject schemas into sections/*.liquid
+npx climaybe build-schemas              # build _sections/ → sections/
 npx climaybe build-schemas --dry-run    # preview without writing files
 npx climaybe build-schemas --list       # list schema files and references
 ```
@@ -67,7 +81,7 @@ The simplest case — define a static schema in a `.json` file.
 }
 ```
 
-**`sections/announcement-bar.liquid`** (before build)
+**`_sections/announcement-bar.liquid`** (source — you edit this)
 
 ```liquid
 <div class="announcement-bar" style="background: {{ section.settings.background_color }}; color: {{ section.settings.text_color }};">
@@ -77,7 +91,7 @@ The simplest case — define a static schema in a `.json` file.
 {% schema 'announcement-bar' %}{% endschema %}
 ```
 
-**`sections/announcement-bar.liquid`** (after build)
+**`sections/announcement-bar.liquid`** (build output — Shopify reads this)
 
 ```liquid
 <div class="announcement-bar" style="background: {{ section.settings.background_color }}; color: {{ section.settings.text_color }};">
@@ -166,7 +180,7 @@ module.exports = {
 };
 ```
 
-**`sections/hero-banner.liquid`**
+**`_sections/hero-banner.liquid`**
 
 ```liquid
 <section class="hero-banner">
@@ -180,7 +194,7 @@ module.exports = {
 
 ## 3. Shared Schema (Same Schema, Multiple Sections)
 
-One schema file reused across multiple section files. Change the schema once, every section updates.
+One schema file reused across multiple section files. Change the schema once, rebuild, every section updates.
 
 **`_schemas/seasonal-landing.js`**
 
@@ -226,9 +240,9 @@ module.exports = {
 };
 ```
 
-Both sections reference the same schema:
+Both source sections reference the same schema:
 
-**`sections/autumn-winter-2024.liquid`**
+**`_sections/autumn-winter-2024.liquid`**
 
 ```liquid
 <div class="seasonal-landing">
@@ -238,7 +252,7 @@ Both sections reference the same schema:
 {% schema 'seasonal-landing' %}{% endschema %}
 ```
 
-**`sections/spring-summer-2025.liquid`**
+**`_sections/spring-summer-2025.liquid`**
 
 ```liquid
 <div class="seasonal-landing">
@@ -248,13 +262,13 @@ Both sections reference the same schema:
 {% schema 'seasonal-landing' %}{% endschema %}
 ```
 
-After build, both sections contain identical schema JSON. Update `_schemas/seasonal-landing.js` once and rebuild — both stay in sync.
+After `npx climaybe build-schemas`, both `sections/autumn-winter-2024.liquid` and `sections/spring-summer-2025.liquid` contain identical schema JSON. Update `_schemas/seasonal-landing.js` once and rebuild — both stay in sync.
 
 ---
 
 ## 4. Partials — Reusing Settings (Section as Block)
 
-Extract a section's settings into a partial so they can be imported as block settings elsewhere.
+Extract a section's settings into a partial so they can be imported as section settings in one schema and block settings in another.
 
 **`_schemas/partials/hero-banner.js`**
 
@@ -330,19 +344,19 @@ module.exports = {
 };
 ```
 
-**`sections/hero-banner.liquid`**
+**`_sections/hero-banner.liquid`**
 
 ```liquid
 {% schema 'hero-banner' %}{% endschema %}
 ```
 
-**`sections/landing-page.liquid`**
+**`_sections/landing-page.liquid`**
 
 ```liquid
 {% schema 'landing-page' %}{% endschema %}
 ```
 
-The hero banner settings array is defined once and lives in both schemas after build.
+The hero banner settings array is defined once and lives in both output schemas after build.
 
 ---
 
@@ -423,9 +437,7 @@ module.exports = {
       step: 1,
       default: 4,
     },
-    // Spread link fields — adds link_text and link_url
     ...linkSettings,
-    // Spread spacing fields — adds padding_top and padding_bottom
     ...spacingSettings,
   ],
   presets: [{ name: 'Featured Collection' }],
@@ -521,16 +533,14 @@ module.exports = {
       unit: 's',
       default: 5,
     },
-    // Generate settings for 5 slides
     ...createSlides(5),
-    // Generate 2 CTA links
     ...createLinks(2),
   ],
   presets: [{ name: 'Hero Slideshow' }],
 };
 ```
 
-After build the schema has 2 global settings + 20 slide fields (4 per slide x 5) + 4 link fields (2 per link x 2) = **26 settings**, all generated from two function calls. Change the factory to add a field to every slide or link — it propagates everywhere.
+After build the schema has 2 global settings + 20 slide fields (4 per slide x 5) + 4 link fields (2 per link x 2) = **26 settings**, all generated from two function calls.
 
 ---
 
@@ -544,8 +554,6 @@ Export a function instead of an object. The function receives `(filename, inline
 const spacingSettings = require('./partials/spacing.js');
 
 module.exports = function (filename, content) {
-  // content is the parsed JSON written between the schema tags in the section file
-  // filename is the section filename (e.g. 'about-page.liquid')
   return {
     name: content.name || filename.replace('.liquid', ''),
     tag: 'section',
@@ -567,9 +575,9 @@ module.exports = function (filename, content) {
 };
 ```
 
-Each section provides its own name and optional class via inline JSON:
+Each source section provides its own name and optional class via inline JSON:
 
-**`sections/about-page.liquid`**
+**`_sections/about-page.liquid`**
 
 ```liquid
 <section class="page-section {{ section.settings.class }}">
@@ -584,7 +592,7 @@ Each section provides its own name and optional class via inline JSON:
 {% endschema %}
 ```
 
-**`sections/contact-page.liquid`**
+**`_sections/contact-page.liquid`**
 
 ```liquid
 <section class="page-section {{ section.settings.class }}">
@@ -599,7 +607,7 @@ Each section provides its own name and optional class via inline JSON:
 {% endschema %}
 ```
 
-**`sections/faq-page.liquid`** (no inline JSON — falls back to filename)
+**`_sections/faq-page.liquid`** (no inline JSON — falls back to filename)
 
 ```liquid
 <section class="page-section">
@@ -610,9 +618,9 @@ Each section provides its own name and optional class via inline JSON:
 ```
 
 After build:
-- `about-page.liquid` gets `"name": "About Us"`, `"class": "about-page"`
-- `contact-page.liquid` gets `"name": "Contact"`, `"class": "contact-page"`
-- `faq-page.liquid` gets `"name": "faq-page"`, `"class": "page-section"` (defaults)
+- `sections/about-page.liquid` gets `"name": "About Us"`, `"class": "about-page"`
+- `sections/contact-page.liquid` gets `"name": "Contact"`, `"class": "contact-page"`
+- `sections/faq-page.liquid` gets `"name": "faq-page"`, `"class": "page-section"` (defaults)
 
 ---
 
@@ -645,13 +653,13 @@ When the schema export is an **object** (not a function), any inline JSON betwee
 }
 ```
 
-**`sections/newsletter.liquid`** (no inline — gets the default name)
+**`_sections/newsletter.liquid`** (no inline — gets the default name)
 
 ```liquid
 {% schema 'newsletter' %}{% endschema %}
 ```
 
-**`sections/footer-newsletter.liquid`** (overrides name via inline JSON)
+**`_sections/footer-newsletter.liquid`** (overrides name via inline JSON)
 
 ```liquid
 {% schema 'newsletter' %}
@@ -662,8 +670,8 @@ When the schema export is an **object** (not a function), any inline JSON betwee
 ```
 
 After build:
-- `newsletter.liquid` gets `"name": "Newsletter"` (unchanged)
-- `footer-newsletter.liquid` gets `"name": "Footer Newsletter"` (overridden), but keeps the same `settings` and `presets`
+- `sections/newsletter.liquid` gets `"name": "Newsletter"` (unchanged)
+- `sections/footer-newsletter.liquid` gets `"name": "Footer Newsletter"` (overridden), but keeps the same `settings` and `presets`
 
 ---
 
@@ -685,6 +693,13 @@ _schemas/
 ├── featured-collection.js    ← uses link + spacing partials
 ├── promotional-grid.js       ← uses create-links factory + color-scheme
 └── page-template.js          ← function export for per-page overrides
+
+_sections/
+├── hero-banner.liquid
+├── featured-collection.liquid
+├── promotional-grid.liquid
+├── shipping-policy.liquid
+└── returns-policy.liquid
 ```
 
 ### `_schemas/partials/color-scheme.js`
@@ -783,7 +798,6 @@ module.exports = {
           id: 'description',
           label: 'Card description',
         },
-        // Each card gets 1 CTA link
         ...createLinks(1),
       ],
     },
@@ -834,9 +848,9 @@ module.exports = function (filename, content) {
 };
 ```
 
-### Section files
+### Source section files
 
-**`sections/promotional-grid.liquid`**
+**`_sections/promotional-grid.liquid`**
 
 ```liquid
 <section class="promo-grid">
@@ -850,7 +864,7 @@ module.exports = function (filename, content) {
 {% schema 'promotional-grid' %}{% endschema %}
 ```
 
-**`sections/shipping-policy.liquid`** (uses function export, custom name)
+**`_sections/shipping-policy.liquid`** (uses function export, custom name)
 
 ```liquid
 <section class="page-section">
@@ -864,7 +878,7 @@ module.exports = function (filename, content) {
 {% endschema %}
 ```
 
-**`sections/returns-policy.liquid`** (uses function export, auto-generates name)
+**`_sections/returns-policy.liquid`** (uses function export, auto-generates name)
 
 ```liquid
 <section class="page-section">
@@ -874,19 +888,21 @@ module.exports = function (filename, content) {
 {% schema 'page-template' %}{% endschema %}
 ```
 
-After build:
-- `promotional-grid.liquid` gets the full schema with looped link fields inside each block, shared color scheme and spacing
-- `shipping-policy.liquid` gets `"name": "Shipping Policy"` from inline JSON
-- `returns-policy.liquid` gets `"name": "Returns Policy"` auto-generated from the filename
+After `npx climaybe build-schemas`:
+- `sections/promotional-grid.liquid` gets the full schema with looped link fields inside each block, shared color scheme and spacing
+- `sections/shipping-policy.liquid` gets `"name": "Shipping Policy"` from inline JSON
+- `sections/returns-policy.liquid` gets `"name": "Returns Policy"` auto-generated from the filename
 
 ---
 
 ## Tips
 
+- **`_sections/` is source, `sections/` is output.** Edit files in `_sections/`, never in `sections/` directly (they get overwritten on build). Sections that don't use dynamic schemas can stay in `sections/` and won't be touched.
 - **JS over JSON** for schemas that benefit from comments, imports, or computation. JSON for simple static schemas.
 - **Partials go in `_schemas/partials/`** by convention — they are not directly referenced by sections, only imported by other schema files.
-- **Rebuild after changes**: run `npx climaybe build-schemas` after editing `_schemas/` files to inject updated JSON.
+- **Rebuild after changes**: run `npx climaybe build-schemas` after editing `_sections/` or `_schemas/` files.
 - **Use `--dry-run`** to verify output before writing.
-- **Use `--list`** to see which sections reference which schemas.
+- **Use `--list`** to see which source sections reference which schemas.
 - **Whitespace control**: the builder matches both `{% schema 'x' %}` and `{%- schema 'x' -%}` variants.
 - **Cache busting**: the builder clears the Node require cache before each load, so changes are picked up without restarting.
+- **`.gitignore`**: consider adding `sections/` to `.gitignore` if all your sections use the builder (generated output). If some sections are static and some are built, only put the built ones in `_sections/`.

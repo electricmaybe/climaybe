@@ -1,8 +1,10 @@
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { join, resolve as pathResolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 const SCHEMA_DIR = '_schemas';
+const SECTIONS_SRC_DIR = '_sections';
+const SECTIONS_OUT_DIR = 'sections';
 
 const SCHEMA_REF_REGEX =
   /\{%-?\s*schema\s+['"]([^'"]+)['"]\s*-?%\}([\s\S]*?)\{%-?\s*endschema\s*-?%\}/g;
@@ -53,8 +55,7 @@ function parseInlineContent(raw) {
  * Evaluate the schema export.
  *
  * - **Function exports** receive `(filename, inlineContent)` and must return
- *   the schema object — this covers the "section-specific overrides" pattern
- *   from the blog article.
+ *   the schema object — this covers the "section-specific overrides" pattern.
  * - **Object exports** are merged with any inline content (inline wins) so
  *   individual sections can override fields like `name`.
  */
@@ -73,43 +74,77 @@ function evaluateSchema(schemaExport, sectionFilename, inlineContent) {
 /**
  * Build section schemas for a Shopify theme project.
  *
- * Scans `sections/*.liquid` for `{% schema 'name' %}` directives, resolves
- * the referenced JS/JSON file from `_schemas/`, evaluates it (supporting
- * shared partials, looping helpers, function exports, and inline overrides),
- * then injects the resulting JSON into the section file.
+ * Source files live in `_sections/*.liquid` (never shipped to Shopify).
+ * Schema definitions live in `_schemas/` as JS or JSON files.
+ *
+ * The builder reads each `_sections/*.liquid` file, resolves any
+ * `{% schema 'name' %}...{% endschema %}` references against `_schemas/`,
+ * injects the resulting JSON, and writes the output to `sections/` — the
+ * folder Shopify actually reads. The source tag in `_sections/` is preserved
+ * so the build is always repeatable.
+ *
+ * Sections without schema references are copied verbatim to `sections/`.
  *
  * @param {object}  options
  * @param {string}  [options.cwd]    Theme project root (default `process.cwd()`).
  * @param {boolean} [options.dryRun] When true, compute schemas without writing files.
- * @returns {{ processed: Array<{section: string, schema: string}>, skipped: string[], errors: Array<{section: string, schema: string, error: string}> }}
+ * @returns {{ processed: Array<{section: string, schema: string}>, copied: string[], errors: Array<{section: string, schema: string, error: string}> }}
  */
 export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
   const schemasDir = join(cwd, SCHEMA_DIR);
-  const sectionsDir = join(cwd, 'sections');
+  const srcDir = join(cwd, SECTIONS_SRC_DIR);
+  const outDir = join(cwd, SECTIONS_OUT_DIR);
 
-  if (!existsSync(schemasDir)) {
-    return { processed: [], skipped: [], errors: [] };
-  }
-  if (!existsSync(sectionsDir)) {
-    return { processed: [], skipped: [], errors: [] };
+  if (!existsSync(srcDir)) {
+    return { processed: [], copied: [], errors: [] };
   }
 
-  const sectionFiles = readdirSync(sectionsDir, { withFileTypes: true })
+  const sectionFiles = readdirSync(srcDir, { withFileTypes: true })
     .filter((d) => d.isFile() && d.name.endsWith('.liquid'))
     .map((d) => d.name)
     .sort();
 
+  if (sectionFiles.length === 0) {
+    return { processed: [], copied: [], errors: [] };
+  }
+
+  if (!dryRun) {
+    mkdirSync(outDir, { recursive: true });
+  }
+
   const processed = [];
-  const skipped = [];
+  const copied = [];
   const errors = [];
 
   for (const sectionFile of sectionFiles) {
-    const sectionPath = join(sectionsDir, sectionFile);
-    const original = readFileSync(sectionPath, 'utf-8');
-    let content = original;
-    let touched = false;
+    const srcPath = join(srcDir, sectionFile);
+    const outPath = join(outDir, sectionFile);
+    const source = readFileSync(srcPath, 'utf-8');
 
-    content = content.replace(SCHEMA_REF_REGEX, (_match, schemaName, inlineJson) => {
+    const re = new RegExp(SCHEMA_REF_REGEX.source, SCHEMA_REF_REGEX.flags);
+    const hasRef = re.test(source);
+
+    if (!hasRef) {
+      if (!dryRun) {
+        writeFileSync(outPath, source, 'utf-8');
+      }
+      copied.push(sectionFile);
+      continue;
+    }
+
+    if (!existsSync(schemasDir)) {
+      errors.push({
+        section: sectionFile,
+        schema: '(unknown)',
+        error: '_schemas/ directory not found — cannot resolve schema references',
+      });
+      continue;
+    }
+
+    let output = source;
+    let hasError = false;
+
+    output = output.replace(SCHEMA_REF_REGEX, (_match, schemaName, inlineJson) => {
       const schemaFile = resolveSchemaFile(schemasDir, schemaName);
       if (!schemaFile) {
         errors.push({
@@ -117,6 +152,7 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
           schema: schemaName,
           error: `Schema file not found: _schemas/${schemaName}.js or .json`,
         });
+        hasError = true;
         return _match;
       }
 
@@ -125,7 +161,6 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
         const inlineContent = parseInlineContent(inlineJson);
         const schema = evaluateSchema(schemaExport, sectionFile, inlineContent);
         const json = JSON.stringify(schema, null, 2);
-        touched = true;
         return `{% schema %}\n${json}\n{% endschema %}`;
       } catch (err) {
         errors.push({
@@ -133,21 +168,20 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
           schema: schemaName,
           error: err.message,
         });
+        hasError = true;
         return _match;
       }
     });
 
-    if (touched) {
+    if (!hasError) {
       if (!dryRun) {
-        writeFileSync(sectionPath, content, 'utf-8');
+        writeFileSync(outPath, output, 'utf-8');
       }
-      processed.push({ section: sectionFile, schema: content });
-    } else if (!errors.some((e) => e.section === sectionFile)) {
-      skipped.push(sectionFile);
+      processed.push({ section: sectionFile, schema: output });
     }
   }
 
-  return { processed, skipped, errors };
+  return { processed, copied, errors };
 }
 
 /**
@@ -163,18 +197,18 @@ export function listSchemaFiles(cwd = process.cwd()) {
 }
 
 /**
- * List section files that contain schema references (`{% schema 'name' %}`).
+ * List source section files in `_sections/` that contain schema references.
  */
 export function listSectionsWithSchemaRefs(cwd = process.cwd()) {
-  const sectionsDir = join(cwd, 'sections');
-  if (!existsSync(sectionsDir)) return [];
+  const srcDir = join(cwd, SECTIONS_SRC_DIR);
+  if (!existsSync(srcDir)) return [];
 
   const results = [];
-  const files = readdirSync(sectionsDir, { withFileTypes: true })
+  const files = readdirSync(srcDir, { withFileTypes: true })
     .filter((d) => d.isFile() && d.name.endsWith('.liquid'));
 
   for (const file of files) {
-    const content = readFileSync(join(sectionsDir, file.name), 'utf-8');
+    const content = readFileSync(join(srcDir, file.name), 'utf-8');
     const refs = [];
     let m;
     const re = new RegExp(SCHEMA_REF_REGEX.source, SCHEMA_REF_REGEX.flags);

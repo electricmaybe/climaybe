@@ -11,13 +11,63 @@ describe('schema-builder', () => {
   function setup() {
     cwd = mkdtempSync(join(tmpdir(), 'climaybe-schema-'));
     mkdirSync(join(cwd, '_schemas'), { recursive: true });
-    mkdirSync(join(cwd, 'sections'), { recursive: true });
+    mkdirSync(join(cwd, '_sections'), { recursive: true });
     return cwd;
   }
 
   function teardown() {
     if (cwd && existsSync(cwd)) rmSync(cwd, { recursive: true });
   }
+
+  // ── Source → output architecture ──────────────────────────────────
+
+  it('reads from _sections/ and writes to sections/ (source is never mutated)', () => {
+    const dir = setup();
+    try {
+      writeFileSync(
+        join(dir, '_schemas', 'banner.json'),
+        JSON.stringify({ name: 'Banner', settings: [] }),
+        'utf-8'
+      );
+
+      const srcContent = `<div>banner</div>\n{% schema 'banner' %}{% endschema %}\n`;
+      writeFileSync(join(dir, '_sections', 'banner.liquid'), srcContent, 'utf-8');
+
+      const { processed, errors } = buildSchemas({ cwd: dir });
+
+      assert.strictEqual(processed.length, 1);
+      assert.strictEqual(errors.length, 0);
+
+      // Source file is unchanged
+      assert.strictEqual(readFileSync(join(dir, '_sections', 'banner.liquid'), 'utf-8'), srcContent);
+
+      // Output file was created in sections/
+      const output = readFileSync(join(dir, 'sections', 'banner.liquid'), 'utf-8');
+      assert.match(output, /{% schema %}/);
+      assert.match(output, /"name": "Banner"/);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('copies _sections/ files without schema refs verbatim to sections/', () => {
+    const dir = setup();
+    try {
+      const staticContent = `<div>static</div>\n{% schema %}\n{"name":"Static"}\n{% endschema %}\n`;
+      writeFileSync(join(dir, '_sections', 'static-section.liquid'), staticContent, 'utf-8');
+
+      const { processed, copied } = buildSchemas({ cwd: dir });
+
+      assert.strictEqual(processed.length, 0);
+      assert.strictEqual(copied.length, 1);
+      assert.strictEqual(copied[0], 'static-section.liquid');
+
+      const output = readFileSync(join(dir, 'sections', 'static-section.liquid'), 'utf-8');
+      assert.strictEqual(output, staticContent);
+    } finally {
+      teardown();
+    }
+  });
 
   // ── Basic schema injection ────────────────────────────────────────
 
@@ -34,7 +84,7 @@ describe('schema-builder', () => {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'hero-banner.liquid'),
+        join(dir, '_sections', 'hero-banner.liquid'),
         `<div>hero</div>\n{% schema 'hero-banner' %}{% endschema %}\n`,
         'utf-8'
       );
@@ -69,7 +119,7 @@ describe('schema-builder', () => {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'landing.liquid'),
+        join(dir, '_sections', 'landing.liquid'),
         `<div>landing</div>\n{% schema 'landing' %}{% endschema %}\n`,
         'utf-8'
       );
@@ -104,12 +154,12 @@ describe('schema-builder', () => {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'autumn-winter-2020.liquid'),
+        join(dir, '_sections', 'autumn-winter-2020.liquid'),
         `<div>AW20</div>\n{% schema 'seasonal-landing' %}{% endschema %}\n`,
         'utf-8'
       );
       writeFileSync(
-        join(dir, 'sections', 'spring-summer-2021.liquid'),
+        join(dir, '_sections', 'spring-summer-2021.liquid'),
         `<div>SS21</div>\n{% schema 'seasonal-landing' %}{% endschema %}\n`,
         'utf-8'
       );
@@ -172,12 +222,12 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'hero-banner.liquid'),
+        join(dir, '_sections', 'hero-banner.liquid'),
         `<div>hero</div>\n{% schema 'hero-banner' %}{% endschema %}\n`,
         'utf-8'
       );
       writeFileSync(
-        join(dir, 'sections', 'landing-page.liquid'),
+        join(dir, '_sections', 'landing-page.liquid'),
         `<div>landing</div>\n{% schema 'landing-page' %}{% endschema %}\n`,
         'utf-8'
       );
@@ -230,7 +280,7 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'hero-with-link.liquid'),
+        join(dir, '_sections', 'hero-with-link.liquid'),
         `<div>hero link</div>\n{% schema 'hero-with-link' %}{% endschema %}\n`,
         'utf-8'
       );
@@ -287,7 +337,7 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'hero-multi-link.liquid'),
+        join(dir, '_sections', 'hero-multi-link.liquid'),
         `<div>hero multi</div>\n{% schema 'hero-multi-link' %}{% endschema %}\n`,
         'utf-8'
       );
@@ -329,7 +379,7 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'about-page.liquid'),
+        join(dir, '_sections', 'about-page.liquid'),
         `<div>about</div>
 {% schema 'page-schema' %}
 {
@@ -341,7 +391,7 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'contact-page.liquid'),
+        join(dir, '_sections', 'contact-page.liquid'),
         `<div>contact</div>
 {% schema 'page-schema' %}
 {
@@ -382,7 +432,7 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'custom-section.liquid'),
+        join(dir, '_sections', 'custom-section.liquid'),
         `<div>custom</div>
 {% schema 'mergeable' %}
 {
@@ -416,15 +466,49 @@ module.exports = {
         'utf-8'
       );
 
-      const original = `<div>banner</div>\n{% schema 'banner' %}{% endschema %}\n`;
-      writeFileSync(join(dir, 'sections', 'banner.liquid'), original, 'utf-8');
+      writeFileSync(
+        join(dir, '_sections', 'banner.liquid'),
+        `<div>banner</div>\n{% schema 'banner' %}{% endschema %}\n`,
+        'utf-8'
+      );
 
       const { processed } = buildSchemas({ cwd: dir, dryRun: true });
 
       assert.strictEqual(processed.length, 1);
+      assert.ok(!existsSync(join(dir, 'sections', 'banner.liquid')));
+    } finally {
+      teardown();
+    }
+  });
 
-      const output = readFileSync(join(dir, 'sections', 'banner.liquid'), 'utf-8');
-      assert.strictEqual(output, original);
+  // ── Rebuild is idempotent (source never changes) ──────────────────
+
+  it('produces identical output on consecutive builds (idempotent)', () => {
+    const dir = setup();
+    try {
+      writeFileSync(
+        join(dir, '_schemas', 'hero.json'),
+        JSON.stringify({ name: 'Hero', settings: [{ id: 'title', type: 'text', label: 'Title' }] }),
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, '_sections', 'hero.liquid'),
+        `<div>hero</div>\n{% schema 'hero' %}{% endschema %}\n`,
+        'utf-8'
+      );
+
+      buildSchemas({ cwd: dir });
+      const firstBuild = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
+
+      buildSchemas({ cwd: dir });
+      const secondBuild = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
+
+      assert.strictEqual(firstBuild, secondBuild);
+
+      // Source file still has the reference tag
+      const source = readFileSync(join(dir, '_sections', 'hero.liquid'), 'utf-8');
+      assert.match(source, /{% schema 'hero' %}/);
     } finally {
       teardown();
     }
@@ -436,7 +520,7 @@ module.exports = {
     const dir = setup();
     try {
       writeFileSync(
-        join(dir, 'sections', 'broken.liquid'),
+        join(dir, '_sections', 'broken.liquid'),
         `<div>broken</div>\n{% schema 'nonexistent' %}{% endschema %}\n`,
         'utf-8'
       );
@@ -451,34 +535,15 @@ module.exports = {
     }
   });
 
-  it('returns empty results when _schemas/ does not exist', () => {
+  it('returns empty results when _sections/ does not exist', () => {
     const dir = mkdtempSync(join(tmpdir(), 'climaybe-schema-'));
     try {
-      const { processed, skipped, errors } = buildSchemas({ cwd: dir });
+      const { processed, copied, errors } = buildSchemas({ cwd: dir });
       assert.strictEqual(processed.length, 0);
-      assert.strictEqual(skipped.length, 0);
+      assert.strictEqual(copied.length, 0);
       assert.strictEqual(errors.length, 0);
     } finally {
       rmSync(dir, { recursive: true });
-    }
-  });
-
-  it('skips section files without schema references', () => {
-    const dir = setup();
-    try {
-      writeFileSync(
-        join(dir, 'sections', 'static-section.liquid'),
-        `<div>static</div>\n{% schema %}\n{"name":"Static"}\n{% endschema %}\n`,
-        'utf-8'
-      );
-
-      const { processed, skipped } = buildSchemas({ cwd: dir });
-
-      assert.strictEqual(processed.length, 0);
-      assert.strictEqual(skipped.length, 1);
-      assert.strictEqual(skipped[0], 'static-section.liquid');
-    } finally {
-      teardown();
     }
   });
 
@@ -494,7 +559,7 @@ module.exports = {
       );
 
       writeFileSync(
-        join(dir, 'sections', 'ws-test.liquid'),
+        join(dir, '_sections', 'ws-test.liquid'),
         `<div>ws</div>\n{%- schema 'ws-test' -%}{%- endschema -%}\n`,
         'utf-8'
       );
@@ -538,16 +603,16 @@ module.exports = {
 
   // ── listSectionsWithSchemaRefs ────────────────────────────────────
 
-  it('lists sections that contain schema references', () => {
+  it('lists source sections (_sections/) that contain schema references', () => {
     const dir = setup();
     try {
       writeFileSync(
-        join(dir, 'sections', 'has-ref.liquid'),
+        join(dir, '_sections', 'has-ref.liquid'),
         `<div>ref</div>\n{% schema 'my-schema' %}{% endschema %}\n`,
         'utf-8'
       );
       writeFileSync(
-        join(dir, 'sections', 'no-ref.liquid'),
+        join(dir, '_sections', 'no-ref.liquid'),
         `<div>no ref</div>\n{% schema %}\n{}\n{% endschema %}\n`,
         'utf-8'
       );
@@ -561,7 +626,7 @@ module.exports = {
     }
   });
 
-  it('returns empty array when sections/ does not exist', () => {
+  it('returns empty array when _sections/ does not exist', () => {
     const dir = mkdtempSync(join(tmpdir(), 'climaybe-schema-'));
     try {
       assert.deepStrictEqual(listSectionsWithSchemaRefs(dir), []);
