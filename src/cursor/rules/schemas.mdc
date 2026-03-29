@@ -13,11 +13,11 @@ alwaysApply: false
 
 ## Schema Builder (`climaybe build-schemas`)
 
-This project uses the climaybe schema builder to generate section schemas from JavaScript/JSON source files. Schemas are defined in `_schemas/` and injected into `sections/*.liquid` at build time.
+This project uses the climaybe schema builder to generate schemas from JavaScript/JSON source files. Schemas are defined in `_schemas/` and injected into `sections/*.liquid` and `blocks/*.liquid` at build time.
 
 ### How it works
 
-A section file contains an inline-comment marker at the end:
+A section or block file contains an inline-comment marker at the end:
 
 ```liquid
 <section class="hero">{{ section.settings.title }}</section>
@@ -110,8 +110,8 @@ Schemas also rebuild automatically during `climaybe serve` (watch mode, tagged `
 
 ### Rules for AI assistants
 
-- When asked to create a new section with a schema, create the schema definition in `_schemas/` and add the `{% # schema 'name' %}` marker to the section file. Do not write raw `{% schema %}` JSON.
-- When asked to edit a schema, edit the file in `_schemas/`, not the generated block in `sections/`.
+- When asked to create a new section or block with a schema, create the schema definition in `_schemas/` and add the `{% # schema 'name' %}` marker to the liquid file. Do not write raw `{% schema %}` JSON.
+- When asked to edit a schema, edit the file in `_schemas/`, not the generated block in `sections/` or `blocks/`.
 - When adding fields that are reused across schemas (links, spacing, colors), extract them into `_schemas/partials/` and spread them.
 - When duplicating a schema for a variant section, use a shared schema file instead. Add the same marker to both sections.
 - After editing `_schemas/` files, remind the user to run `npx climaybe build-schemas` (or note that `climaybe serve` rebuilds automatically).

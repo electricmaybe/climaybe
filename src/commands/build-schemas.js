@@ -3,7 +3,7 @@ import { requireThemeProject } from '../lib/theme-guard.js';
 import { buildSchemas, listSchemaFiles, listSectionsWithSchemaRefs } from '../lib/schema-builder.js';
 
 export async function buildSchemasCommand(opts = {}) {
-  console.log(pc.bold('\n  climaybe — Build section schemas\n'));
+  console.log(pc.bold('\n  climaybe — Build schemas\n'));
   if (!requireThemeProject()) return;
 
   try {
@@ -12,10 +12,10 @@ export async function buildSchemasCommand(opts = {}) {
 
     if (list) {
       const schemas = listSchemaFiles(process.cwd());
-      const sections = listSectionsWithSchemaRefs(process.cwd());
+      const refs = listSectionsWithSchemaRefs(process.cwd());
 
-      if (schemas.length === 0 && sections.length === 0) {
-        console.log(pc.yellow('  No _schemas/ files or schema markers found in sections/.'));
+      if (schemas.length === 0 && refs.length === 0) {
+        console.log(pc.yellow('  No _schemas/ files or schema markers found.'));
         return;
       }
 
@@ -26,10 +26,10 @@ export async function buildSchemasCommand(opts = {}) {
         }
       }
 
-      if (sections.length > 0) {
-        console.log(pc.cyan('\n  Sections with schema markers:'));
-        for (const { section, schemas: refs } of sections) {
-          console.log(`    ${pc.white(section)} → ${refs.map((r) => pc.green(r)).join(', ')}`);
+      if (refs.length > 0) {
+        console.log(pc.cyan('\n  Files with schema markers:'));
+        for (const { section, schemas: names } of refs) {
+          console.log(`    ${pc.white(section)} → ${names.map((r) => pc.green(r)).join(', ')}`);
         }
       }
       return;
@@ -42,28 +42,28 @@ export async function buildSchemasCommand(opts = {}) {
     const { processed, skipped, errors } = buildSchemas({ cwd: process.cwd(), dryRun });
 
     if (processed.length === 0 && errors.length === 0 && skipped.length === 0) {
-      console.log(pc.yellow('  No sections/ directory found. Nothing to build.'));
+      console.log(pc.yellow('  No sections/ or blocks/ directory found. Nothing to build.'));
       return;
     }
 
     if (processed.length === 0 && errors.length === 0) {
-      console.log(pc.yellow('  No schema markers found in sections/*.liquid.'));
-      console.log(pc.dim("  Add a marker to a section file:  {% # schema 'name' %}"));
+      console.log(pc.yellow('  No schema markers found in sections/ or blocks/.'));
+      console.log(pc.dim("  Add a marker to a liquid file:  {% # schema 'name' %}"));
       return;
     }
 
     if (processed.length > 0) {
       const verb = dryRun ? 'Would generate' : 'Generated';
-      console.log(pc.green(`  ${verb} schemas for ${processed.length} section(s):`));
+      console.log(pc.green(`  ${verb} schemas for ${processed.length} file(s):`));
       for (const { section, schemaName } of processed) {
-        console.log(pc.dim(`    - sections/${section} ← _schemas/${schemaName}`));
+        console.log(pc.dim(`    - ${section} ← _schemas/${schemaName}`));
       }
     }
 
     if (errors.length > 0) {
       console.log(pc.red(`\n  ${errors.length} error(s):`));
       for (const { section, schema, error } of errors) {
-        console.log(pc.red(`    sections/${section} (schema: ${schema}): ${error}`));
+        console.log(pc.red(`    ${section} (schema: ${schema}): ${error}`));
       }
       process.exitCode = 1;
     }

@@ -262,13 +262,12 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
     : null;
 
   const schemasDir = join(cwd, '_schemas');
-  const sectionsDir = join(cwd, 'sections');
   const hasSchemas = existsSync(schemasDir);
   if (hasSchemas) {
     try {
       const result = buildSchemas({ cwd });
       if (result.processed.length > 0) {
-        writeTaggedLine('schema', pc.green, `built ${result.processed.length} section(s) (initial)`);
+        writeTaggedLine('schema', pc.green, `built ${result.processed.length} file(s) (initial)`);
       }
       if (result.errors.length > 0) {
         for (const e of result.errors) {
@@ -282,43 +281,25 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
     writeTaggedLine('schema', pc.green, 'skipped (missing _schemas/)');
   }
 
-  let schemaWriting = false;
-  const runSchemasBuild = () => {
-    try {
-      schemaWriting = true;
-      const result = buildSchemas({ cwd });
-      schemaWriting = false;
-      if (result.processed.length > 0) {
-        writeTaggedLine('schema', pc.green, `rebuilt ${result.processed.length} section(s)`);
-      }
-      if (result.errors.length > 0) {
-        for (const e of result.errors) {
-          writeTaggedLine('schema', pc.green, `error: ${e.section} — ${e.error}`, process.stderr);
-        }
-      }
-    } catch (err) {
-      schemaWriting = false;
-      writeTaggedLine('schema', pc.green, `build failed: ${err.message}`, process.stderr);
-    }
-  };
-
-  const schemasDefWatch = hasSchemas
+  const schemasWatch = hasSchemas
     ? watchTree({
         rootDir: schemasDir,
         ignore: (p) => p.includes('node_modules') || p.includes('/.git/'),
         debounceMs: 300,
-        onChange: runSchemasBuild,
-      })
-    : null;
-
-  const schemasSectionsWatch = hasSchemas && existsSync(sectionsDir)
-    ? watchTree({
-        rootDir: sectionsDir,
-        ignore: (p) => p.includes('node_modules') || p.includes('/.git/') || !p.endsWith('.liquid'),
-        debounceMs: 500,
         onChange: () => {
-          if (schemaWriting) return;
-          runSchemasBuild();
+          try {
+            const result = buildSchemas({ cwd });
+            if (result.processed.length > 0) {
+              writeTaggedLine('schema', pc.green, `rebuilt ${result.processed.length} file(s)`);
+            }
+            if (result.errors.length > 0) {
+              for (const e of result.errors) {
+                writeTaggedLine('schema', pc.green, `error: ${e.section} — ${e.error}`, process.stderr);
+              }
+            }
+          } catch (err) {
+            writeTaggedLine('schema', pc.green, `build failed: ${err.message}`, process.stderr);
+          }
         },
       })
     : null;
@@ -368,14 +349,13 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
 
   const cleanup = () => {
     safeClose(scriptsWatch);
-    safeClose(schemasDefWatch);
-    safeClose(schemasSectionsWatch);
+    safeClose(schemasWatch);
     safeClose(themeCheckWatch);
     safeKill(tailwind);
     safeKill(devMcp);
   };
 
-  return { tailwind, devMcp, scriptsWatch, schemasDefWatch, schemasSectionsWatch, themeCheckWatch, cleanup };
+  return { tailwind, devMcp, scriptsWatch, schemasWatch, themeCheckWatch, cleanup };
 }
 
 export function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
