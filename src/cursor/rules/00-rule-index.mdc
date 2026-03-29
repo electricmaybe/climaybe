@@ -15,7 +15,7 @@ When you perform any of the following, **read and apply** the corresponding rule
 - **Liquid syntax and usage** → `liquid.mdc`
 - **Section files (sections/*.liquid)** → `sections.mdc`
 - **Snippets (snippets/*.liquid)** → `snippets.mdc`
-- **Schema definitions (section/layout schemas)** → `schemas.mdc`
+- **Schema definitions (section/layout schemas), _schemas/ builder** → `schemas.mdc`
 - **Liquid documentation comments** → `liquid-doc-rules.mdc`
 - **JS refactor tasks / current refactoring work** → `js-refactor-tasks.mdc`
 - **Adding or editing Cursor rules** → `cursor-rule-template.mdc`
