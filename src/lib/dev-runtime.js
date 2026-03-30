@@ -208,11 +208,11 @@ function runThemeCheckFiltered({ cwd = process.cwd() } = {}) {
   return child;
 }
 
-export function serveShopify({ cwd = process.cwd() } = {}) {
+export function serveShopify({ cwd = process.cwd(), store = '' } = {}) {
   const config = readConfig(cwd) || {};
-  const store = config.default_store || config.store || '';
+  const resolvedStore = store || config.default_store || config.store || Object.values(config.stores || {})[0] || '';
   const args = ['theme', 'dev', '--theme-editor-sync'];
-  if (store) args.push(`--store=${store}`);
+  if (resolvedStore) args.push(`--store=${resolvedStore}`);
   // Keep Shopify on inherited stdio so reconciliation prompts remain interactive.
   return runShopify(args, { cwd, name: 'shopify' });
 }
@@ -312,13 +312,13 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
   return { tailwind, devMcp, scriptsWatch, themeCheckWatch, cleanup };
 }
 
-export function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
+export function serveAll({ cwd = process.cwd(), includeThemeCheck = false, store = '' } = {}) {
   // Start assets first, then bring up Shopify after a short delay.
   const assets = serveAssets({ cwd, includeThemeCheck });
   let shopify = null;
   const shopifyStartDelayMs = 2500;
   const shopifyTimer = setTimeout(() => {
-    shopify = serveShopify({ cwd });
+    shopify = serveShopify({ cwd, store });
     shopify.on('exit', () => {
       cleanup();
     });
