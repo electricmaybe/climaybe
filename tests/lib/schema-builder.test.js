@@ -549,7 +549,7 @@ module.exports = {
 
       assert.strictEqual(processed.length, 0);
       assert.strictEqual(skipped.length, 1);
-      assert.strictEqual(skipped[0], 'static-section.liquid');
+      assert.strictEqual(skipped[0], 'sections/static-section.liquid');
     } finally {
       teardown();
     }
@@ -644,6 +644,68 @@ module.exports = {
     }
   });
 
+  // ── blocks/ support ────────────────────────────────────────────────
+
+  it('processes blocks/*.liquid files alongside sections/', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, 'blocks'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_schemas', 'card.json'),
+        JSON.stringify({ name: 'Card Block', settings: [{ id: 'title', type: 'text', label: 'Title' }] }),
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, 'sections', 'hero.liquid'),
+        `<div>hero</div>\n{% # schema 'card' %}\n`,
+        'utf-8'
+      );
+      writeFileSync(
+        join(dir, 'blocks', 'card.liquid'),
+        `<div>card block</div>\n{% # schema 'card' %}\n`,
+        'utf-8'
+      );
+
+      const { processed, errors } = buildSchemas({ cwd: dir });
+
+      assert.strictEqual(errors.length, 0);
+      assert.strictEqual(processed.length, 2);
+
+      const names = processed.map((p) => p.section).sort();
+      assert.deepStrictEqual(names, ['blocks/card.liquid', 'sections/hero.liquid']);
+
+      const blockOutput = readFileSync(join(dir, 'blocks', 'card.liquid'), 'utf-8');
+      assert.match(blockOutput, /"name": "Card Block"/);
+
+      const sectionOutput = readFileSync(join(dir, 'sections', 'hero.liquid'), 'utf-8');
+      assert.match(sectionOutput, /"name": "Card Block"/);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('lists blocks with schema markers in listSectionsWithSchemaRefs', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, 'blocks'), { recursive: true });
+
+      writeFileSync(
+        join(dir, 'blocks', 'slide.liquid'),
+        `<div>slide</div>\n{% # schema 'slide-schema' %}\n`,
+        'utf-8'
+      );
+
+      const refs = listSectionsWithSchemaRefs(dir);
+      assert.strictEqual(refs.length, 1);
+      assert.strictEqual(refs[0].section, 'blocks/slide.liquid');
+      assert.deepStrictEqual(refs[0].schemas, ['slide-schema']);
+    } finally {
+      teardown();
+    }
+  });
+
   // ── listSchemaFiles ───────────────────────────────────────────────
 
   it('lists available schema files', () => {
@@ -687,7 +749,7 @@ module.exports = {
 
       const refs = listSectionsWithSchemaRefs(dir);
       assert.strictEqual(refs.length, 1);
-      assert.strictEqual(refs[0].section, 'has-ref.liquid');
+      assert.strictEqual(refs[0].section, 'sections/has-ref.liquid');
       assert.deepStrictEqual(refs[0].schemas, ['my-schema']);
     } finally {
       teardown();

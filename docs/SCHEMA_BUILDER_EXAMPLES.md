@@ -4,22 +4,24 @@ Complete, working examples for every pattern supported by `climaybe build-schema
 
 ## How it works
 
-Add an inline-comment marker to any `sections/*.liquid` file:
+Add an inline-comment marker to any `sections/*.liquid` or `blocks/*.liquid` file:
 
 ```liquid
 {% # schema 'hero-banner' %}
 ```
 
-Shopify treats `{% # ... %}` as a comment and ignores it. The builder finds the marker, resolves `_schemas/hero-banner.js` (or `.json`), and writes the generated `{% schema %}...{% endschema %}` block directly below it. On subsequent builds, only the generated block is replaced — the marker and everything above it (including theme editor changes) are preserved.
+Shopify treats `{% # ... %}` as a comment and ignores it. The builder finds the marker in both `sections/` and `blocks/`, resolves `_schemas/hero-banner.js` (or `.json`), and writes the generated `{% schema %}...{% endschema %}` block directly below it. On subsequent builds, only the generated block is replaced — the marker and everything above it (including theme editor changes) are preserved.
 
 **Directory layout:**
 
 ```
 your-theme/
-├── sections/              ← your section files (with inline-comment markers)
+├── sections/              ← section files (with inline-comment markers)
 │   ├── hero-banner.liquid
 │   ├── landing-page.liquid
 │   └── static-section.liquid  (no marker — left alone)
+├── blocks/                ← block files (also supports markers)
+│   └── card.liquid
 ├── _schemas/              ← schema definitions (JS or JSON)
 │   ├── partials/          ← shared settings, fieldsets, helpers
 │   │   ├── link.js

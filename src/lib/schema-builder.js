@@ -3,19 +3,15 @@ import { existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SCHEMA_DIR = '_schemas';
+const LIQUID_DIRS = ['sections', 'blocks'];
 
 // Matches the inline-comment marker: {% # schema 'name' %}
-// Supports whitespace-control dashes and single or double quotes.
 const MARKER_REGEX =
   /\{%-?\s*#\s*schema\s+['"]([^'"]+)['"]\s*-?%\}/;
 
 // Matches the marker, then an optional inline-override marker, then an
 // optional existing generated {% schema %}...{% endschema %} block, all the
 // way to end-of-file.
-// Group 1: full marker tag
-// Group 2: schema name
-// Group 3: content between marker and generated block (may contain override)
-// Group 4: existing generated block (may be undefined on first build)
 const MARKER_WITH_OUTPUT_REGEX =
   /(\{%-?\s*#\s*schema\s+['"]([^'"]+)['"]\s*-?%\})([\s\S]*?)(\{%-?\s*schema\s*-?%\}[\s\S]*?\{%-?\s*endschema\s*-?%\})?\s*$/;
 
@@ -83,61 +79,29 @@ function evaluateSchema(schemaExport, sectionFilename, inlineContent) {
 }
 
 /**
- * Build section schemas for a Shopify theme project.
- *
- * Scans `sections/*.liquid` for an inline-comment marker:
- *
- *   {% # schema 'hero-banner' %}
- *
- * When found, resolves `_schemas/hero-banner.js` (or `.json`), evaluates it,
- * and writes (or replaces) the generated `{% schema %}...{% endschema %}`
- * block directly below the marker. The marker is never removed, so rebuilds
- * always work — even after Shopify theme editor edits.
- *
- * Optional per-section overrides use a second inline comment:
- *
- *   {% # schema 'name' %}
- *   {% # { "name": "Custom Name" } %}
- *   {% schema %}...{% endschema %}
- *
- * @param {object}  options
- * @param {string}  [options.cwd]    Theme project root (default `process.cwd()`).
- * @param {boolean} [options.dryRun] When true, compute schemas without writing files.
- * @returns {{ processed: Array<{section: string, schemaName: string}>, skipped: string[], errors: Array<{section: string, schema: string, error: string}> }}
+ * Process a single directory of liquid files (sections/ or blocks/).
  */
-export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
-  const schemasDir = join(cwd, SCHEMA_DIR);
-  const sectionsDir = join(cwd, 'sections');
+function processLiquidDir({ dirPath, dirName, schemasDir, dryRun, processed, skipped, errors }) {
+  if (!existsSync(dirPath)) return;
 
-  if (!existsSync(sectionsDir)) {
-    return { processed: [], skipped: [], errors: [] };
-  }
-
-  const sectionFiles = readdirSync(sectionsDir, { withFileTypes: true })
+  const files = readdirSync(dirPath, { withFileTypes: true })
     .filter((d) => d.isFile() && d.name.endsWith('.liquid'))
     .map((d) => d.name)
     .sort();
 
-  if (sectionFiles.length === 0) {
-    return { processed: [], skipped: [], errors: [] };
-  }
-
-  const processed = [];
-  const skipped = [];
-  const errors = [];
-
-  for (const sectionFile of sectionFiles) {
-    const sectionPath = join(sectionsDir, sectionFile);
-    const content = readFileSync(sectionPath, 'utf-8');
+  for (const fileName of files) {
+    const filePath = join(dirPath, fileName);
+    const displayName = `${dirName}/${fileName}`;
+    const content = readFileSync(filePath, 'utf-8');
 
     if (!MARKER_REGEX.test(content)) {
-      skipped.push(sectionFile);
+      skipped.push(displayName);
       continue;
     }
 
     if (!existsSync(schemasDir)) {
       errors.push({
-        section: sectionFile,
+        section: displayName,
         schema: '(unknown)',
         error: '_schemas/ directory not found',
       });
@@ -146,7 +110,7 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
 
     const fullMatch = content.match(MARKER_WITH_OUTPUT_REGEX);
     if (!fullMatch) {
-      skipped.push(sectionFile);
+      skipped.push(displayName);
       continue;
     }
 
@@ -157,7 +121,7 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
     const schemaFile = resolveSchemaFile(schemasDir, schemaName);
     if (!schemaFile) {
       errors.push({
-        section: sectionFile,
+        section: displayName,
         schema: schemaName,
         error: `Schema file not found: _schemas/${schemaName}.js or .json`,
       });
@@ -173,7 +137,7 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
         inlineContent = parseInlineContent(inlineMatch[1]);
       }
 
-      const schema = evaluateSchema(schemaExport, sectionFile, inlineContent);
+      const schema = evaluateSchema(schemaExport, fileName, inlineContent);
       const json = JSON.stringify(schema, null, 2);
       const generatedBlock = `{% schema %}\n${json}\n{% endschema %}`;
 
@@ -188,16 +152,53 @@ export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
       const newContent = beforeMarker + marker + inlineOverrideBlock + '\n' + generatedBlock + '\n';
 
       if (!dryRun) {
-        writeFileSync(sectionPath, newContent, 'utf-8');
+        writeFileSync(filePath, newContent, 'utf-8');
       }
-      processed.push({ section: sectionFile, schemaName });
+      processed.push({ section: displayName, schemaName });
     } catch (err) {
       errors.push({
-        section: sectionFile,
+        section: displayName,
         schema: schemaName,
         error: err.message,
       });
     }
+  }
+}
+
+/**
+ * Build section and block schemas for a Shopify theme project.
+ *
+ * Scans `sections/*.liquid` and `blocks/*.liquid` for an inline-comment marker:
+ *
+ *   {% # schema 'hero-banner' %}
+ *
+ * When found, resolves `_schemas/hero-banner.js` (or `.json`), evaluates it,
+ * and writes (or replaces) the generated `{% schema %}...{% endschema %}`
+ * block directly below the marker. The marker is never removed, so rebuilds
+ * always work — even after Shopify theme editor edits.
+ *
+ * @param {object}  options
+ * @param {string}  [options.cwd]    Theme project root (default `process.cwd()`).
+ * @param {boolean} [options.dryRun] When true, compute schemas without writing files.
+ * @returns {{ processed: Array<{section: string, schemaName: string}>, skipped: string[], errors: Array<{section: string, schema: string, error: string}> }}
+ */
+export function buildSchemas({ cwd = process.cwd(), dryRun = false } = {}) {
+  const schemasDir = join(cwd, SCHEMA_DIR);
+
+  const processed = [];
+  const skipped = [];
+  const errors = [];
+
+  for (const dirName of LIQUID_DIRS) {
+    processLiquidDir({
+      dirPath: join(cwd, dirName),
+      dirName,
+      schemasDir,
+      dryRun,
+      processed,
+      skipped,
+      errors,
+    });
   }
 
   return { processed, skipped, errors };
@@ -216,22 +217,26 @@ export function listSchemaFiles(cwd = process.cwd()) {
 }
 
 /**
- * List section files that contain the inline-comment schema marker.
+ * List liquid files in sections/ and blocks/ that contain the inline-comment schema marker.
  */
 export function listSectionsWithSchemaRefs(cwd = process.cwd()) {
-  const sectionsDir = join(cwd, 'sections');
-  if (!existsSync(sectionsDir)) return [];
-
   const results = [];
-  const files = readdirSync(sectionsDir, { withFileTypes: true })
-    .filter((d) => d.isFile() && d.name.endsWith('.liquid'));
 
-  for (const file of files) {
-    const content = readFileSync(join(sectionsDir, file.name), 'utf-8');
-    const match = content.match(MARKER_REGEX);
-    if (match) {
-      results.push({ section: file.name, schemas: [match[1]] });
+  for (const dirName of LIQUID_DIRS) {
+    const dirPath = join(cwd, dirName);
+    if (!existsSync(dirPath)) continue;
+
+    const files = readdirSync(dirPath, { withFileTypes: true })
+      .filter((d) => d.isFile() && d.name.endsWith('.liquid'));
+
+    for (const file of files) {
+      const content = readFileSync(join(dirPath, file.name), 'utf-8');
+      const match = content.match(MARKER_REGEX);
+      if (match) {
+        results.push({ section: `${dirName}/${file.name}`, schemas: [match[1]] });
+      }
     }
   }
+
   return results;
 }

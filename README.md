@@ -274,7 +274,7 @@ If these files already exist, `init` warns that they will be replaced.
 
 Build Shopify section schemas dynamically from JavaScript or JSON files using `climaybe build-schemas`. Works directly in `sections/` — no separate source folder, no sync issues with the theme editor.
 
-**How it works:** Add an inline-comment marker at the end of any `sections/*.liquid` file. Shopify treats `{% # ... %}` as a comment and ignores it. The builder finds the marker, resolves the schema from `_schemas/`, and writes the generated `{% schema %}...{% endschema %}` block below it. The marker is never removed, so rebuilds always work — even after Shopify theme editor edits.
+**How it works:** Add an inline-comment marker at the end of any `sections/*.liquid` or `blocks/*.liquid` file. Shopify treats `{% # ... %}` as a comment and ignores it. The builder finds the marker, resolves the schema from `_schemas/`, and writes the generated `{% schema %}...{% endschema %}` block below it. The marker is never removed, so rebuilds always work — even after Shopify theme editor edits.
 
 ```liquid
 <section class="hero">{{ section.settings.title }}</section>
@@ -305,7 +305,7 @@ npx climaybe build-schemas --dry-run    # preview without writing files
 npx climaybe build-schemas --list       # list schema files and markers
 ```
 
-Schemas also rebuild automatically during `climaybe serve` and `climaybe serve:assets` — the watcher monitors `_schemas/` and rebuilds on change, tagged `[schema]` in the console. `climaybe build` includes schemas alongside scripts and Tailwind.
+Schemas also rebuild automatically during `climaybe serve` and `climaybe serve:assets` — the watcher monitors `_schemas/` for changes and rebuilds on save, tagged `[schema]` in green. `climaybe build` includes schemas alongside scripts and Tailwind.
 
 Example `_schemas/hero-banner.js`:
 
