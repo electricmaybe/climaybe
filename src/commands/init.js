@@ -36,6 +36,7 @@ import {
   setSecret,
   setGitLabVariable,
 } from '../lib/github-secrets.js';
+import { logBranchProtectionResult, syncBranchProtection } from '../lib/branch-protection.js';
 
 function installThemeDependencies(cwd = process.cwd()) {
   try {
@@ -132,6 +133,20 @@ async function runInitFlow() {
       createStoreBranches(s.alias);
       createStoreDirectories(s.alias);
     }
+  }
+
+  const protection = syncBranchProtection({
+    mode,
+    aliases: stores.map((s) => s.alias),
+    cwd: process.cwd(),
+  });
+  logBranchProtectionResult(protection, mode);
+  if (protection.applied.length > 0 || protection.removed.length > 0) {
+    console.log(
+      pc.dim(
+        '  Rule: PR required on protected branches; live-* bypass allowed for shopify[bot], github-actions[bot], actions-user.'
+      )
+    );
   }
 
   // 6. Scaffold workflows

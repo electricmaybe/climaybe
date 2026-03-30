@@ -27,6 +27,10 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 ## Local dev (multi-store)
 
 - **Select store**: `climaybe theme switch <alias>` or `climaybe switch <alias>` (e.g. `climaybe switch voldt-staging`). Copies `stores/<alias>/` JSONs to repo root.
+- **Serve directly**: `climaybe serve` / `climaybe serve:shopify` now resolve store automatically in multi-store mode:
+  - uses `active_store_alias` saved by `switch` when available;
+  - otherwise prompts for an alias and saves it;
+  - optional override: `--alias <alias>`.
 - **Edit**: Change root JSONs as needed.
 - **Write back**: `climaybe theme sync [alias]` or `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
 - **Cursor (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled `.cursor/rules`, `.cursor/skills`, and `.cursor/agents` (e.g. **theme-translator** for syncing `theme/locales/` from English defaults). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
@@ -83,6 +87,10 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Single-store**: `climaybe init` / `climaybe ensure-branches` creates `staging` (no `staging-<alias>` / `live-<alias>` branches).
 - **Multi-store**: `climaybe init` / `climaybe ensure-branches` creates `staging` and per-store branches (`staging-<alias>`, `live-<alias>`).
 - If the repo only has `main` (e.g. after clone), run `climaybe ensure-branches` then `git push origin --all` so the mode-appropriate sync workflows can run.
+- Branch protection reconciliation (GitHub): when `gh` is authenticated and `origin` is GitHub, `init`, `add-store`, and `ensure-branches` align protection with mode:
+  - single-store: protect `main` (PR required)
+  - multi-store: protect `live-<alias>` (PR required; bypass users: `shopify[bot]`, `github-actions[bot]`, `actions-user`)
+  - on single→multi migration, old `main` protection is removed and `live-<alias>` protections are applied
 
 ## Custom steps and optional paths
 
@@ -113,7 +121,7 @@ When the implementation changes, update the external “CI/CD – Developer Comm
 | Topic | Doc change |
 |-------|------------|
 | **Versiyonlama** | Version always three-part (e.g. `v3.2.0`). No version in code or PR title; system infers from tags. Staging→main: pre-release patch tag on PR (e.g. v3.1.13), then minor on merge (v3.2.0). Non-staging (hotfix): patch only via nightly 02:00 US Eastern. |
-| **§2.2 Local preview** | Replace `--stores=` with `climaybe switch <alias>`. Build steps: (1) `climaybe switch <alias>`, (2) edit root, (3) `climaybe sync [alias]` (no watch). |
+| **§2.2 Local preview** | Replace `--stores=` with `climaybe switch <alias>` and/or direct `climaybe serve` store selection. Build steps: (1) `climaybe switch <alias>` or `climaybe serve` (auto-prompt/remember alias), (2) edit root, (3) `climaybe sync [alias]` (no watch). |
 | **§2.4** | Use workflow name “main-to-staging-<store>” and note climaybe file: `main-to-staging-stores.yml`. |
 | **§2.6 Hotfixler** | Hotfixes from both `staging-<store>` and `live-<store>` are synced to main automatically (no PR; branch is merged into main). Replace “main’e commit atılır” with “main’e merge edilir (otomatik senkronizasyon).” For live-*: root-to-stores runs first, then multistore-hotfix-to-main merges into main. |
 | **§2.7 Versiyon bump** | “Staging→main merge: minor bump (anında). Staging dışı (hotfix): patch bump sadece gece 02:00 US Eastern nightly workflow ile; commit anında tag yok.” |
