@@ -114,6 +114,10 @@ If no alias is given, syncs to the default store.
 
 Create missing branches from your current branch (usually `main`). In single-store mode, this creates `staging` only. In multi-store mode, this creates `staging` plus per-store branches (`staging-<alias>`, `live-<alias>`). Use when the repo only has `main` (e.g. after a fresh clone) so the configured sync flow can run.
 
+When a GitHub remote and authenticated `gh` CLI are available, this command also reconciles branch protection to match current mode:
+- single-store: protect `main` (PR required)
+- multi-store: protect `live-<alias>` (PR required; bypass users: `shopify[bot]`, `github-actions[bot]`, `actions-user`)
+
 ```bash
 npx climaybe ensure-branches
 git push origin --all
@@ -184,6 +188,7 @@ staging → main
 
 - `staging` — development branch
 - `main` — production branch
+- branch protection: `main` requires PR (no direct pushes)
 
 ### Multi-store
 
@@ -195,6 +200,7 @@ staging → main → staging-<store> → live-<store>
 - `main` — shared codebase (not live)
 - `staging-<store>` — per-store staging with store-specific JSON data
 - `live-<store>` — per-store production
+- branch protection: each `live-<store>` requires PR; bypass users: `shopify[bot]`, `github-actions[bot]`, `actions-user`
 
 Direct pushes to `staging-<store>` or `live-<store>` are automatically synced back to `main` (no PR; multistore-hotfix-to-main merges the branch into main).
 
