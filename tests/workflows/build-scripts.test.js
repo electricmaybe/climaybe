@@ -250,6 +250,44 @@ import "./electric-variant-link-converter.js"
     }
   });
 
+  it('isolates side-effect-only imports to avoid duplicate top-level identifier collisions', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'deferred.js'),
+        `import "./feature-a.js";
+import "./feature-b.js";
+console.log("deferred");
+`,
+        'utf-8'
+      );
+      writeFileSync(
+        join(dir, '_scripts', 'feature-a.js'),
+        `const ON_CHANGE_DEBOUNCE_TIMER = 150;
+console.log("a", ON_CHANGE_DEBOUNCE_TIMER);
+`,
+        'utf-8'
+      );
+      writeFileSync(
+        join(dir, '_scripts', 'feature-b.js'),
+        `const ON_CHANGE_DEBOUNCE_TIMER = 250;
+console.log("b", ON_CHANGE_DEBOUNCE_TIMER);
+`,
+        'utf-8'
+      );
+
+      buildScripts({ cwd: dir, entry: 'deferred' });
+
+      const out = readFileSync(join(dir, 'assets', 'deferred.js'), 'utf-8');
+      assert.doesNotThrow(() => new Function(out), out);
+    } finally {
+      teardown();
+    }
+  });
+
   it('preserves script comments in production mode', () => {
     const dir = setup();
     const originalNodeEnv = process.env.NODE_ENV;

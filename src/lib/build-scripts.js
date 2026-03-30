@@ -1,23 +1,27 @@
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, basename, dirname, normalize } from 'node:path';
 
-function extractImports(content) {
+function extractImportRecords(content) {
   const imports = [];
   // Supports compact imports (import{a}from"./x"), multiline forms,
   // and import attributes (with { type: "json" }).
   const fromImportRegex =
-    /(^|\n)\s*import(?:\s+type)?\s*[\s\S]*?\s*\bfrom\b\s*['"]([^'"]+)['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g;
+    /(^|\n)\s*import(?:\s+type)?\s*([\s\S]*?)\s*\bfrom\b\s*['"]([^'"]+)['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g;
   const sideEffectImportRegex = /(^|\n)\s*import\s*['"]([^'"]+)['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g;
   let match;
 
   while ((match = fromImportRegex.exec(content)) !== null) {
-    imports.push(match[2]);
+    imports.push({ importPath: match[3], hasBindings: Boolean(match[2]?.trim()) });
   }
   while ((match = sideEffectImportRegex.exec(content)) !== null) {
-    imports.push(match[2]);
+    imports.push({ importPath: match[2], hasBindings: false });
   }
 
   return imports;
+}
+
+function extractImports(content) {
+  return extractImportRecords(content).map((record) => record.importPath);
 }
 
 function stripModuleSyntax(content) {
@@ -58,7 +62,7 @@ function minifyScriptContent(content) {
   return minified;
 }
 
-function processScriptFile({ scriptsDir, filePath, processedFiles, minify = false }) {
+function processScriptFile({ scriptsDir, filePath, processedFiles, minify = false, isolateFiles = new Set() }) {
   if (processedFiles.has(filePath)) return '';
   processedFiles.add(filePath);
 
@@ -78,11 +82,20 @@ function processScriptFile({ scriptsDir, filePath, processedFiles, minify = fals
   for (const importPath of imports) {
     const resolvedImport = resolveImportPath(filePath, importPath);
     if (!resolvedImport) continue;
-    importedContent += processScriptFile({ scriptsDir, filePath: resolvedImport, processedFiles, minify });
+    importedContent += processScriptFile({
+      scriptsDir,
+      filePath: resolvedImport,
+      processedFiles,
+      minify,
+      isolateFiles
+    });
   }
 
   content = stripModuleSyntax(content);
   if (minify) content = minifyScriptContent(content);
+  if (isolateFiles.has(filePath)) {
+    content = `(function () {\n${content.trim()}\n})();`;
+  }
 
   return importedContent + '\n' + content;
 }
@@ -113,6 +126,39 @@ function collectImportedFiles({ scriptsDir, entryFile, seen = new Set() }) {
   return seen;
 }
 
+function collectFilesToIsolate({ scriptsDir, entryFile }) {
+  const seen = new Set();
+  const importedWithBindings = new Set();
+
+  function visit(filePath) {
+    if (seen.has(filePath)) return;
+    seen.add(filePath);
+
+    const fullPath = join(scriptsDir, filePath);
+    if (!existsSync(fullPath)) return;
+    const content = readFileSync(fullPath, 'utf8');
+    const imports = extractImportRecords(content);
+
+    for (const record of imports) {
+      const resolved = resolveImportPath(filePath, record.importPath);
+      if (!resolved) continue;
+      if (record.hasBindings) importedWithBindings.add(resolved);
+      visit(resolved);
+    }
+  }
+
+  visit(entryFile);
+
+  const isolateFiles = new Set();
+  for (const file of seen) {
+    if (file !== entryFile && !importedWithBindings.has(file)) {
+      isolateFiles.add(file);
+    }
+  }
+
+  return isolateFiles;
+}
+
 function listTopLevelEntrypoints(scriptsDir) {
   if (!existsSync(scriptsDir)) return [];
   return readdirSync(scriptsDir, { withFileTypes: true })
@@ -134,7 +180,14 @@ function buildSingleEntrypoint({ cwd, entryFile, minify = false }) {
   }
 
   const processedFiles = new Set();
-  let finalContent = processScriptFile({ scriptsDir, filePath: entryFile, processedFiles, minify });
+  const isolateFiles = collectFilesToIsolate({ scriptsDir, entryFile });
+  let finalContent = processScriptFile({
+    scriptsDir,
+    filePath: entryFile,
+    processedFiles,
+    minify,
+    isolateFiles
+  });
   finalContent = stripModuleSyntax(finalContent);
   if (minify) finalContent = minifyScriptContent(finalContent);
 
