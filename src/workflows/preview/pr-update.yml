@@ -10,10 +10,38 @@ on:
     branches: [main, staging, develop, 'staging-*', 'live-*']
 
 jobs:
+  filter:
+    runs-on: ubuntu-latest
+    outputs:
+      theme: ${{ steps.paths.outputs.theme }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: paths
+        with:
+          filters: |
+            theme:
+              - 'assets/**'
+              - 'blocks/**'
+              - 'config/**'
+              - 'layout/**'
+              - 'locales/**'
+              - 'sections/**'
+              - 'snippets/**'
+              - 'templates/**'
+              - '_scripts/**'
+              - '_styles/**'
+              - 'shopify.theme.toml'
+              - 'stores/**'
+
   extract-pr-number:
+    needs: [filter]
+    if: needs.filter.outputs.theme == 'true'
     uses: ./.github/workflows/reusable-extract-pr-number.yml
 
   validate-environment:
+    needs: [filter]
+    if: needs.filter.outputs.theme == 'true'
     runs-on: ubuntu-latest
     outputs:
       store_alias: ${{ steps.resolve.outputs.alias }}

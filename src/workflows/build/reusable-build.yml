@@ -6,6 +6,9 @@ on:
       build-success:
         description: "Whether build was successful"
         value: ${{ jobs.build.outputs.success }}
+      build_ran:
+        description: "True when npm ci and at least one build step ran (path filters matched)"
+        value: ${{ jobs.build.outputs.build_ran }}
 
 jobs:
   build:
@@ -14,22 +17,25 @@ jobs:
       contents: write
     outputs:
       success: ${{ steps.build.outputs.success }}
+      build_ran: ${{ steps.run.outputs.build_ran }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: changes
         with:
-          node-version: "24"
-
-      - name: Install dependencies from lockfile
-        run: |
-          if [ ! -f "package-lock.json" ]; then
-            echo "package-lock.json is required for deterministic build workflow installs."
-            exit 1
-          fi
-          npm ci
+          filters: |
+            scripts:
+              - '_scripts/**/*.js'
+              - 'assets/**/*.js'
+            tailwind:
+              - '**/*.liquid'
+              - '**/*.css'
+              - '_scripts/**/*.js'
+              - 'tailwind.config.*'
+              - 'postcss.config.*'
 
       - name: Detect build entrypoints
         id: detect
@@ -51,8 +57,42 @@ jobs:
             echo "scripts_minify=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Decide which build steps to run
+        id: run
+        run: |
+          SCRIPTS="${{ steps.changes.outputs.scripts }}"
+          TW="${{ steps.changes.outputs.tailwind }}"
+          HAS_SCR="${{ steps.detect.outputs.has_scripts }}"
+          HAS_STY="${{ steps.detect.outputs.has_styles }}"
+          run_scripts=false
+          run_tailwind=false
+          if [ "$SCRIPTS" = "true" ] && [ "$HAS_SCR" = "true" ]; then run_scripts=true; fi
+          if [ "$TW" = "true" ] && [ "$HAS_STY" = "true" ]; then run_tailwind=true; fi
+          if [ "$run_scripts" = "true" ] || [ "$run_tailwind" = "true" ]; then
+            echo "build_ran=true" >> $GITHUB_OUTPUT
+          else
+            echo "build_ran=false" >> $GITHUB_OUTPUT
+          fi
+          echo "run_scripts=$run_scripts" >> $GITHUB_OUTPUT
+          echo "run_tailwind=$run_tailwind" >> $GITHUB_OUTPUT
+
+      - name: Set up Node.js
+        if: steps.run.outputs.build_ran == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies from lockfile
+        if: steps.run.outputs.build_ran == 'true'
+        run: |
+          if [ ! -f "package-lock.json" ]; then
+            echo "package-lock.json is required for deterministic build workflow installs."
+            exit 1
+          fi
+          npm ci
+
       - name: Build scripts
-        if: steps.detect.outputs.has_scripts == 'true'
+        if: steps.run.outputs.build_ran == 'true' && steps.run.outputs.run_scripts == 'true'
         run: |
           if [ "${{ steps.detect.outputs.scripts_minify }}" = "true" ]; then
             npx --no-install climaybe build-scripts --minify
@@ -61,16 +101,12 @@ jobs:
           fi
 
       - name: Run Tailwind build
-        id: build
+        if: steps.run.outputs.build_ran == 'true' && steps.run.outputs.run_tailwind == 'true'
         run: |
-          if [ "${{ steps.detect.outputs.has_styles }}" = "true" ]; then
-            NODE_ENV=production npx --no-install climaybe build
-          else
-            echo "No _styles/main.css found; skipping Tailwind build."
-          fi
-          echo "success=true" >> $GITHUB_OUTPUT
+          NODE_ENV=production npx --no-install climaybe build
 
       - name: Commit and push changes
+        if: steps.run.outputs.build_ran == 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -89,3 +125,8 @@ jobs:
             git commit -m "chore(assets): update compiled javascript and css"
             git push origin "$BRANCH_NAME"
           fi
+
+      - name: Finalize success
+        id: build
+        if: success()
+        run: echo "success=true" >> $GITHUB_OUTPUT

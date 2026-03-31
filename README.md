@@ -227,7 +227,7 @@ Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`; defau
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `pr-update.yml` | PR opened/synchronize/reopened (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs; uses default store for main/staging/develop, or the store for staging-&lt;alias&gt;/live-&lt;alias&gt; |
+| `pr-update.yml` | PR opened/synchronize/reopened (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs; uses default store for main/staging/develop, or the store for staging-&lt;alias&gt;/live-&lt;alias&gt;. **Path filter:** runs only when the PR changes theme paths (`assets/`, `blocks/`, `config/`, `layout/`, `locales/`, `sections/`, `snippets/`, `templates/`, `_scripts/`, `_styles/`, `shopify.theme.toml`, `stores/**`); docs-only or tooling-only PRs skip preview work. |
 | `pr-close.yml` | PR closed (same branch set) | Deletes matching preview themes and comments deleted count + names |
 | `reusable-share-theme.yml` | workflow_call | Shares Shopify draft theme and returns `theme_id` |
 | `reusable-rename-theme.yml` | workflow_call | Renames shared theme to include `PR<number>` (fails job on rename failure) |
@@ -250,8 +250,8 @@ Build workflows install deps with `npm ci` and run `npx --no-install climaybe bu
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `build-pipeline.yml` | Push to any branch | Runs reusable build and Lighthouse checks (when required secrets exist) |
-| `reusable-build.yml` | workflow_call | Runs Node build + Tailwind compile, then commits compiled assets when changed |
+| `build-pipeline.yml` | Push to any branch (ignores docs-only/tooling-only paths; see CI/CD reference) | Runs reusable build; Lighthouse only on branch **`staging`**, when a build ran, and secrets allow |
+| `reusable-build.yml` | workflow_call | Path-filtered `build-scripts` / Tailwind (`climaybe build`), then commits compiled assets when changed |
 | `create-release.yml` | Push tag `v*`, or **workflow_run** after Post-Merge Tag / Nightly Hotfix Tag succeed on `main` | Builds release archive and creates GitHub Release notes from commits since the previous tag. It filters repetitive automation subjects (main→staging syncs, store/root sync chores, bot merge noise) before generating notes. If remaining subjects are low-signal and `GEMINI_API_KEY` exists, it uses Gemini to generate cleaner merchant-facing notes. Also covers tags created by workflows with `GITHUB_TOKEN`, which may not trigger tag-push workflows. |
 
 ### Optional theme dev kit package

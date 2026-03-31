@@ -129,6 +129,9 @@ describe('workflows', () => {
         const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
         const hasPreview = files.some((f) => f.includes('pr-update') || f.includes('preview'));
         assert.ok(hasPreview, 'expected at least one preview workflow');
+        const prUpdate = readFileSync(join(workflowsDir, 'pr-update.yml'), 'utf-8');
+        assert.match(prUpdate, /dorny\/paths-filter/);
+        assert.match(prUpdate, /stores\/\*\*/);
       } finally {
         teardown();
       }
@@ -149,7 +152,9 @@ describe('workflows', () => {
         assert.match(reusableBuild, /npx --no-install climaybe build-scripts/);
         assert.match(reusableBuild, /scripts_minify=true/);
         assert.match(reusableBuild, /build-scripts --minify/);
-        assert.match(reusableBuild, /No _styles\/main\.css found; skipping Tailwind build/);
+        assert.match(reusableBuild, /dorny\/paths-filter/);
+        assert.match(reusableBuild, /Decide which build steps to run/);
+        assert.match(reusableBuild, /Finalize success/);
         assert.match(reusableBuild, /git add -f assets\/\*\.js/);
       } finally {
         teardown();

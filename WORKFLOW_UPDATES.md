@@ -6,6 +6,10 @@
 
 This document summarizes past CI workflow hardening changes applied in `climaybe`.
 
+## Path filters (reduce Actions minutes)
+
+Scaffolded **build** and **preview** workflows use `dorny/paths-filter` (and `build-pipeline.yml` uses `paths-ignore`) so script/Tailwind builds, Lighthouse, and PR preview deploys skip when changes are limited to docs, tooling, or paths outside the theme. Script builds also match `assets/**/*.js`; Tailwind does not use a blanket `**/*.js` so compiled asset edits trigger `build-scripts` only. **`github-actions[bot]`** pushes with the standard `chore(assets): …` message skip the build job. **Lighthouse** runs only on the **`staging`** branch (not `staging-*`). The **climaybe** repo’s own **CI** workflow runs tests only when `src/`, `tests/`, `scripts/`, lockfile, or `ci.yml` change; **commitlint** still runs on every PR. See [docs/CI_CD_REFERENCE.md](docs/CI_CD_REFERENCE.md) for the exact globs.
+
 ## Latest tag = max semver merged into HEAD (not `git describe`)
 
 `post-merge-tag`, `version-bump`, `nightly-hotfix`, and `release-pr-check` now resolve the base tag as the **highest** `vMAJOR.MINOR.PATCH` among `git tag --merged HEAD` (with `sort -V`), instead of `git describe --tags --abbrev=0`. After a staging→main merge, `git describe` could pick an **older** tag that was fewer commits away on the staging parent than `v2.0.0` on main, producing an incorrect bump (e.g. toward `v1.0.1` instead of `v2.1.0`).
