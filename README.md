@@ -215,6 +215,7 @@ Direct pushes to `staging-<store>` or `live-<store>` are automatically synced ba
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
+| `default-store-to-root.yml` | Push to `main` or `staging` | Enforces deterministic root JSONs by copying from `stores/<default>/` → root (default from `climaybe.config.json`). Prevents conflicts when developers switch aliases locally. |
 | `main-to-staging-stores.yml` (main-to-staging-&lt;store&gt;) | Push to `main` | Merges main into each `staging-<alias>`; root JSONs ignored. Skips no-op sync when branch tree already matches main. For hotfix-backport: if source is `staging-<alias>`, that same staging branch is skipped; if source is `live-<alias>`, `staging-<alias>` is also synced. Skips only on pure store-sync. |
 | `stores-to-root.yml` | Push to `staging-*` | From main merge: stores→root. From elsewhere (e.g. Shopify): root→stores |
 | `pr-to-live.yml` | After stores-to-root | Opens PR from `staging-<alias>` to `live-<alias>` |
