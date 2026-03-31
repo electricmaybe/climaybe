@@ -45,7 +45,19 @@ function canPromptForUpdate() {
   return Boolean(input.isTTY && output.isTTY && process.env.CI !== 'true');
 }
 
-export function resolveInstallScope({ packageDir, cwd = process.cwd() } = {}) {
+function isNodeModulesInstall(packageDir, packageName) {
+  if (!packageDir || !packageName) return false;
+  const normalized = resolve(packageDir);
+  const nm = `${join('node_modules', packageName)}`;
+  return normalized.includes(`${join('node_modules', '')}`) && normalized.endsWith(nm);
+}
+
+export function resolveInstallScope({ packageName, packageDir, cwd = process.cwd() } = {}) {
+  // Prefer using the *running* CLI install path to decide how to update.
+  // This prevents "update loops" where we update a project dependency while the
+  // user is actually running a global install (or vice-versa).
+  if (isNodeModulesInstall(packageDir, packageName)) return 'local';
+
   try {
     const globalRoot = execSync('npm root -g', { encoding: 'utf-8', stdio: 'pipe' }).trim();
     if (packageDir && resolve(packageDir).startsWith(resolve(globalRoot))) return 'global';
@@ -53,7 +65,8 @@ export function resolveInstallScope({ packageDir, cwd = process.cwd() } = {}) {
     // ignore and fallback to local checks
   }
 
-  if (existsSync(join(cwd, 'package.json'))) return 'local';
+  // If we don't have an install path, fall back to "am I in a project?"
+  if (!packageDir && existsSync(join(cwd, 'package.json'))) return 'local';
   return 'global';
 }
 
@@ -73,13 +86,14 @@ export function getLocalInstallFlag({ packageName, cwd = process.cwd() } = {}) {
 }
 
 function runUpdate(packageName, { packageDir, cwd = process.cwd() } = {}) {
-  const scope = resolveInstallScope({ packageDir, cwd });
+  const scope = resolveInstallScope({ packageName, packageDir, cwd });
   if (scope === 'global') {
     execSync(`npm install -g ${packageName}@latest`, { stdio: 'inherit' });
     return 'global';
   }
-  const flag = getLocalInstallFlag({ packageName, cwd });
-  execSync(`npm install ${packageName}@latest ${flag}`, { cwd, stdio: 'inherit' });
+  const installCwd = cwd || process.cwd();
+  const flag = getLocalInstallFlag({ packageName, cwd: installCwd });
+  execSync(`npm install ${packageName}@latest ${flag}`, { cwd: installCwd, stdio: 'inherit' });
   return 'local';
 }
 
