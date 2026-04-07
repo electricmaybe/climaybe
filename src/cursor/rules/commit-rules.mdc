@@ -1,5 +1,5 @@
 ---
-description: Git commit conventions for Shopify theme projects (emoji + type + description)
+description: Git commit conventions for Shopify theme projects (type + description)
 globs:
   - "**/*"
 alwaysApply: false
@@ -8,75 +8,75 @@ alwaysApply: false
 
 ## Commit Convention
 
-Follow conventional commit format with emoji prefixes for all commits:
+Follow conventional commit format for all commits:
 
 ```
-<emoji> <type>: <description>
+<type>: <description>
 ```
 
 ## Commit Types
 
-### 🔨 `fix:` - Bug Fixes
+### `fix:` - Bug Fixes
 - Fixes for broken functionality
 - Bug patches and error corrections
 - Performance fixes
 
 **Examples:**
 ```
-🔨 fix: modal close button not working
-🔨 fix: cart total calculation error
-🔨 fix: mobile navigation menu overlap
+fix: modal close button not working
+fix: cart total calculation error
+fix: mobile navigation menu overlap
 ```
 
-### 🚀 `feat:` - New Features
+### `feat:` - New Features
 - New functionality additions
 - Feature implementations
 - New components or sections
 
 **Examples:**
 ```
-🚀 feat: add product quick view functionality
-🚀 feat: implement infinite scroll for collections
-🚀 feat: add newsletter signup modal
+feat: add product quick view functionality
+feat: implement infinite scroll for collections
+feat: add newsletter signup modal
 ```
 
-### ♻️ `refactor:` - Code Refactoring
+### `refactor:` - Code Refactoring
 - Code restructuring without changing functionality
 - Performance improvements
 - Code cleanup and optimization
 
 **Examples:**
 ```
-♻️ refactor: optimize product card rendering
-♻️ refactor: restructure JavaScript build system
-♻️ refactor: improve web component lifecycle management
+refactor: optimize product card rendering
+refactor: restructure JavaScript build system
+refactor: improve web component lifecycle management
 ```
 
-### 🎨 `style:` - UI/Styling Changes
+### `style:` - UI/Styling Changes
 - Visual design updates
 - CSS/styling modifications
 - Layout adjustments
 
 **Examples:**
 ```
-🎨 style: update button hover states
-🎨 style: improve mobile responsive design
-🎨 style: adjust typography spacing
+style: update button hover states
+style: improve mobile responsive design
+style: adjust typography spacing
 ```
 
-### 🗑️ `remove:` - Code Removal
+### `remove:` - Code Removal
 - Removing unused code
 - Deleting deprecated features
 - Cleaning up legacy code
 
 **Examples:**
 ```
-🗑️ remove: unused JavaScript functions
-🗑️ remove: deprecated Liquid snippets
-🗑️ remove: old CSS classes
+remove: unused JavaScript functions
+remove: deprecated Liquid snippets
+remove: old CSS classes
 ```
 
-### 🚧 `wip:` - Work in Progress
+### `wip:` - Work in Progress
 - Incomplete features
 - Experimental code
 - Development in progress
@@ -84,12 +84,12 @@ Follow conventional commit format with emoji prefixes for all commits:
 
 **Examples:**
 ```
-🚧 wip: product quick view modal (incomplete)
-🚧 wip: experimental infinite scroll implementation
-🚧 wip: temporary mobile navigation solution
+wip: product quick view modal (incomplete)
+wip: experimental infinite scroll implementation
+wip: temporary mobile navigation solution
 ```
 
-### 📝 `docs:` - Documentation
+### `docs:` - Documentation
 - README updates
 - Code documentation
 - Comment additions
@@ -97,12 +97,12 @@ Follow conventional commit format with emoji prefixes for all commits:
 
 **Examples:**
 ```
-📝 docs: update installation instructions
-📝 docs: add component usage examples
-📝 docs: improve code comments
+docs: update installation instructions
+docs: add component usage examples
+docs: improve code comments
 ```
 
-### ✨ `ai:` - AI Rules & Automation
+### `ai:` - AI Rules & Automation
 - AI-generated code improvements
 - Automated refactoring
 - Code optimization rules
@@ -110,12 +110,12 @@ Follow conventional commit format with emoji prefixes for all commits:
 
 **Examples:**
 ```
-✨ ai: implement automated code formatting rules
-✨ ai: optimize web component performance with AI suggestions
-✨ ai: add intelligent error handling patterns
+ai: implement automated code formatting rules
+ai: optimize web component performance with AI suggestions
+ai: add intelligent error handling patterns
 ```
 
-### 🔧 `chore:` - Maintenance Tasks
+### `chore:` - Maintenance Tasks
 - Build system updates
 - Configuration changes
 - Dependency management
@@ -123,21 +123,21 @@ Follow conventional commit format with emoji prefixes for all commits:
 
 **Examples:**
 ```
-🔧 chore: update Tailwind CSS to v4
-🔧 chore: add new npm scripts
-🔧 chore: update Shopify CLI version
+chore: update Tailwind CSS to v4
+chore: add new npm scripts
+chore: update Shopify CLI version
 ```
 
-### ⬆️ `upgrade:` - Dependencies
+### `upgrade:` - Dependencies
 - Package updates
 - Version upgrades
 - Security patches
 
 **Examples:**
 ```
-⬆️ upgrade: update Shopify CLI to latest version
-⬆️ upgrade: bump Tailwind CSS dependencies
-⬆️ upgrade: security patch for npm packages
+upgrade: update Shopify CLI to latest version
+upgrade: bump Tailwind CSS dependencies
+upgrade: security patch for npm packages
 ```
 
 ## Commit Message Guidelines
@@ -150,18 +150,18 @@ Follow conventional commit format with emoji prefixes for all commits:
 
 ### Good Examples
 ```
-🔨 fix: resolve cart total calculation error
-🚀 feat: implement product quick view modal
-♻️ refactor: optimize web component performance
-🎨 style: improve mobile navigation layout
+fix: resolve cart total calculation error
+feat: implement product quick view modal
+refactor: optimize web component performance
+style: improve mobile navigation layout
 ```
 
 ### Bad Examples
 ```
-🔨 fix: fixed the bug
-🚀 feat: Added new feature
-♻️ refactor: Refactored code for better performance.
-🎨 style: Updated styling
+fix: fixed the bug
+feat: Added new feature
+refactor: Refactored code for better performance.
+style: Updated styling
 ```
 
 ## Multi-line Commit Messages
@@ -169,7 +169,7 @@ Follow conventional commit format with emoji prefixes for all commits:
 For complex changes, use multi-line format:
 
 ```
-🔨 fix: resolve cart total calculation error
+fix: resolve cart total calculation error
 
 - Fix floating point precision issues
 - Add proper error handling for invalid prices
@@ -183,7 +183,7 @@ Closes #123
 For breaking changes, use `!` after the type and include migration notes:
 
 ```
-♻️ refactor!: restructure web component API
+refactor!: restructure web component API
 
 BREAKING CHANGE: Component initialization now requires config object
 Migration: Update component calls to use new API format
@@ -197,9 +197,9 @@ Migration: Update component calls to use new API format
 You can add scope to specify the area of change:
 
 ```
-🔨 fix(web-components): resolve event listener memory leak
-🚀 feat(sections): add new product grid layout
-🎨 style(header): improve mobile navigation
+fix(web-components): resolve event listener memory leak
+feat(sections): add new product grid layout
+style(header): improve mobile navigation
 ```
 
 ## File-specific Commits
@@ -207,9 +207,9 @@ You can add scope to specify the area of change:
 When committing changes to specific file types, include context:
 
 ```
-🔨 fix(liquid): resolve template rendering error in product page
-🚀 feat(js): add new utility functions for DOM manipulation
-🎨 style(css): update button component styling
+fix(liquid): resolve template rendering error in product page
+feat(js): add new utility functions for DOM manipulation
+style(css): update button component styling
 ```
 
 ## Commit Frequency
@@ -250,37 +250,37 @@ When creating pull requests:
 
 ### Web Components
 ```
-🔨 fix: resolve web component memory leak in disconnectedCallback
-🚀 feat: add new electric-slider component with touch support
-♻️ refactor: optimize web component event handling
+fix: resolve web component memory leak in disconnectedCallback
+feat: add new electric-slider component with touch support
+refactor: optimize web component event handling
 ```
 
 ### Shopify Sections
 ```
-🔨 fix: resolve section rendering error in collection page
-🚀 feat: add new product recommendations section
-🎨 style: improve section spacing and layout
+fix: resolve section rendering error in collection page
+feat: add new product recommendations section
+style: improve section spacing and layout
 ```
 
 ### JavaScript
 ```
-🔨 fix: resolve async/await error in cart API
-🚀 feat: add utility functions for DOM manipulation
-♻️ refactor: optimize JavaScript build system
+fix: resolve async/await error in cart API
+feat: add utility functions for DOM manipulation
+refactor: optimize JavaScript build system
 ```
 
 ### CSS/Styling
 ```
-🎨 style: update button component design system
-🎨 style: improve mobile responsive breakpoints
-🎨 style: add new color palette variables
+style: update button component design system
+style: improve mobile responsive breakpoints
+style: add new color palette variables
 ```
 
 ### Liquid Templates
 ```
-🔨 fix: resolve Liquid syntax error in product template
-🚀 feat: add new product variant selector
-♻️ refactor: optimize Liquid template performance
+fix: resolve Liquid syntax error in product template
+feat: add new product variant selector
+refactor: optimize Liquid template performance
 ```
 
 This commit convention ensures clear, consistent, and informative commit messages that help track project progress and facilitate collaboration.

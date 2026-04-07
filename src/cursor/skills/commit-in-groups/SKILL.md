@@ -1,6 +1,6 @@
 ---
 name: commit-in-groups
-description: Groups current working tree changes into logical commits and suggests commit messages per project convention. Use when the user says "/commit-in-groups", "commit in groups", "group my commits", "suggest separate commits", or "split my changes into commits". Follows commit-rules.mdc (emoji + type + description).
+description: Groups current working tree changes into logical commits and suggests commit messages per project convention. Use when the user says "/commit-in-groups", "commit in groups", "group my commits", "suggest separate commits", or "split my changes into commits". Follows commit-rules.mdc (type + description).
 ---
 
 # Commit in Groups
@@ -14,7 +14,7 @@ Analyzes uncommitted changes, groups them into logical commits, and suggests one
 Before suggesting any commit messages, read and apply:
 
 1. `.cursor/rules/00-rule-index.mdc` — rule index
-2. `.cursor/rules/commit-rules.mdc` — commit format (emoji + type + description), types (fix, feat, refactor, style, etc.), imperative mood, optional scope
+2. `.cursor/rules/commit-rules.mdc` — commit format (type + description), types (fix, feat, refactor, style, etc.), imperative mood, optional scope
 
 Use the exact format and types from commit-rules; no period at end; lowercase description.
 
@@ -27,8 +27,8 @@ Use the exact format and types from commit-rules; no period at end; lowercase de
    - Refactor in one area, fix in another → separate commits
    - Locale/schema/docs can be separate if they form a clear unit
    - When in doubt, split rather than combine
-3. **Assign type** — For each group, pick the best type from commit-rules (🔨 fix, 🚀 feat, ♻️ refactor, 🎨 style, 🗑️ remove, 📝 docs, 🔧 chore, etc.) and optional scope (e.g. `sections`, `cart`, `locales`).
-4. **Write messages** — One line per commit: `<emoji> <type>(scope): <description>`. Imperative, lowercase, no period. Multi-line body only if the change is complex and warrants bullets.
+3. **Assign type** — For each group, pick the best type from commit-rules (fix, feat, refactor, style, remove, docs, chore, etc.) and optional scope (e.g. `sections`, `cart`, `locales`).
+4. **Write messages** — One line per commit: `<type>(scope): <description>`. Imperative, lowercase, no period. Multi-line body only if the change is complex and warrants bullets.
 5. **Output and execute** — List the suggested commits (message + files per commit), then **run the commits yourself**: for each group, run `git add` on the listed files and `git commit -m "..."` with the exact message. Do not only suggest commands; execute them so the working tree is left with the changes committed. Summarize what was committed at the end.
 
 ## Output Format
@@ -38,11 +38,11 @@ Show the plan briefly, then run it:
 ```markdown
 ## Suggested commits
 
-**Commit 1:** `🚀 feat(sections): add featured collection section`
+**Commit 1:** `feat(sections): add featured collection section`
 - `sections/s--featured-collection.liquid`
 - `snippets/m--product-card.liquid`
 
-**Commit 2:** `🎨 style(cart): adjust drawer spacing`
+**Commit 2:** `style(cart): adjust drawer spacing`
 - `sections/cart--drawer.liquid`
 - `assets/style.css`
 ```
