@@ -11,10 +11,12 @@ alwaysApply: false
 
 Every section must include:
 
-- `{% schema %}` tag with valid JSON
+- Schema definition — either a `{% schema %}` tag with valid JSON, or a `{% # schema 'name' %}` marker referencing a schema from `_schemas/` (see `schemas.mdc` for the schema builder)
 - Proper HTML semantic structure
 - CSS scoping with section classes
 - Translation keys for all text
+
+When using the schema builder, add the inline-comment marker at the end of the section file and define the schema in `_schemas/`. The generated `{% schema %}...{% endschema %}` block is build output — do not edit it directly.
 
 ## Section Patterns
 

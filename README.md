@@ -270,6 +270,59 @@ You can create optional build entrypoints later with:
 
 If these files already exist, `init` warns that they will be replaced.
 
+### Section schema builder
+
+Build Shopify section schemas dynamically from JavaScript or JSON files using `climaybe build-schemas`. Works directly in `sections/` — no separate source folder, no sync issues with the theme editor.
+
+**How it works:** Add an inline-comment marker at the end of any `sections/*.liquid` or `blocks/*.liquid` file. Shopify treats `{% # ... %}` as a comment and ignores it. The builder finds the marker, resolves the schema from `_schemas/`, and writes the generated `{% schema %}...{% endschema %}` block below it. The marker is never removed, so rebuilds always work — even after Shopify theme editor edits.
+
+```liquid
+<section class="hero">{{ section.settings.title }}</section>
+
+{% # schema 'hero-banner' %}
+{% schema %}
+{
+  "name": "Hero Banner",
+  "settings": [...]
+}
+{% endschema %}
+```
+
+On rebuild, only the generated `{% schema %}` block is replaced. Everything above the marker (including theme editor changes) is preserved.
+
+**Supported patterns:**
+
+- **Shared schemas** — one schema file reused across multiple sections
+- **Partials** — `require()` shared settings arrays into multiple schemas
+- **Common fieldsets** — spread partial arrays into settings (`...linkSettings`)
+- **Looping fieldsets** — factory functions that generate repeated field groups
+- **Section-specific overrides** — export a function receiving `(filename, inlineContent)` to customise per section
+- **Inline JSON overrides** — add `{% # { "name": "Custom" } %}` below the marker
+
+```bash
+npx climaybe build-schemas              # generate schemas in sections/
+npx climaybe build-schemas --dry-run    # preview without writing files
+npx climaybe build-schemas --list       # list schema files and markers
+```
+
+Schemas also rebuild automatically during `climaybe serve` and `climaybe serve:assets` — the watcher monitors `_schemas/` for changes and rebuilds on save, tagged `[schema]` in green. `climaybe build` includes schemas alongside scripts and Tailwind.
+
+Example `_schemas/hero-banner.js`:
+
+```js
+const createLinks = require('./partials/create-links');
+
+module.exports = {
+  name: 'Hero Banner',
+  settings: [
+    { label: 'Title', id: 'title', type: 'text' },
+    ...createLinks(2)
+  ]
+};
+```
+
+**Full examples:** See **[Schema Builder Examples](docs/SCHEMA_BUILDER_EXAMPLES.md)** for working code covering every pattern.
+
 You can install/update this later with:
 
 `climaybe add-dev-kit` (or `climaybe theme add-dev-kit`)
@@ -342,6 +395,10 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 │       ├── config/settings_data.json
 │       ├── templates/*.json
 │       └── sections/*.json
+├── _schemas/            (optional: JS/JSON schema definitions for build-schemas)
+│   ├── hero-banner.js
+│   └── partials/
+│       └── link.js
 ├── package.json
 └── .github/workflows/
 ```
