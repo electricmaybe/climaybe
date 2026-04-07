@@ -150,8 +150,8 @@ describe('workflows', () => {
         assert.match(reusableBuild, /Install dependencies from lockfile/);
         assert.match(reusableBuild, /npm ci/);
         assert.match(reusableBuild, /npx --no-install climaybe build-scripts/);
-        assert.match(reusableBuild, /scripts_minify=true/);
-        assert.match(reusableBuild, /build-scripts --minify/);
+        assert.doesNotMatch(reusableBuild, /scripts_minify=true/);
+        assert.doesNotMatch(reusableBuild, /build-scripts --minify/);
         assert.match(reusableBuild, /dorny\/paths-filter/);
         assert.match(reusableBuild, /Decide which build steps to run/);
         assert.match(reusableBuild, /Finalize success/);

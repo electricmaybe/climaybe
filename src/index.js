@@ -77,7 +77,7 @@ function registerThemeCommands(cmd) {
   cmd.command('build').description('Build assets (Tailwind + scripts build)').action(() => buildAll());
   cmd
     .command('build-scripts')
-    .description('Build _scripts → assets/*.js (+ *.min.js)')
+    .description('Build _scripts → assets/*.js')
     .option('--minify', 'Minify output bundles')
     .action(buildScriptsCommand);
   cmd

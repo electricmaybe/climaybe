@@ -50,12 +50,6 @@ jobs:
           fi
           echo "has_scripts=$HAS_SCRIPTS" >> $GITHUB_OUTPUT
           echo "has_styles=$HAS_STYLES" >> $GITHUB_OUTPUT
-          BRANCH_NAME="${{ github.head_ref || github.ref_name }}"
-          if [[ "$BRANCH_NAME" == live-* ]]; then
-            echo "scripts_minify=true" >> $GITHUB_OUTPUT
-          else
-            echo "scripts_minify=false" >> $GITHUB_OUTPUT
-          fi
 
       - name: Decide which build steps to run
         id: run
@@ -94,11 +88,7 @@ jobs:
       - name: Build scripts
         if: steps.run.outputs.build_ran == 'true' && steps.run.outputs.run_scripts == 'true'
         run: |
-          if [ "${{ steps.detect.outputs.scripts_minify }}" = "true" ]; then
-            npx --no-install climaybe build-scripts --minify
-          else
-            npx --no-install climaybe build-scripts
-          fi
+          npx --no-install climaybe build-scripts
 
       - name: Run Tailwind build
         if: steps.run.outputs.build_ran == 'true' && steps.run.outputs.run_tailwind == 'true'

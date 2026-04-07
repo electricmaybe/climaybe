@@ -52,7 +52,7 @@ describe('theme-dev-kit', () => {
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf-8');
       assert.ok(gitignore.includes('# climaybe: theme dev kit (managed)'));
       assert.ok(gitignore.includes('node_modules/'));
-      assert.ok(gitignore.includes('assets/index.min.js'));
+      assert.ok(!gitignore.includes('assets/index.min.js'));
     } finally {
       teardown();
     }
@@ -83,6 +83,7 @@ describe('theme-dev-kit', () => {
       scaffoldThemeDevKit({ includeVSCodeTasks: false, defaultStoreDomain: 'demo.myshopify.com', cwd: dir });
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf-8');
       assert.ok(gitignore.includes('node_modules/'));
+      assert.ok(!gitignore.includes('assets/index.min.js'));
       assert.strictEqual((gitignore.match(/# climaybe: theme dev kit \(managed\)/g) || []).length, 1);
     } finally {
       teardown();

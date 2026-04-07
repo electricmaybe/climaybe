@@ -174,12 +174,6 @@ function outputNameForEntrypoint(entryFile) {
   return basename(entryFile);
 }
 
-function outputMinNameForEntrypoint(entryFile) {
-  const name = outputNameForEntrypoint(entryFile);
-  if (!name.endsWith('.js')) return `${name}.min.js`;
-  return name.replace(/\.js$/, '.min.js');
-}
-
 function buildSingleEntrypoint({ cwd, entryFile, minify = false }) {
   const scriptsDir = join(cwd, '_scripts');
   const entryPath = join(scriptsDir, entryFile);
@@ -214,16 +208,11 @@ function buildSingleEntrypoint({ cwd, entryFile, minify = false }) {
   const outReadable = stripModuleSyntax(readableContent).trim() + '\n';
   const outMinified = minifyScriptContent(stripModuleSyntax(minifiedContent)).trim() + '\n';
 
-  // Back-compat: when minify=true, the primary output file is minified.
+  // When minify=true, the primary output file is minified.
   writeFileSync(outputPath, (minify ? outMinified : outReadable), 'utf-8');
 
-  // Always emit an explicit *.min.js asset so Shopify won't attempt CDN minification.
-  const outMinFile = outputMinNameForEntrypoint(entryFile);
-  const outputMinPath = join(assetsDir, outMinFile);
-  writeFileSync(outputMinPath, outMinified, 'utf-8');
-
   const fileCount = Math.max(processedFilesReadable.size, processedFilesMinified.size);
-  return { entryFile, fileCount, outputPath, outputMinPath };
+  return { entryFile, fileCount, outputPath };
 }
 
 export function buildScripts({ cwd = process.cwd(), entry = null, minify = false } = {}) {
