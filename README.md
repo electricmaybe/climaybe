@@ -94,7 +94,7 @@ Switch your local dev environment to a specific store (multi-store only).
 npx climaybe switch voldt-norway
 ```
 
-Copies `stores/<alias>/` JSON files to the repo root so you can preview that store locally.
+Copies `stores/<alias>/` JSON files to the repo root so you can preview that store locally, and sets `default_store` in `climaybe.config.json` so `climaybe serve` / `shopify theme dev` targets that store. If your current git branch is `staging-<alias>` or `live-<alias>`, `climaybe serve` uses that store’s domain from config (even if `default_store` differs), matching CI preview behavior.
 
 ### `climaybe sync [alias]` / `climaybe theme sync`
 

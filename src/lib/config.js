@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { getLatestTagVersion } from './git.js';
+import { getLatestTagVersion, isGitRepo, currentBranch } from './git.js';
 
 const PKG = 'package.json';
 const CLIMAYBE_CONFIG = 'climaybe.config.json';
@@ -186,6 +186,37 @@ export function getStoreAliases(cwd = process.cwd()) {
 export function getMode(cwd = process.cwd()) {
   const aliases = getStoreAliases(cwd);
   return aliases.length > 1 ? 'multi' : 'single';
+}
+
+/**
+ * When on git branches `staging-<alias>` or `live-<alias>`, resolve the Shopify domain
+ * for that store from config. Returns null if not a git repo, branch doesn't match,
+ * or the alias is unknown.
+ * @param {string} [cwd]
+ * @returns {string | null}
+ */
+export function getStoreDomainFromBranch(cwd = process.cwd()) {
+  if (!isGitRepo(cwd)) return null;
+  let branch;
+  try {
+    branch = currentBranch(cwd);
+  } catch {
+    return null;
+  }
+  const config = readConfig(cwd);
+  const stores = config?.stores;
+  if (!stores || typeof stores !== 'object') return null;
+
+  let alias = '';
+  if (branch.startsWith('staging-')) {
+    alias = branch.slice('staging-'.length);
+  } else if (branch.startsWith('live-')) {
+    alias = branch.slice('live-'.length);
+  }
+  if (!alias) return null;
+
+  const domain = stores[alias];
+  return typeof domain === 'string' && domain.trim() ? domain.trim() : null;
 }
 
 /**

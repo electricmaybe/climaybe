@@ -26,7 +26,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 
 ## Local dev (multi-store)
 
-- **Select store**: `climaybe theme switch <alias>` or `climaybe switch <alias>` (e.g. `climaybe switch voldt-staging`). Copies `stores/<alias>/` JSONs to repo root.
+- **Select store**: `climaybe theme switch <alias>` or `climaybe switch <alias>` (e.g. `climaybe switch voldt-staging`). Copies `stores/<alias>/` JSONs to repo root and updates `default_store` for local `shopify theme dev` / `climaybe serve`. On a `staging-<alias>` or `live-<alias>` branch, `climaybe serve` picks that store from config without a manual switch.
 - **Edit**: Change root JSONs as needed.
 - **Write back**: `climaybe theme sync [alias]` or `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
 - **Cursor (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled `.cursor/rules`, `.cursor/skills`, and `.cursor/agents` (e.g. **theme-translator** for syncing `theme/locales/` from English defaults). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).

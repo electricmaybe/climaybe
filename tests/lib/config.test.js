@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
@@ -11,6 +12,7 @@ import {
   migrateLegacyPackageConfigToClimaybe,
   getStoreAliases,
   getMode,
+  getStoreDomainFromBranch,
   isPreviewWorkflowsEnabled,
   isBuildWorkflowsEnabled,
   isCommitlintEnabled,
@@ -159,6 +161,69 @@ describe('config', () => {
         const did = migrateLegacyPackageConfigToClimaybe({ cwd: dir });
         assert.strictEqual(did, true);
         assert.deepStrictEqual(readClimaybeConfig(dir), legacy);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('getStoreDomainFromBranch', () => {
+    it('returns null when not a git repository', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { norway: 'n.myshopify.com' } }, dir);
+        assert.strictEqual(getStoreDomainFromBranch(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns domain when branch is staging-<alias>', () => {
+      const dir = setup();
+      try {
+        writeConfig(
+          { stores: { norway: 'norway.myshopify.com', other: 'other.myshopify.com' } },
+          dir
+        );
+        execSync('git init', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.email "t@test.com"', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+        writeFileSync(join(dir, 'f.txt'), 'x', 'utf-8');
+        execSync('git add -A && git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+        execSync('git checkout -b staging-norway', { cwd: dir, stdio: 'pipe' });
+        assert.strictEqual(getStoreDomainFromBranch(dir), 'norway.myshopify.com');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns domain when branch is live-<alias>', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { norway: 'norway.myshopify.com' } }, dir);
+        execSync('git init', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.email "t@test.com"', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+        writeFileSync(join(dir, 'f.txt'), 'x', 'utf-8');
+        execSync('git add -A && git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+        execSync('git checkout -b live-norway', { cwd: dir, stdio: 'pipe' });
+        assert.strictEqual(getStoreDomainFromBranch(dir), 'norway.myshopify.com');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns null when branch alias is not in stores', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { norway: 'norway.myshopify.com' } }, dir);
+        execSync('git init', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.email "t@test.com"', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+        writeFileSync(join(dir, 'f.txt'), 'x', 'utf-8');
+        execSync('git add -A && git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+        execSync('git checkout -b staging-unknown', { cwd: dir, stdio: 'pipe' });
+        assert.strictEqual(getStoreDomainFromBranch(dir), null);
       } finally {
         teardown();
       }

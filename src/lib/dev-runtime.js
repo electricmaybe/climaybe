@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { watchTree } from './watch.js';
 import { isAbsolute, join, relative } from 'node:path';
 import pc from 'picocolors';
-import { readConfig } from './config.js';
+import { readConfig, getStoreDomainFromBranch } from './config.js';
 import { buildScripts } from './build-scripts.js';
 import { buildSchemas } from './schema-builder.js';
 import { runShopify } from './shopify-cli.js';
@@ -211,7 +211,8 @@ function runThemeCheckFiltered({ cwd = process.cwd() } = {}) {
 
 export function serveShopify({ cwd = process.cwd() } = {}) {
   const config = readConfig(cwd) || {};
-  const store = config.default_store || config.store || '';
+  const branchStore = getStoreDomainFromBranch(cwd);
+  const store = branchStore || config.default_store || config.store || '';
   const args = ['theme', 'dev', '--theme-editor-sync'];
   if (store) args.push(`--store=${store}`);
   // Keep Shopify on inherited stdio so reconciliation prompts remain interactive.
