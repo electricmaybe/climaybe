@@ -156,6 +156,9 @@ describe('workflows', () => {
         assert.match(reusableBuild, /Decide which build steps to run/);
         assert.match(reusableBuild, /Finalize success/);
         assert.match(reusableBuild, /git add -f assets\/\*\.js/);
+        const buildPipeline = readFileSync(join(workflowsDir, 'build-pipeline.yml'), 'utf-8');
+        assert.match(buildPipeline, /startsWith\(github\.ref_name, 'live-'\)/);
+        assert.match(buildPipeline, /contains\(github\.actor, '\[bot\]'\)/);
       } finally {
         teardown();
       }

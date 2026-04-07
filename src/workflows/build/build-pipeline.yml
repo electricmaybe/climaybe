@@ -22,11 +22,14 @@ jobs:
     # Skip pure store-sync + hotfix-backport commits; those are infrastructure-only
     # syncs from staging/live stores back to main and should not trigger heavy theme
     # review / build pipelines.
+    # On live-<alias>, skip when the pusher is a GitHub bot (actor name contains "[bot]")
+    # so automated commits do not run script/Tailwind compilation.
     if: >
       !contains(github.event.head_commit.message, '[hotfix-backport]')
       && !contains(github.event.head_commit.message, '[stores-to-root]')
       && !contains(github.event.head_commit.message, '[root-to-stores]')
       && !(github.actor == 'github-actions[bot]' && contains(github.event.head_commit.message, 'chore(assets): update compiled javascript and css'))
+      && !(startsWith(github.ref_name, 'live-') && contains(github.actor, '[bot]'))
     uses: ./.github/workflows/reusable-build.yml
 
   lighthouse-gate:

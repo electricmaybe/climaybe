@@ -243,14 +243,14 @@ When enabled, builds are **resilient**:
 - If `_scripts/*.js` or `_styles/main.css` are missing, the build workflow **skips** those steps and continues.
 - `init` may offer to create entrypoints; **default answer is No**.
 - Script bundling preserves comments/spacing and emits bundles only for root entry files (files imported by other top-level `_scripts/*.js` are inlined, not emitted separately).
-- On `live-<alias>` branches only, script bundles are minified and overwrite `assets/*.js`; `main` and `staging-*` keep readable built JS.
+- Script bundles are written to `assets/*.js` (readable by default; use `climaybe build-scripts --minify` if you want minified output).
 - Live minified `assets/*` changes are intentionally excluded from hotfix backports to `main` (no branch-specific `.gitignore` split required).
 
 Build workflows install deps with `npm ci` and run `npx --no-install climaybe build-scripts` plus `npx --no-install climaybe build`, so CI uses lockfile-pinned versions (no `@latest` drift).
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `build-pipeline.yml` | Push to any branch (ignores docs-only/tooling-only paths; see CI/CD reference) | Runs reusable build; Lighthouse only on branch **`staging`**, when a build ran, and secrets allow |
+| `build-pipeline.yml` | Push to any branch (ignores docs-only/tooling-only paths; see CI/CD reference) | Runs reusable build; skips entirely on **`live-*`** when the pusher is a GitHub **`[bot]`** user; Lighthouse only on branch **`staging`**, when a build ran, and secrets allow |
 | `reusable-build.yml` | workflow_call | Path-filtered `build-scripts` / Tailwind (`climaybe build`), then commits compiled assets when changed |
 | `create-release.yml` | Push tag `v*`, or **workflow_run** after Post-Merge Tag / Nightly Hotfix Tag succeed on `main` | Builds release archive and creates GitHub Release notes from commits since the previous tag. It filters repetitive automation subjects (main→staging syncs, store/root sync chores, bot merge noise) before generating notes. If remaining subjects are low-signal and `GEMINI_API_KEY` exists, it uses Gemini to generate cleaner merchant-facing notes. Also covers tags created by workflows with `GITHUB_TOKEN`, which may not trigger tag-push workflows. |
 
