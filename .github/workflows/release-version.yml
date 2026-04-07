@@ -48,7 +48,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           # semantic-release@25 requires Node ^22.14.0 or >= 24.10.0
-          node-version: '22'
+          # Pin to a patch to avoid runner toolcache corruption issues, and
+          # force fetching the latest available build for that version.
+          node-version: '22.23.0'
+          check-latest: true
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
 
