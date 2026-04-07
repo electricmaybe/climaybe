@@ -46,6 +46,9 @@ describe('theme-dev-kit', () => {
       assert.strictEqual(cfg.vscode_tasks, true);
       const themeCheck = readFileSync(join(dir, '.theme-check.yml'), 'utf-8');
       assert.ok(themeCheck.includes('extends: theme-check:recommended'));
+      const shopifyignore = readFileSync(join(dir, '.shopifyignore'), 'utf-8');
+      assert.ok(shopifyignore.includes('.cursor'));
+      assert.ok(shopifyignore.includes('stores'));
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf-8');
       assert.ok(gitignore.includes('# climaybe: theme dev kit (managed)'));
       assert.ok(gitignore.includes('node_modules/'));
