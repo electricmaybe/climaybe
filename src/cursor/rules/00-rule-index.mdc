@@ -12,6 +12,7 @@ When you perform any of the following, **read and apply** the corresponding rule
 - **Accessibility, a11y, focus, WCAG, UI behavior** → `accessibility-rules.mdc`
 - **JavaScript, web components, _scripts/, *.js** → `javascript-standards.mdc`
 - **Tailwind CSS, theme tokens, Liquid/CSS classes, _styles/** → `tailwindcss-rules.mdc`
+- **Asset JS vs source JS boundaries (`assets/*.js` and `_scripts/*.js`)** → `scripts-source-of-truth.mdc`
 - **Liquid syntax and usage** → `liquid.mdc`
 - **Section files (sections/*.liquid)** → `sections.mdc`
 - **Snippets (snippets/*.liquid)** → `snippets.mdc`

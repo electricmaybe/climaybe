@@ -1,0 +1,12 @@
+---
+description: Keep generated asset scripts read-only and edit source scripts only
+alwaysApply: true
+---
+
+# Script editing boundary
+
+Treat script files in any `assets` directory as generated output.
+
+- Do not edit JavaScript files inside `assets` folders.
+- Make script changes only in matching source files inside `_scripts` folders.
+- If both locations exist, `_scripts` is the single source of truth and `assets` should only be updated by the build process.

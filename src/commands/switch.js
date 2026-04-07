@@ -1,5 +1,5 @@
 import pc from 'picocolors';
-import { getStoreAliases, getMode } from '../lib/config.js';
+import { getStoreAliases, getMode, setActiveStoreAlias } from '../lib/config.js';
 import { storesToRoot } from '../lib/store-sync.js';
 import { requireThemeProject } from '../lib/theme-guard.js';
 
@@ -23,7 +23,9 @@ export async function switchCommand(alias) {
 
   const ok = storesToRoot(alias);
   if (ok) {
+    setActiveStoreAlias(alias);
     console.log(pc.bold(pc.green(`\n  Switched to store: ${alias}\n`)));
+    console.log(pc.dim('  Saved as active store for `climaybe serve`.'));
     console.log(pc.dim('  Root JSON files now reflect this store\'s data.'));
     console.log(pc.dim('  Use "climaybe theme sync" (or "climaybe sync") to write changes back.\n'));
   }

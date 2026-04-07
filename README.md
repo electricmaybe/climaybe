@@ -95,6 +95,21 @@ npx climaybe switch voldt-norway
 ```
 
 Copies `stores/<alias>/` JSON files to the repo root so you can preview that store locally.
+Also saves this alias as your active local store, so the next `climaybe serve` run can use it automatically.
+
+### `climaybe serve` / `climaybe serve:shopify`
+
+Run local Shopify theme dev server(s).
+
+```bash
+npx climaybe serve
+```
+
+- In single-store mode, serves `config.default_store` (or first configured store).
+- In multi-store mode:
+  - if you previously ran `climaybe switch <alias>`, serve reuses that alias automatically;
+  - otherwise it prompts you to choose a store alias, then remembers that choice.
+- You can force an alias directly: `npx climaybe serve --alias voldt-norway` (same for `serve:shopify`).
 
 ### `climaybe sync [alias]` / `climaybe theme sync`
 
@@ -109,6 +124,10 @@ If no alias is given, syncs to the default store.
 ### `climaybe ensure-branches` / `climaybe theme ensure-branches`
 
 Create missing branches from your current branch (usually `main`). In single-store mode, this creates `staging` only. In multi-store mode, this creates `staging` plus per-store branches (`staging-<alias>`, `live-<alias>`). Use when the repo only has `main` (e.g. after a fresh clone) so the configured sync flow can run.
+
+When a GitHub remote and authenticated `gh` CLI are available, this command also reconciles branch protection to match current mode:
+- single-store: protect `main` (PR required)
+- multi-store: protect `live-<alias>` (PR required; bypass users: `shopify[bot]`, `github-actions[bot]`, `actions-user`)
 
 ```bash
 npx climaybe ensure-branches
@@ -180,6 +199,7 @@ staging → main
 
 - `staging` — development branch
 - `main` — production branch
+- branch protection: `main` requires PR (no direct pushes)
 
 ### Multi-store
 
@@ -191,6 +211,7 @@ staging → main → staging-<store> → live-<store>
 - `main` — shared codebase (not live)
 - `staging-<store>` — per-store staging with store-specific JSON data
 - `live-<store>` — per-store production
+- branch protection: each `live-<store>` requires PR; bypass users: `shopify[bot]`, `github-actions[bot]`, `actions-user`
 
 Direct pushes to `staging-<store>` or `live-<store>` are automatically synced back to `main` (no PR; multistore-hotfix-to-main merges the branch into main).
 
@@ -262,7 +283,9 @@ dev config defaults (`.theme-check.yml`, `.shopifyignore`, `.prettierrc`,
 `.vscode/tasks.json` (default: yes) wired to run `climaybe` dev commands.
 
 Local serve commands keep Theme Check disabled by default for faster startup. Enable it explicitly with
-`climaybe serve --theme-check` or `climaybe serve:assets --theme-check`.
+`climaybe serve --theme-check` or `climaybe serve:assets --theme-check`. In multi-store mode,
+`climaybe serve` and `climaybe serve:shopify` also select a store automatically from your active alias
+saved by `climaybe switch`, or prompt to choose one when needed.
 
 You can create optional build entrypoints later with:
 

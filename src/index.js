@@ -12,7 +12,8 @@ import { appInitCommand } from './commands/app-init.js';
 import { migrateLegacyConfigCommand } from './commands/migrate-legacy-config.js';
 import { buildScriptsCommand } from './commands/build-scripts.js';
 import { createEntrypointsCommand } from './commands/create-entrypoints.js';
-import { serveAll, serveAssets, serveShopify, lintAll, buildAll } from './lib/dev-runtime.js';
+import { serveAssets, lintAll, buildAll } from './lib/dev-runtime.js';
+import { serveCommand, serveShopifyCommand } from './commands/serve.js';
 
 /**
  * Register theme CI/CD commands on a Commander instance (root or `theme` subgroup).
@@ -62,9 +63,14 @@ function registerThemeCommands(cmd) {
   cmd
     .command('serve')
     .description('Run local theme dev (Shopify + assets; Theme Check off by default)')
+    .option('-s, --alias <alias>', 'Store alias to serve in multi-store mode')
     .option('--theme-check', 'Enable Theme Check watcher')
-    .action((opts) => serveAll({ includeThemeCheck: opts.themeCheck === true }));
-  cmd.command('serve:shopify').description('Run Shopify theme dev server').action(() => serveShopify());
+    .action(serveCommand);
+  cmd
+    .command('serve:shopify')
+    .description('Run Shopify theme dev server')
+    .option('-s, --alias <alias>', 'Store alias to serve in multi-store mode')
+    .action(serveShopifyCommand);
   cmd
     .command('serve:assets')
     .description('Run assets watch (Tailwind + scripts; Theme Check off by default)')

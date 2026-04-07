@@ -12,6 +12,7 @@ import { requireThemeProject } from '../lib/theme-guard.js';
 import { createStoreBranches } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
+import { logBranchProtectionResult, syncBranchProtection } from '../lib/branch-protection.js';
 import {
   isGhAvailable,
   hasGitHubRemote,
@@ -72,6 +73,20 @@ export async function addStoreCommand() {
   } else if (newMode === 'multi') {
     // Already multi, just make sure workflows are current
     scaffoldWorkflows('multi', { includePreview, includeBuild });
+  }
+
+  const protection = syncBranchProtection({
+    mode: newMode,
+    aliases: getStoreAliases(),
+    cwd: process.cwd(),
+  });
+  logBranchProtectionResult(protection, newMode);
+  if (protection.applied.length > 0 || protection.removed.length > 0) {
+    console.log(
+      pc.dim(
+        '  Rule: PR required on protected branches; live-* bypass allowed for shopify[bot], github-actions[bot], actions-user.'
+      )
+    );
   }
 
   console.log(pc.bold(pc.green('\n  Store added successfully!\n')));

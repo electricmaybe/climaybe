@@ -9,6 +9,7 @@ import {
   hasOriginRemote,
   pushBranchesToOrigin,
 } from '../lib/git.js';
+import { logBranchProtectionResult, syncBranchProtection } from '../lib/branch-protection.js';
 
 /**
  * Create missing staging (single-store) or staging + per-store branches (multi-store) from current HEAD.
@@ -51,6 +52,16 @@ export async function ensureBranchesCommand() {
     try {
       pushBranchesToOrigin(branchesToPush);
       console.log(pc.green('  Pushed ensured branches to origin.\n'));
+      const protection = syncBranchProtection({ mode, aliases, cwd: process.cwd() });
+      logBranchProtectionResult(protection, mode);
+      if (protection.applied.length > 0 || protection.removed.length > 0) {
+        console.log(
+          pc.dim(
+            '  Rule: PR required on protected branches; live-* bypass allowed for shopify[bot], github-actions[bot], actions-user.'
+          )
+        );
+      }
+      console.log('');
     } catch (err) {
       console.log(pc.yellow(`  Could not push branches automatically: ${err.message}`));
       console.log(pc.dim('  Push them manually so CI can run:'));

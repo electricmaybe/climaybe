@@ -181,6 +181,26 @@ export function getStoreAliases(cwd = process.cwd()) {
 }
 
 /**
+ * Get the persisted active store alias (multi-store local dev selection).
+ * Returns null when missing or invalid.
+ */
+export function getActiveStoreAlias(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  const alias = config?.active_store_alias;
+  if (!alias || typeof alias !== 'string') return null;
+  const stores = config?.stores || {};
+  return stores[alias] ? alias : null;
+}
+
+/**
+ * Persist the active store alias in config.
+ */
+export function setActiveStoreAlias(alias, cwd = process.cwd()) {
+  const config = readConfig(cwd) || {};
+  writeConfig({ ...config, active_store_alias: alias }, cwd);
+}
+
+/**
  * Determine the current mode: 'single' or 'multi'.
  */
 export function getMode(cwd = process.cwd()) {

@@ -248,6 +248,22 @@ export async function promptNewStore(existingAliases = []) {
 }
 
 /**
+ * Prompt user to select one store alias from available aliases.
+ * Returns selected alias string, or null when cancelled.
+ */
+export async function promptStoreAliasSelection(aliases, message = 'Select store') {
+  if (!Array.isArray(aliases) || aliases.length === 0) return null;
+  const { alias } = await prompts({
+    type: 'select',
+    name: 'alias',
+    message,
+    choices: aliases.map((value) => ({ title: value, value })),
+    initial: 0,
+  });
+  return alias ?? null;
+}
+
+/**
  * Ask which CI host to configure for secrets (after init). Returns 'github' | 'gitlab' | 'skip'.
  */
 export async function promptConfigureCISecrets() {
