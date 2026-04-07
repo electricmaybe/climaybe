@@ -95,6 +95,7 @@ node_modules/
 **/.DS_Store
 assets/style.css
 assets/index.js
+assets/index.min.js
 .shopify
 .vercel
 `;

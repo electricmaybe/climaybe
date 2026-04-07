@@ -38,10 +38,12 @@ console.log("main");
       buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'index.min.js'), 'utf-8');
       assert.match(out, /console\.log\(["']utils["']\)/, out);
       assert.match(out, /console\.log\(["']helper["']\)/, out);
       assert.match(out, /console\.log\(["']main["']\)/, out);
       assert.ok(!/\bimport\b/.test(out), 'bundle should not contain import statements');
+      assert.ok(!/\bimport\b/.test(outMin), 'minified bundle should not contain import statements');
     } finally {
       teardown();
     }
@@ -74,10 +76,49 @@ export { a };
       buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'index.min.js'), 'utf-8');
       assert.ok(!/\bexport\b/.test(out), `bundle should not contain export statements\n${out}`);
       assert.match(out, /\bconst a = 1;/);
       assert.match(out, /\bfunction run\(\)/);
       assert.match(out, /\bclass Demo/);
+      assert.ok(!/\bexport\b/.test(outMin), `minified bundle should not contain export statements\n${outMin}`);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('strips multiline named export blocks from output bundle', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'main.js'),
+        `import { run } from "./helpers.js";
+console.log(run());
+`,
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, '_scripts', 'helpers.js'),
+        `function run() { return "ok"; }
+export {
+  run,
+};
+`,
+        'utf-8'
+      );
+
+      buildScripts({ cwd: dir });
+
+      const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'index.min.js'), 'utf-8');
+      assert.ok(!/\bexport\b/.test(out), `bundle should not contain export statements\n${out}`);
+      assert.ok(!/\bexport\b/.test(outMin), `minified bundle should not contain export statements\n${outMin}`);
+      assert.match(out, /\bfunction run\(\)/);
+      assert.match(out, /console\.log\(run\(\)\)/);
     } finally {
       teardown();
     }
@@ -109,10 +150,12 @@ console.log("main");
       buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'index.min.js'), 'utf-8');
       assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
       assert.match(out, /console\.log\(["']helpers["']\)/, out);
       assert.match(out, /console\.log\(["']core["']\)/, out);
       assert.match(out, /console\.log\(["']main["']\)/, out);
+      assert.ok(!/\bimport\b/.test(outMin), `minified bundle should not contain import statements\n${outMin}`);
     } finally {
       teardown();
     }
@@ -144,10 +187,12 @@ console.log(run());
       buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'index.min.js'), 'utf-8');
       assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
       assert.match(out, /\bfunction run\(\)/);
       assert.match(out, /console\.log\("flags"\)/);
       assert.match(out, /console\.log\(run\(\)\)/);
+      assert.ok(!/\bimport\b/.test(outMin), `minified bundle should not contain import statements\n${outMin}`);
     } finally {
       teardown();
     }
@@ -181,8 +226,10 @@ import "./electric-variant-link-converter.js"
       buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'index.min.js'), 'utf-8');
       assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
       assert.match(out, /console\.log\(["']variant["']\)/, out);
+      assert.ok(!/\bimport\b/.test(outMin), `minified bundle should not contain import statements\n${outMin}`);
     } finally {
       teardown();
     }
@@ -200,7 +247,9 @@ import "./electric-variant-link-converter.js"
       buildScripts({ cwd: dir });
 
       assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'index.min.js')));
       assert.ok(existsSync(join(dir, 'assets', 'productpage.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'productpage.min.js')));
       assert.match(readFileSync(join(dir, 'assets', 'productpage.js'), 'utf-8'), /product/);
     } finally {
       teardown();
@@ -221,7 +270,9 @@ import "./electric-variant-link-converter.js"
       buildScripts({ cwd: dir });
 
       assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'index.min.js')));
       assert.ok(existsSync(join(dir, 'assets', 'other.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'other.min.js')));
       assert.ok(!existsSync(join(dir, 'assets', 'productpage.js')));
       assert.ok(!existsSync(join(dir, 'assets', 'helpers.js')));
     } finally {
@@ -242,7 +293,9 @@ import "./electric-variant-link-converter.js"
       buildScripts({ cwd: dir });
 
       assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'index.min.js')));
       assert.ok(existsSync(join(dir, 'assets', 'deferred.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'deferred.min.js')));
       assert.ok(!existsSync(join(dir, 'assets', 'footer-newsletter.js')));
       assert.match(readFileSync(join(dir, 'assets', 'deferred.js'), 'utf-8'), /newsletter/);
     } finally {
@@ -282,7 +335,9 @@ console.log("b", ON_CHANGE_DEBOUNCE_TIMER);
       buildScripts({ cwd: dir, entry: 'deferred' });
 
       const out = readFileSync(join(dir, 'assets', 'deferred.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'deferred.min.js'), 'utf-8');
       assert.doesNotThrow(() => new Function(out), out);
+      assert.doesNotThrow(() => new Function(outMin), outMin);
     } finally {
       teardown();
     }
@@ -308,9 +363,11 @@ console.log("main");
       buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'index.min.js'), 'utf-8');
       assert.match(out, /Keep this banner/);
       assert.match(out, /Keep this inline comment/);
       assert.match(out, /console\.log\(["']main["']\)/);
+      assert.doesNotMatch(outMin, /Keep this banner/);
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
       teardown();
@@ -336,10 +393,12 @@ console.log(value);
       buildScripts({ cwd: dir, minify: true });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      const outMin = readFileSync(join(dir, 'assets', 'index.min.js'), 'utf-8');
       assert.doesNotMatch(out, /Keep this banner/);
       assert.doesNotMatch(out, /Keep this inline comment/);
       assert.match(out, /const value=42;/);
       assert.match(out, /console\.log\(value\);/);
+      assert.match(outMin, /const value=42;/);
     } finally {
       teardown();
     }

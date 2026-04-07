@@ -52,6 +52,7 @@ describe('theme-dev-kit', () => {
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf-8');
       assert.ok(gitignore.includes('# climaybe: theme dev kit (managed)'));
       assert.ok(gitignore.includes('node_modules/'));
+      assert.ok(gitignore.includes('assets/index.min.js'));
     } finally {
       teardown();
     }
@@ -75,7 +76,7 @@ describe('theme-dev-kit', () => {
       writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'theme', version: '1.0.0' }), 'utf-8');
       writeFileSync(
         join(dir, '.gitignore'),
-        ['# climaybe: theme dev kit (managed)', '.vscode', 'assets/style.css', 'assets/index.js', '.shopify', '.vercel', ''].join('\n'),
+        ['# climaybe: theme dev kit (managed)', '.vscode', 'assets/style.css', 'assets/index.js', 'assets/index.min.js', '.shopify', '.vercel', ''].join('\n'),
         'utf-8'
       );
 

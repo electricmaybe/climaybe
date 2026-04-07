@@ -40,6 +40,8 @@ function stripModuleSyntax(content) {
   );
 
   cleaned = cleaned.replace(/^\s*export\s+default\s+/gm, '');
+  // Remove named exports (single-line and multiline forms).
+  cleaned = cleaned.replace(/(^|\n)\s*export\s*\{[\s\S]*?\}\s*;?/g, '$1');
   cleaned = cleaned.replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, '');
   cleaned = cleaned.replace(/^\s*export\s+(?=(const|let|var|function|class)\b)/gm, '');
   return cleaned;
@@ -172,6 +174,12 @@ function outputNameForEntrypoint(entryFile) {
   return basename(entryFile);
 }
 
+function outputMinNameForEntrypoint(entryFile) {
+  const name = outputNameForEntrypoint(entryFile);
+  if (!name.endsWith('.js')) return `${name}.min.js`;
+  return name.replace(/\.js$/, '.min.js');
+}
+
 function buildSingleEntrypoint({ cwd, entryFile, minify = false }) {
   const scriptsDir = join(cwd, '_scripts');
   const entryPath = join(scriptsDir, entryFile);
@@ -179,26 +187,43 @@ function buildSingleEntrypoint({ cwd, entryFile, minify = false }) {
     throw new Error(`Missing required file: _scripts/${entryFile}`);
   }
 
-  const processedFiles = new Set();
+  const processedFilesReadable = new Set();
+  const processedFilesMinified = new Set();
   const isolateFiles = collectFilesToIsolate({ scriptsDir, entryFile });
-  let finalContent = processScriptFile({
+  const readableContent = processScriptFile({
     scriptsDir,
     filePath: entryFile,
-    processedFiles,
-    minify,
+    processedFiles: processedFilesReadable,
+    minify: false,
     isolateFiles
   });
-  finalContent = stripModuleSyntax(finalContent);
-  if (minify) finalContent = minifyScriptContent(finalContent);
+
+  const minifiedContent = processScriptFile({
+    scriptsDir,
+    filePath: entryFile,
+    processedFiles: processedFilesMinified,
+    minify: true,
+    isolateFiles
+  });
 
   const assetsDir = join(cwd, 'assets');
   mkdirSync(assetsDir, { recursive: true });
 
   const outFile = outputNameForEntrypoint(entryFile);
   const outputPath = join(assetsDir, outFile);
-  writeFileSync(outputPath, finalContent.trim() + '\n', 'utf-8');
+  const outReadable = stripModuleSyntax(readableContent).trim() + '\n';
+  const outMinified = minifyScriptContent(stripModuleSyntax(minifiedContent)).trim() + '\n';
 
-  return { entryFile, fileCount: processedFiles.size, outputPath };
+  // Back-compat: when minify=true, the primary output file is minified.
+  writeFileSync(outputPath, (minify ? outMinified : outReadable), 'utf-8');
+
+  // Always emit an explicit *.min.js asset so Shopify won't attempt CDN minification.
+  const outMinFile = outputMinNameForEntrypoint(entryFile);
+  const outputMinPath = join(assetsDir, outMinFile);
+  writeFileSync(outputMinPath, outMinified, 'utf-8');
+
+  const fileCount = Math.max(processedFilesReadable.size, processedFilesMinified.size);
+  return { entryFile, fileCount, outputPath, outputMinPath };
 }
 
 export function buildScripts({ cwd = process.cwd(), entry = null, minify = false } = {}) {
