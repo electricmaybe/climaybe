@@ -32,11 +32,22 @@ describe('update-notifier', () => {
   });
 
   describe('resolveInstallScope', () => {
-    it('prefers local when package.json exists in cwd', () => {
+    it('prefers local when packageDir indicates node_modules install', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'climaybe-update-notifier-nm-'));
+      try {
+        const packageName = 'climaybe';
+        const packageDir = join(dir, 'node_modules', packageName);
+        assert.strictEqual(resolveInstallScope({ packageName, packageDir, cwd: '/' }), 'local');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('prefers local when package.json exists in cwd (fallback)', () => {
       const dir = mkdtempSync(join(tmpdir(), 'climaybe-update-notifier-'));
       try {
         writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'theme' }), 'utf-8');
-        assert.strictEqual(resolveInstallScope({ packageDir: '/tmp/somewhere', cwd: dir }), 'local');
+        assert.strictEqual(resolveInstallScope({ packageName: 'climaybe', cwd: dir }), 'local');
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -44,7 +55,7 @@ describe('update-notifier', () => {
 
     it('falls back to global when local project does not exist', () => {
       const dir = join(tmpdir(), `climaybe-update-notifier-missing-${Date.now()}`);
-      assert.strictEqual(resolveInstallScope({ packageDir: '/tmp/somewhere', cwd: dir }), 'global');
+      assert.strictEqual(resolveInstallScope({ packageName: 'climaybe', cwd: dir }), 'global');
     });
   });
 
