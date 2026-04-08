@@ -137,6 +137,57 @@ describe('workflows', () => {
       }
     });
 
+    it('includes profile workflows when includeProfile is true', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeProfile: true }, dir);
+        const workflowsDir = join(dir, '.github', 'workflows');
+        const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
+        const hasProfile = files.some((f) => f.includes('liquid-performance') || f.includes('liquid-profile'));
+        assert.ok(hasProfile, 'expected at least one profile workflow');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('does not include profile workflows by default', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', {}, dir);
+        const workflowsDir = join(dir, '.github', 'workflows');
+        const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
+        const hasProfile = files.some((f) => f.includes('liquid-performance') || f.includes('liquid-profile'));
+        assert.ok(!hasProfile, 'expected no profile workflows when not opted in');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('profile workflow measures 4 templates with TTFB averaging', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeProfile: true }, dir);
+        const reusable = readFileSync(join(dir, '.github', 'workflows', 'reusable-liquid-profile.yml'), 'utf-8');
+        assert.match(reusable, /index/);
+        assert.match(reusable, /collection/);
+        assert.match(reusable, /product/);
+        assert.match(reusable, /cart/);
+        assert.match(reusable, /iterations/);
+        assert.match(reusable, /warm-up/);
+        assert.match(reusable, /shopify theme share/);
+        assert.match(reusable, /shopify theme delete/);
+        assert.match(reusable, /GITHUB_STEP_SUMMARY/);
+
+        const pipeline = readFileSync(join(dir, '.github', 'workflows', 'liquid-performance.yml'), 'utf-8');
+        assert.match(pipeline, /push:/);
+        assert.match(pipeline, /branches:.*main/);
+        assert.match(pipeline, /reusable-liquid-profile\.yml/);
+        assert.match(pipeline, /hotfix-backport/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('includes build workflows when includeBuild is true', () => {
       const dir = setup();
       try {

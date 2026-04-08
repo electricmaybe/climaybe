@@ -1,0 +1,47 @@
+# climaybe — Liquid Performance (Optional Profile Package)
+# Profiles Liquid rendering performance (TTFB) for core templates on main.
+# Pushes a shared theme, measures TTFB for index/collection/product/cart,
+# runs 4 iterations per template, reports the average of the last 3 runs.
+
+name: Liquid Performance
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  profile-gate:
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.head_commit.message, '[hotfix-backport]')
+      && !contains(github.event.head_commit.message, '[stores-to-root]')
+      && !contains(github.event.head_commit.message, '[root-to-stores]')
+    outputs:
+      run_profile: ${{ steps.check.outputs.run_profile }}
+    env:
+      SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
+      SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+    steps:
+      - name: Check if profiling should run
+        id: check
+        run: |
+          SKIP_REASONS=()
+          if [ -z "$SHOPIFY_STORE_URL" ]; then
+            SKIP_REASONS+=("Missing secret: SHOPIFY_STORE_URL")
+          fi
+          if [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
+            SKIP_REASONS+=("Missing secret: SHOPIFY_THEME_ACCESS_TOKEN")
+          fi
+          if [ ${#SKIP_REASONS[@]} -gt 0 ]; then
+            echo "run_profile=false" >> $GITHUB_OUTPUT
+            echo "Liquid profiling skipped:"
+            for reason in "${SKIP_REASONS[@]}"; do echo "  - $reason"; done
+          else
+            echo "run_profile=true" >> $GITHUB_OUTPUT
+          fi
+
+  liquid-profile:
+    needs: [profile-gate]
+    if: needs.profile-gate.outputs.run_profile == 'true'
+    uses: ./.github/workflows/reusable-liquid-profile.yml
+    secrets: inherit

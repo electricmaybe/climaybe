@@ -194,6 +194,18 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 - **Problem:** Passing `inputs.changelog` into the shell via `CHANGELOG="${{ inputs.changelog }}"` expanded multiline markdown into the script body. Newlines broke the assignment; lines starting with `-` ran as commands; stray tokens (e.g. a heading word) could invoke bogus binaries (`markdown: command not found`).
 - **Fix:** Set `env: CHANGELOG: ${{ inputs.changelog }}` on the commit/tag step and pipe the message into `git tag -a "$NEW_VERSION" -F -` so the annotation is read from stdin. Empty changelog still uses `git tag -m "Release …"`.
 
+## 17) Optional Liquid performance profiling workflows package
+
+- Added `init` prompt: `Enable Liquid performance profiling workflows?` (default: yes).
+- Persisted selection in `climaybe.config.json` via `profile_workflows` flag.
+- Updated workflow scaffolding so `update` and `add-store` preserve this flag.
+- Added optional template workflows under `src/workflows/profile`:
+  - `liquid-performance.yml` — gate job on `main` push; checks for required secrets.
+  - `reusable-liquid-profile.yml` — reusable workflow: shares a preview theme, measures TTFB for index/collection/product/cart templates (4 iterations each), reports average of last 3 (first is warm-up), cleans up preview theme.
+- Report is posted to GitHub Actions job summary as a markdown table.
+- Workflow skips gracefully when `SHOPIFY_STORE_URL` or `SHOPIFY_THEME_ACCESS_TOKEN` secrets are missing.
+- Preview theme is always cleaned up via `shopify theme delete` in an `if: always()` step.
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.

@@ -5,6 +5,7 @@ import {
   promptStoreLoop,
   promptPreviewWorkflows,
   promptBuildWorkflows,
+  promptProfileWorkflows,
   promptDevKit,
   promptVSCodeDevTasks,
   promptProjectName,
@@ -61,6 +62,7 @@ async function runInitFlow() {
   const mode = stores.length > 1 ? 'multi' : 'single';
   const enablePreviewWorkflows = await promptPreviewWorkflows();
   const enableBuildWorkflows = await promptBuildWorkflows();
+  const enableProfileWorkflows = await promptProfileWorkflows();
   const enableDevKit = await promptDevKit();
   const enableVSCodeTasks = enableDevKit ? await promptVSCodeDevTasks() : false;
   const enableCommitlint = await promptCommitlint();
@@ -102,6 +104,7 @@ async function runInitFlow() {
     default_store: stores[0].domain,
     preview_workflows: enablePreviewWorkflows,
     build_workflows: enableBuildWorkflows,
+    profile_workflows: enableProfileWorkflows,
     build_entrypoints_ready: enableBuildWorkflows ? missingBuildFiles?.length === 0 : undefined,
     dev_kit: enableDevKit,
     vscode_tasks: enableVSCodeTasks,
@@ -138,6 +141,7 @@ async function runInitFlow() {
   scaffoldWorkflows(mode, {
     includePreview: enablePreviewWorkflows,
     includeBuild: enableBuildWorkflows,
+    includeProfile: enableProfileWorkflows,
   });
 
   // 7. Optional commitlint + Husky and Cursor bundle (rules, skills, agents)
@@ -190,6 +194,7 @@ async function runInitFlow() {
   }
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Profile workflows: ${enableProfileWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Theme dev kit: ${enableDevKit ? 'enabled' : 'disabled'}`));
   if (enableDevKit) {
     console.log(pc.dim(`  VS Code tasks: ${enableVSCodeTasks ? 'enabled' : 'disabled'}`));

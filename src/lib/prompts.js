@@ -150,6 +150,20 @@ export async function promptBuildWorkflows() {
 }
 
 /**
+ * Ask whether Liquid performance profile workflows should be scaffolded.
+ */
+export async function promptProfileWorkflows() {
+  const { enableProfileWorkflows } = await prompts({
+    type: 'confirm',
+    name: 'enableProfileWorkflows',
+    message: 'Enable Liquid performance profiling workflows? (TTFB measurement on main)',
+    initial: true,
+  });
+
+  return !!enableProfileWorkflows;
+}
+
+/**
  * Ask whether to scaffold local theme dev-kit files (configs, ignores, editor tasks).
  */
 export async function promptDevKit() {

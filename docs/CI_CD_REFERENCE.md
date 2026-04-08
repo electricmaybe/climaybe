@@ -31,6 +31,18 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Write back**: `climaybe theme sync [alias]` or `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
 - **Cursor (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled `.cursor/rules`, `.cursor/skills`, and `.cursor/agents` (e.g. **theme-translator** for syncing `theme/locales/` from English defaults). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
 
+## Liquid performance profiling (optional)
+
+When enabled (`profile_workflows: true`), the `liquid-performance.yml` workflow runs on every push to `main` (excluding store-sync and hotfix-backport commits). It:
+
+1. **Shares a preview theme** via `shopify theme share` using the default store credentials.
+2. **Measures TTFB** (time to first byte) for four core Shopify templates: `index` (`/`), `collection` (`/collections`), `product` (`/products`), `cart` (`/cart`).
+3. **Runs 4 iterations** per template. The first iteration is treated as a warm-up and discarded.
+4. **Reports the average of the last 3 iterations** in the GitHub Actions job summary as a markdown table.
+5. **Cleans up** the shared preview theme after profiling (even if profiling fails).
+
+Required secrets: `SHOPIFY_STORE_URL` and `SHOPIFY_THEME_ACCESS_TOKEN`. When either is missing, the workflow skips gracefully (no failure).
+
 ## Build workflows (optional)
 
 - Build workflows install dependencies via `npm ci` and run `npx --no-install climaybe build-scripts` (scripts) and `npx --no-install climaybe build` (Tailwind), so CI uses versions pinned in `package-lock.json`.
