@@ -232,8 +232,14 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
     writeTaggedLine('tailwind', pc.blue, 'watching _styles/main.css -> assets/style.css');
   }
 
-  // Optional dev MCP (non-blocking if missing)
-  const devMcp = spawnLogged('npx', ['-y', '@shopify/dev-mcp@latest'], { name: 'dev-mcp', cwd });
+  // Optional dev MCP (non-blocking if missing). @shopify/dev-mcp pulls hydrogen (peers react-router 7.12)
+  // alongside react-router 7.13 — npm warns with ERESOLVE unless legacy peer resolution is enabled.
+  const devMcpEnv = { ...process.env, npm_config_legacy_peer_deps: 'true' };
+  const devMcp = spawnLogged('npx', ['-y', '@shopify/dev-mcp@latest'], {
+    name: 'dev-mcp',
+    cwd,
+    env: devMcpEnv,
+  });
 
   const scriptsDir = join(cwd, '_scripts');
   if (existsSync(scriptsDir)) {
