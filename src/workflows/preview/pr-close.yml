@@ -15,6 +15,7 @@ jobs:
   resolve-store:
     runs-on: ubuntu-latest
     outputs:
+      store_alias: ${{ steps.resolve.outputs.alias }}
       store_alias_secret: ${{ steps.resolve.outputs.alias_secret }}
     steps:
       - name: Checkout code
@@ -80,7 +81,7 @@ jobs:
     secrets: inherit
 
   comment-on-pr:
-    needs: cleanup-theme
+    needs: [cleanup-theme, resolve-store]
     runs-on: ubuntu-latest
     steps:
       - name: Comment on PR about cleanup
@@ -88,6 +89,7 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
+            const storeAlias = '${{ needs.resolve-store.outputs.store_alias }}' || '';
             const deletedCount = parseInt('${{ needs.cleanup-theme.outputs.deleted_count }}') || 0;
             const deletedThemesRaw = `${{ needs.cleanup-theme.outputs.deleted_themes }}`.trim();
 
@@ -98,8 +100,9 @@ jobs:
               '',
               `**Branch:** ${context.payload.pull_request.head.ref}`,
               `**PR Status:** ${context.payload.pull_request.state}`,
+              storeAlias ? `**Store:** ${storeAlias}` : null,
               `**Deleted Themes:** ${deletedCount}`
-            ];
+            ].filter(Boolean);
 
             if (deletedCount > 0 && deletedThemesRaw) {
               const deletedThemeLines = deletedThemesRaw

@@ -18,6 +18,18 @@ on:
       deleted_themes:
         description: "Deleted theme names, one per line"
         value: ${{ jobs.cleanup.outputs.deleted_themes }}
+      matched_count:
+        description: "Number of themes matching this PR (before delete)"
+        value: ${{ jobs.cleanup.outputs.matched_count }}
+      matched_themes:
+        description: "Matched theme names, one per line (before delete)"
+        value: ${{ jobs.cleanup.outputs.matched_themes }}
+      skipped_reason:
+        description: "Why cleanup was skipped (empty if not skipped)"
+        value: ${{ jobs.cleanup.outputs.skipped_reason }}
+      store_hint:
+        description: "Redacted store host (best-effort; may be masked)"
+        value: ${{ jobs.cleanup.outputs.store_hint }}
 
 jobs:
   cleanup:
@@ -25,6 +37,10 @@ jobs:
     outputs:
       deleted_count: ${{ steps.cleanup.outputs.deleted_count }}
       deleted_themes: ${{ steps.cleanup.outputs.deleted_themes }}
+      matched_count: ${{ steps.cleanup.outputs.matched_count }}
+      matched_themes: ${{ steps.cleanup.outputs.matched_themes }}
+      skipped_reason: ${{ steps.cleanup.outputs.skipped_reason }}
+      store_hint: ${{ steps.cleanup.outputs.store_hint }}
     steps:
       - name: Install Shopify CLI
         run: npm install -g @shopify/cli @shopify/theme
@@ -35,20 +51,86 @@ jobs:
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
           SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          STORE_ALIAS_SECRET: ${{ inputs.store_alias_secret }}
         run: |
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
+          set -euo pipefail
+
+          STORE_HOST="${SHOPIFY_STORE_URL#https://}"
+          STORE_HOST="${STORE_HOST#http://}"
+          STORE_HOST="${STORE_HOST%%/*}"
+
+          {
+            echo "### 🧹 Cleanup preview themes"
+            echo ""
+            echo "- **PR**: \`${PR_NUMBER}\`"
+            echo "- **Store alias secret**: \`${STORE_ALIAS_SECRET:-<default>}\`"
+            echo "- **Store (host)**: \`${STORE_HOST:-<missing>}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "PR=${PR_NUMBER}"
+          echo "Store alias secret=${STORE_ALIAS_SECRET:-<default>}"
+          echo "Store host=${STORE_HOST:-<missing>}"
+
+          if [ -z "${SHOPIFY_STORE_URL:-}" ] || [ -z "${SHOPIFY_THEME_ACCESS_TOKEN:-}" ]; then
             echo "Missing Shopify secrets; skipping theme cleanup (no themes deleted)."
-            echo "deleted_count=0" >> $GITHUB_OUTPUT
-            echo "deleted_themes<<DELETED_EOF" >> $GITHUB_OUTPUT
-            echo "DELETED_EOF" >> $GITHUB_OUTPUT
+
+            {
+              echo ""
+              echo "#### Result"
+              echo "- **Skipped**: yes (missing Shopify secrets)"
+              echo "- **Matched themes**: 0"
+              echo "- **Deleted themes**: 0"
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            echo "skipped_reason=missing_secrets" >> "$GITHUB_OUTPUT"
+            echo "store_hint=${STORE_HOST:-}" >> "$GITHUB_OUTPUT"
+            echo "matched_count=0" >> "$GITHUB_OUTPUT"
+            echo "matched_themes<<MATCHED_EOF" >> "$GITHUB_OUTPUT"
+            echo "MATCHED_EOF" >> "$GITHUB_OUTPUT"
+            echo "deleted_count=0" >> "$GITHUB_OUTPUT"
+            echo "deleted_themes<<DELETED_EOF" >> "$GITHUB_OUTPUT"
+            echo "DELETED_EOF" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          THEME_LIST=$(shopify theme list \
+          echo "store_hint=${STORE_HOST:-}" >> "$GITHUB_OUTPUT"
+          echo "skipped_reason=" >> "$GITHUB_OUTPUT"
+
+          THEME_LIST_ERR="$(mktemp)"
+          THEME_LIST_JSON="$(mktemp)"
+
+          if ! shopify theme list \
             --store "$SHOPIFY_STORE_URL" \
             --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
-            --json 2>/dev/null || echo "[]")
+            --json > "$THEME_LIST_JSON" 2> "$THEME_LIST_ERR"; then
+            echo "shopify theme list failed."
+            echo "Error output (first 120 lines):"
+            sed -n '1,120p' "$THEME_LIST_ERR" || true
+            {
+              echo ""
+              echo "#### Result"
+              echo "- **Error**: \`shopify theme list\` failed"
+              echo ""
+              echo "<details><summary>CLI error output</summary>"
+              echo ""
+              echo "\`\`\`"
+              sed -n '1,240p' "$THEME_LIST_ERR" || true
+              echo "\`\`\`"
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
+          # Defensive: if CLI returned empty, treat as an empty list (instead of jq failure).
+          if [ ! -s "$THEME_LIST_JSON" ]; then
+            echo "[]" > "$THEME_LIST_JSON"
+          fi
+
+          ALL_COUNT="$(jq -r 'length' "$THEME_LIST_JSON" 2>/dev/null || echo "0")"
+          echo "Found ${ALL_COUNT} total theme(s) on store."
+
+          MATCHED_COUNT=0
+          MATCHED_THEMES=""
           DELETED_COUNT=0
           DELETED_THEMES=""
 
@@ -57,22 +139,61 @@ jobs:
             [ -z "$THEME_NAME" ] && continue
 
             if printf "%s" "$THEME_NAME" | grep -q "PR${PR_NUMBER}"; then
+              MATCHED_COUNT=$((MATCHED_COUNT + 1))
+              MATCHED_THEMES="${MATCHED_THEMES}${THEME_NAME}\n"
+              echo "Matched: $THEME_NAME ($THEME_ID)"
+
+              DELETE_ERR="$(mktemp)"
               if shopify theme delete \
                 --store "$SHOPIFY_STORE_URL" \
                 --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
                 --force \
-                --theme "$THEME_ID" 2>/dev/null; then
+                --theme "$THEME_ID" 1>/dev/null 2>"$DELETE_ERR"; then
                 DELETED_COUNT=$((DELETED_COUNT + 1))
                 DELETED_THEMES="${DELETED_THEMES}${THEME_NAME}\n"
+                echo "Deleted: $THEME_NAME ($THEME_ID)"
               else
-                echo "Failed to delete theme: $THEME_NAME ($THEME_ID)"
+                echo "Failed to delete: $THEME_NAME ($THEME_ID)"
+                echo "Delete error output (first 80 lines):"
+                sed -n '1,80p' "$DELETE_ERR" || true
               fi
             fi
-          done < <(echo "$THEME_LIST" | jq -r '.[] | [.id, .name] | @tsv')
+          done < <(jq -r '.[] | [.id, .name] | @tsv' "$THEME_LIST_JSON")
 
-          echo "deleted_count=$DELETED_COUNT" >> $GITHUB_OUTPUT
+          {
+            echo ""
+            echo "#### Result"
+            echo "- **Total themes on store**: ${ALL_COUNT}"
+            echo "- **Matched (PR${PR_NUMBER})**: ${MATCHED_COUNT}"
+            echo "- **Deleted**: ${DELETED_COUNT}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$MATCHED_COUNT" -gt 0 ]; then
+            {
+              echo ""
+              echo "#### Matched theme names"
+              printf "%b" "$MATCHED_THEMES" | sed -e 's/^/- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$DELETED_COUNT" -gt 0 ]; then
+            {
+              echo ""
+              echo "#### Deleted theme names"
+              printf "%b" "$DELETED_THEMES" | sed -e 's/^/- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "matched_count=$MATCHED_COUNT" >> "$GITHUB_OUTPUT"
+          {
+            echo "matched_themes<<MATCHED_EOF"
+            printf "%b" "$MATCHED_THEMES"
+            echo "MATCHED_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "deleted_count=$DELETED_COUNT" >> "$GITHUB_OUTPUT"
           {
             echo "deleted_themes<<DELETED_EOF"
             printf "%b" "$DELETED_THEMES"
             echo "DELETED_EOF"
-          } >> $GITHUB_OUTPUT
+          } >> "$GITHUB_OUTPUT"

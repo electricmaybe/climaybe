@@ -194,6 +194,14 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 - **Problem:** Passing `inputs.changelog` into the shell via `CHANGELOG="${{ inputs.changelog }}"` expanded multiline markdown into the script body. Newlines broke the assignment; lines starting with `-` ran as commands; stray tokens (e.g. a heading word) could invoke bogus binaries (`markdown: command not found`).
 - **Fix:** Set `env: CHANGELOG: ${{ inputs.changelog }}` on the commit/tag step and pipe the message into `git tag -a "$NEW_VERSION" -F -` so the annotation is read from stdin. Empty changelog still uses `git tag -m "Release …"`.
 
+## 17) Preview cleanup: actionable job summaries
+
+- Updated `reusable-cleanup-themes.yml` to write a clear **Job Summary** including PR number, selected store alias (default vs scoped), store host (best-effort), total themes found, matched themes for `PR<number>`, and deleted count.
+- Stopped swallowing CLI errors (previously `2>/dev/null`) so failures show actionable stderr snippets in both logs and the job summary.
+- Added reusable outputs for diagnosis and chaining:
+  - `matched_count`, `matched_themes`, `skipped_reason`, `store_hint`
+- Updated `pr-close.yml` PR comment to include the resolved store alias.
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.
