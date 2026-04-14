@@ -1,0 +1,108 @@
+# climaybe — Default Store to Root (Multi-store, main + staging)
+# On main and staging branches, the repo root JSON files must always reflect the DEFAULT store
+# to prevent alias-switch confusion and merge conflicts.
+#
+# This workflow enforces:
+# - main + staging: stores/<default-alias>/ → root (deterministic)
+# - Never writes root → stores/ here (that happens only on staging-<alias>/live-<alias>)
+
+name: Default Store to Root
+
+on:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+
+concurrency:
+  group: default-store-to-root-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Skip if this is our own sync commit
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if echo "$COMMIT_MSG" | grep -qE "\[default-store-to-root\]|\[stores-to-root\]|\[root-to-stores\]"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+      - name: Resolve default store alias from climaybe.config.json
+        if: steps.gate.outputs.skip != 'true'
+        id: default_store
+        run: |
+          DEFAULT_ALIAS=$(node -e "
+            const fs = require('fs');
+            const cfg = JSON.parse(fs.readFileSync('./climaybe.config.json', 'utf8'));
+            const stores = cfg?.stores || {};
+            const defaultStoreRaw = cfg?.default_store;
+            const normalize = (v) => String(v || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/\\/.*/, '');
+            const defaultStore = normalize(defaultStoreRaw);
+            let alias = '';
+            if (defaultStore) {
+              for (const [k, d] of Object.entries(stores)) {
+                if (normalize(d) === defaultStore) { alias = k; break; }
+              }
+            }
+            if (!alias) alias = Object.keys(stores)[0] || '';
+            process.stdout.write(alias);
+          ")
+          if [ -z "$DEFAULT_ALIAS" ]; then
+            echo "No default store alias found; skipping."
+            exit 0
+          fi
+          echo "alias=$DEFAULT_ALIAS" >> $GITHUB_OUTPUT
+          echo "Default store alias: $DEFAULT_ALIAS"
+
+      - name: Sync stores/<default>/ to root (main/staging)
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          ALIAS="${{ steps.default_store.outputs.alias }}"
+          STORE_DIR="stores/${ALIAS}"
+          if [ ! -d "$STORE_DIR" ]; then
+            echo "Store directory $STORE_DIR does not exist, skipping."
+            exit 0
+          fi
+
+          for DIR in config templates sections; do
+            SRC="${STORE_DIR}/${DIR}"
+            if [ -d "$SRC" ]; then
+              find "$SRC" -name "*.json" | while read -r FILE; do
+                REL_PATH="${FILE#$STORE_DIR/}"
+                if [ "$REL_PATH" = "config/settings_schema.json" ]; then
+                  continue
+                fi
+                mkdir -p "$(dirname "$REL_PATH")"
+                cp "$FILE" "$REL_PATH"
+              done
+            fi
+          done
+
+      - name: Commit default-store→root
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config templates sections 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync default store to root [default-store-to-root]"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+

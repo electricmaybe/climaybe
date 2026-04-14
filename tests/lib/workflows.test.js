@@ -40,7 +40,14 @@ describe('workflows', () => {
         const workflowsDir = join(dir, '.github', 'workflows');
         const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
         const hasMulti = files.some((f) =>
-          ['main-to-staging-stores.yml', 'pr-to-live.yml', 'root-to-stores.yml', 'stores-to-root.yml', 'multistore-hotfix-to-main.yml'].includes(f)
+          [
+            'main-to-staging-stores.yml',
+            'pr-to-live.yml',
+            'root-to-stores.yml',
+            'stores-to-root.yml',
+            'multistore-hotfix-to-main.yml',
+            'default-store-to-root.yml',
+          ].includes(f)
         );
         assert.ok(hasMulti, 'expected at least one multi-store workflow');
       } finally {

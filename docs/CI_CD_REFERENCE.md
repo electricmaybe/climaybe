@@ -50,11 +50,13 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **live-***: Same as staging-*: **root-to-stores** detects source (main vs elsewhere). From main → stores→root; from elsewhere → root→stores, then **multistore-hotfix-to-main** merges to main (skips when push was merge from main).
 - **main-to-staging-stores** runs on every push to main except pure store-sync commits. Version bumps and normal releases are merged into all `staging-<alias>`. For hotfix-backports, the merge commit message is parsed to get the source branch. If source is `staging-<alias>`, that same `staging-<alias>` is skipped (already has the hotfix). If source is `live-<alias>`, main is still merged into `staging-<alias>` so staging gets the live fix.
 - **Root JSON files** (config/settings_data.json, templates/*.json, sections/*.json) are **ignored** between main and staging-&lt;alias&gt;: when main is synced to a store branch, the workflow merges main then restores root from `stores/<alias>/`, so main’s root JSONs never overwrite store-specific data.
+- **main + staging determinism**: `default-store-to-root` enforces that root JSON files on `main` and `staging` always reflect `stores/<default>/` (default from `climaybe.config.json`). This prevents alias-switch root conflicts and keeps those branches deterministic.
 
 ## Workflow names and roles
 
 | Concept | File | Trigger | What it does |
 |--------|------|---------|--------------|
+| default-store-to-root | `default-store-to-root.yml` | Push to `main` or `staging` | Enforces deterministic root JSONs by copying `stores/<default>/` → root (default from `climaybe.config.json`). Prevents alias-switch conflicts on shared branches. |
 | main-to-staging-<store> | `main-to-staging-stores.yml` | Push to `main`; or **workflow_run** when Post-Merge Tag / Nightly Hotfix Tag complete | Merges main into each `staging-<alias>` (local merge + push). Root JSONs ignored (restored from `stores/<alias>/`). Skips no-op sync when branch tree already matches main, and skips only pure store-sync commits for loop prevention. Runs after version-bump workflows so the version-bump commit (pushed with GITHUB_TOKEN) reaches staging. For hotfix-backport: if source is `staging-<alias>`, that same staging branch is skipped; if source is `live-<alias>`, `staging-<alias>` is also synced. |
 | stores-to-root | `stores-to-root.yml` | Push to `staging-*` | **From main** (merge): copies `stores/<alias>/` → root. **From elsewhere** (Shopify, direct, feature): copies root → `stores/<alias>/`. |
 | pr-to-live | `pr-to-live.yml` | After stores-to-root | Opens PR from `staging-<alias>` to `live-<alias>`. |
