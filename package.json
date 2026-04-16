@@ -86,7 +86,7 @@
     "picocolors": "^1.1.1",
     "prettier": "^3.4.2",
     "prompts": "^2.4.2",
-    "stylelint": "^16.9.0",
+    "stylelint": "^17.8.0",
     "stylelint-config-standard": "^36.0.1",
     "tailwindcss": "^4.1.18"
   },
