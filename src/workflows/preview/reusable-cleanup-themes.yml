@@ -3,14 +3,25 @@ name: Cleanup Themes
 on:
   workflow_call:
     inputs:
-      pr_number:
-        required: true
+      cleanup_mode:
+        required: false
         type: string
-        description: "PR number to clean up themes for"
+        default: 'by_pr'
+        description: "by_pr: delete themes whose name ends with -PR{pr_number} (padded). orphan_pr: delete themes ending with -PR<n> when PR n is not open in this repo."
+      pr_number:
+        required: false
+        type: string
+        default: ''
+        description: "Padded PR number (e.g. 09) when cleanup_mode is by_pr; ignored for orphan_pr."
       store_alias_secret:
         required: false
         type: string
         description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_*_<this>; else uses SHOPIFY_STORE_URL / SHOPIFY_THEME_ACCESS_TOKEN."
+      result_artifact_prefix:
+        required: false
+        type: string
+        default: ''
+        description: "When non-empty, uploads a tiny artifact named {prefix}-{store_alias_secret} with deleted_count for matrix fan-in."
     outputs:
       deleted_count:
         description: "Number of deleted themes"
@@ -34,6 +45,10 @@ on:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
     outputs:
       deleted_count: ${{ steps.cleanup.outputs.deleted_count }}
       deleted_themes: ${{ steps.cleanup.outputs.deleted_themes }}
@@ -51,7 +66,10 @@ jobs:
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
           SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          CLEANUP_MODE: ${{ inputs.cleanup_mode }}
           STORE_ALIAS_SECRET: ${{ inputs.store_alias_secret }}
+          RESULT_ARTIFACT_PREFIX: ${{ inputs.result_artifact_prefix }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -62,11 +80,13 @@ jobs:
           {
             echo "### 🧹 Cleanup preview themes"
             echo ""
-            echo "- **PR**: \`${PR_NUMBER}\`"
+            echo "- **Mode**: \`${CLEANUP_MODE}\`"
+            echo "- **PR (by_pr mode)**: \`${PR_NUMBER:-<n/a>}\`"
             echo "- **Store alias secret**: \`${STORE_ALIAS_SECRET:-<default>}\`"
             echo "- **Store (host)**: \`${STORE_HOST:-<missing>}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+          echo "CLEANUP_MODE=${CLEANUP_MODE}"
           echo "PR=${PR_NUMBER}"
           echo "Store alias secret=${STORE_ALIAS_SECRET:-<default>}"
           echo "Store host=${STORE_HOST:-<missing>}"
@@ -91,6 +111,11 @@ jobs:
             echo "deleted_themes<<DELETED_EOF" >> "$GITHUB_OUTPUT"
             echo "DELETED_EOF" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          if [ "$CLEANUP_MODE" = "by_pr" ] && [ -z "${PR_NUMBER:-}" ]; then
+            echo "cleanup_mode is by_pr but pr_number is empty."
+            exit 1
           fi
 
           echo "store_hint=${STORE_HOST:-}" >> "$GITHUB_OUTPUT"
@@ -121,7 +146,6 @@ jobs:
             exit 1
           fi
 
-          # Defensive: if CLI returned empty, treat as an empty list (instead of jq failure).
           if [ ! -s "$THEME_LIST_JSON" ]; then
             echo "[]" > "$THEME_LIST_JSON"
           fi
@@ -134,11 +158,59 @@ jobs:
           DELETED_COUNT=0
           DELETED_THEMES=""
 
+          OPEN_PRS_FILE="$(mktemp)"
+          if [ "$CLEANUP_MODE" = "orphan_pr" ]; then
+            echo "Fetching open PR numbers (limit 1000)…"
+            if ! gh pr list --repo "${GITHUB_REPOSITORY}" --state open --limit 1000 --json number -q '.[].number' > "$OPEN_PRS_FILE" 2>/dev/null; then
+              echo "gh pr list failed; cannot determine open PRs safely. Skipping orphan cleanup."
+              {
+                echo ""
+                echo "#### Result"
+                echo "- **Skipped**: \`gh pr list\` failed (check \`pull-requests: read\` permission)"
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "skipped_reason=gh_pr_list_failed" >> "$GITHUB_OUTPUT"
+              echo "matched_count=0" >> "$GITHUB_OUTPUT"
+              echo "matched_themes<<MATCHED_EOF" >> "$GITHUB_OUTPUT"
+              echo "MATCHED_EOF" >> "$GITHUB_OUTPUT"
+              echo "deleted_count=0" >> "$GITHUB_OUTPUT"
+              echo "deleted_themes<<DELETED_EOF" >> "$GITHUB_OUTPUT"
+              echo "DELETED_EOF" >> "$GITHUB_OUTPUT"
+              rm -f "$THEME_LIST_ERR" "$THEME_LIST_JSON" "$OPEN_PRS_FILE"
+              exit 0
+            fi
+            echo "Open PR count (lines): $(wc -l < "$OPEN_PRS_FILE" | tr -d ' ')"
+          fi
+
+          should_delete_theme() {
+            local id="$1"
+            local name="$2"
+            local suffix=""
+            suffix="$(printf '%s' "$name" | sed -n 's/.*-PR\([0-9][0-9]*\)$/\1/p')"
+            if [ -z "$suffix" ]; then
+              return 1
+            fi
+            if [ "$CLEANUP_MODE" = "by_pr" ]; then
+              case "$name" in
+                *"-PR${PR_NUMBER}") return 0 ;;
+                *) return 1 ;;
+              esac
+            fi
+            if [ "$CLEANUP_MODE" = "orphan_pr" ]; then
+              local num=""
+              num=$((10#$suffix))
+              if grep -qx "$num" "$OPEN_PRS_FILE" 2>/dev/null; then
+                return 1
+              fi
+              return 0
+            fi
+            return 1
+          }
+
           while IFS=$'\t' read -r THEME_ID THEME_NAME; do
             [ -z "$THEME_ID" ] && continue
             [ -z "$THEME_NAME" ] && continue
 
-            if printf "%s" "$THEME_NAME" | grep -q "PR${PR_NUMBER}"; then
+            if should_delete_theme "$THEME_ID" "$THEME_NAME"; then
               MATCHED_COUNT=$((MATCHED_COUNT + 1))
               MATCHED_THEMES="${MATCHED_THEMES}${THEME_NAME}\n"
               echo "Matched: $THEME_NAME ($THEME_ID)"
@@ -164,7 +236,7 @@ jobs:
             echo ""
             echo "#### Result"
             echo "- **Total themes on store**: ${ALL_COUNT}"
-            echo "- **Matched (PR${PR_NUMBER})**: ${MATCHED_COUNT}"
+            echo "- **Matched**: ${MATCHED_COUNT}"
             echo "- **Deleted**: ${DELETED_COUNT}"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -197,3 +269,16 @@ jobs:
             printf "%b" "$DELETED_THEMES"
             echo "DELETED_EOF"
           } >> "$GITHUB_OUTPUT"
+
+          rm -f "$THEME_LIST_ERR" "$THEME_LIST_JSON" "$OPEN_PRS_FILE"
+
+      - name: Upload deleted count for matrix fan-in
+        if: inputs.result_artifact_prefix != ''
+        run: printf '%s' '${{ steps.cleanup.outputs.deleted_count }}' > deleted-count.txt
+      - name: Save cleanup result artifact
+        if: inputs.result_artifact_prefix != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.result_artifact_prefix }}-${{ inputs.store_alias_secret }}
+          path: deleted-count.txt
+          retention-days: 2

@@ -19,11 +19,29 @@ on:
         required: false
         type: string
         description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_STORE_URL_<this>; else uses SHOPIFY_STORE_URL."
+      use_preview_fragments:
+        required: false
+        type: string
+        default: 'false'
+        description: "When 'true', download preview-fragment-* artifacts (from publish matrix) and post one comment with all preview URLs."
 
 jobs:
   comment:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
     steps:
+      - name: Download preview fragments (multi-store / matrix publish)
+        if: inputs.use_preview_fragments == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: preview-fragment-*
+          merge-multiple: true
+          path: preview-fragments
+
       - name: Post preview comment
         uses: actions/github-script@v7
         env:
@@ -31,39 +49,85 @@ jobs:
           THEME_ID: ${{ inputs.theme_id }}
           SHARE_OUTPUT: ${{ inputs.share_output }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          USE_PREVIEW_FRAGMENTS: ${{ inputs.use_preview_fragments }}
         with:
           script: |
+            const fs = require('fs');
+            const path = require('path');
             const issueNumber = parseInt(process.env.PR_NUMBER);
-            const storeDomain = (process.env.SHOPIFY_STORE_URL || '')
-              .replace(/^https?:\/\//, '')
-              .replace(/\/$/, '');
-            const themeId = process.env.THEME_ID || '';
-            const shareOutput = process.env.SHARE_OUTPUT || '';
+            const useFragments = process.env.USE_PREVIEW_FRAGMENTS === 'true';
 
-            let previewUrl = '';
-            let customizeUrl = '';
-            if (storeDomain && themeId) {
-              previewUrl = `https://${storeDomain}?preview_theme_id=${themeId}`;
-              customizeUrl = `https://${storeDomain}/admin/themes/${themeId}/editor`;
+            const walkJsonFiles = (dir) => {
+              const out = [];
+              if (!fs.existsSync(dir)) return out;
+              const stack = [dir];
+              while (stack.length) {
+                const d = stack.pop();
+                for (const ent of fs.readdirSync(d, { withFileTypes: true })) {
+                  const p = path.join(d, ent.name);
+                  if (ent.isDirectory()) stack.push(p);
+                  else if (ent.name === 'fragment.json' || ent.name.endsWith('.json')) {
+                    try {
+                      out.push(JSON.parse(fs.readFileSync(p, 'utf8')));
+                    } catch {
+                      // ignore
+                    }
+                  }
+                }
+              }
+              return out;
+            };
+
+            let fragments = [];
+            if (useFragments) {
+              fragments = walkJsonFiles('preview-fragments');
             }
 
             const parts = [
               '## 🎨 Theme Preview Generated',
               '',
-              `**Store:** ${process.env.SHOPIFY_STORE_URL || 'N/A'}`,
               `**Branch:** ${context.payload.pull_request?.head?.ref || context.ref.replace('refs/heads/', '')}`,
               `**Commit:** ${(context.payload.pull_request?.head?.sha || context.sha || '').substring(0, 7)}`
             ];
 
-            if (customizeUrl) {
-              parts.push('', `**Customize URL:** ${customizeUrl}`);
+            if (fragments.length > 0) {
+              parts.push('', '### Preview links (per store)');
+              const byAlias = [...fragments].sort((a, b) => String(a.alias).localeCompare(String(b.alias)));
+              for (const f of byAlias) {
+                const host = (f.store_host || '').replace(/\/$/, '');
+                const tid = f.theme_id || '';
+                const alias = f.alias || 'store';
+                if (host && tid) {
+                  const previewUrl = `https://${host}?preview_theme_id=${tid}`;
+                  const customizeUrl = `https://${host}/admin/themes/${tid}/editor`;
+                  parts.push('', `**${alias}**`, `- Customize: ${customizeUrl}`, `- Preview: ${previewUrl}`);
+                }
+              }
+            } else if (useFragments) {
+              parts.push(
+                '',
+                '*(Could not load per-store preview fragments from workflow artifacts; see the publish job logs.)*'
+              );
+            } else {
+              const storeDomain = (process.env.SHOPIFY_STORE_URL || '')
+                .replace(/^https?:\/\//, '')
+                .replace(/\/$/, '');
+              const themeId = process.env.THEME_ID || '';
+              const shareOutput = process.env.SHARE_OUTPUT || '';
+              parts.push('', `**Store:** ${process.env.SHOPIFY_STORE_URL || 'N/A'}`);
+              let previewUrl = '';
+              let customizeUrl = '';
+              if (storeDomain && themeId) {
+                previewUrl = `https://${storeDomain}?preview_theme_id=${themeId}`;
+                customizeUrl = `https://${storeDomain}/admin/themes/${themeId}/editor`;
+              }
+              if (customizeUrl) parts.push('', `**Customize URL:** ${customizeUrl}`);
+              if (previewUrl) parts.push('', `**Preview URL:** ${previewUrl}`);
+              if (shareOutput.trim()) {
+                parts.push('', '### Share Output', '```', shareOutput, '```');
+              }
             }
-            if (previewUrl) {
-              parts.push('', `**Preview URL:** ${previewUrl}`);
-            }
-            if (shareOutput.trim()) {
-              parts.push('', '### Share Output', '```', shareOutput, '```');
-            }
+
             parts.push('', '---', '*This preview will be available for 7 days.*');
 
             await github.rest.issues.createComment({

@@ -1,0 +1,162 @@
+# Share theme to one Shopify store, rename with -PR{padded}, upload JSON fragment for PR comment fan-in.
+# Intended to be called from a matrix job (one invocation per store).
+
+name: Publish PR preview (single store)
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        required: true
+        type: string
+        description: "Padded PR number (e.g. 09) for theme name suffix -PR09"
+      store_alias:
+        required: true
+        type: string
+        description: "Store alias (for artifact naming and comment JSON)"
+      store_alias_secret:
+        required: false
+        type: string
+        default: ''
+        description: "Upper snake-case secret suffix; empty uses SHOPIFY_STORE_URL / SHOPIFY_THEME_ACCESS_TOKEN"
+    outputs:
+      theme_id:
+        description: "Theme ID after share/rename"
+        value: ${{ jobs.publish.outputs.theme_id }}
+      theme_name:
+        description: "Final theme name after rename"
+        value: ${{ jobs.publish.outputs.theme_name }}
+      share_output:
+        description: "Raw share command output"
+        value: ${{ jobs.publish.outputs.share_output }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      theme_id: ${{ steps.rename.outputs.theme_id }}
+      theme_name: ${{ steps.rename.outputs.theme_name }}
+      share_output: ${{ steps.share.outputs.share_output }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate theme root
+        run: |
+          if [ ! -f "layout/theme.liquid" ]; then
+            echo "layout/theme.liquid not found. Ensure workflow runs at theme repository root."
+            exit 1
+          fi
+
+      - name: Install Shopify CLI
+        run: npm install -g @shopify/cli @shopify/theme
+
+      - name: Share theme
+        id: share
+        env:
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
+            echo "Missing Shopify secrets."
+            exit 1
+          fi
+
+          OUTPUT=$(shopify theme share \
+            --store "$SHOPIFY_STORE_URL" \
+            --password "$SHOPIFY_THEME_ACCESS_TOKEN" 2>&1)
+          STATUS=$?
+
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ]; then
+            echo "Theme share failed."
+            exit $STATUS
+          fi
+
+          THEME_NAME=$(echo "$OUTPUT" | sed -n "s/.*The theme '\([^']*\)'.*/\1/p" | head -1)
+          THEME_ID=$(echo "$OUTPUT" | sed -n 's/.*#\([0-9]*\).*/\1/p' | head -1)
+
+          if [ -z "$THEME_ID" ]; then
+            echo "Could not parse theme id from share output."
+            exit 1
+          fi
+
+          echo "theme_id=$THEME_ID" >> "$GITHUB_OUTPUT"
+          if [ -n "$THEME_NAME" ]; then
+            echo "theme_name=$THEME_NAME" >> "$GITHUB_OUTPUT"
+          fi
+
+          {
+            echo "share_output<<SHARE_EOF"
+            echo "$OUTPUT"
+            echo "SHARE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Rename theme with PR suffix
+        id: rename
+        env:
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          THEME_ID: ${{ steps.share.outputs.theme_id }}
+          THEME_NAME: ${{ steps.share.outputs.theme_name }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          if [ -z "$THEME_ID" ] || [ -z "$THEME_NAME" ]; then
+            echo "Missing theme_id/theme_name from share step."
+            exit 1
+          fi
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
+            echo "Missing Shopify store URL/token for rename."
+            exit 1
+          fi
+
+          NEW_THEME_NAME="${THEME_NAME}-PR${PR_NUMBER}"
+          echo "Renaming theme $THEME_ID to '$NEW_THEME_NAME'..."
+
+          if shopify theme rename \
+            --store "$SHOPIFY_STORE_URL" \
+            --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
+            --theme "$THEME_ID" \
+            --name "$NEW_THEME_NAME" 2>&1; then
+            echo "Rename succeeded with password auth."
+          elif shopify theme rename \
+            --store "$SHOPIFY_STORE_URL" \
+            --theme "$THEME_ID" \
+            --name "$NEW_THEME_NAME" 2>&1; then
+            echo "Rename succeeded with authenticated session."
+          else
+            echo "Failed to rename theme."
+            exit 1
+          fi
+
+          echo "theme_id=$THEME_ID" >> "$GITHUB_OUTPUT"
+          echo "theme_name=$NEW_THEME_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Write preview fragment for PR comment
+        env:
+          STORE_ALIAS: ${{ inputs.store_alias }}
+          THEME_ID: ${{ steps.rename.outputs.theme_id }}
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const url = (process.env.SHOPIFY_STORE_URL || '')
+            .replace(/^https?:\/\//, '')
+            .replace(/\/.*$/, '');
+          const payload = {
+            alias: process.env.STORE_ALIAS || '',
+            theme_id: process.env.THEME_ID || '',
+            store_host: url,
+          };
+          fs.writeFileSync('fragment.json', JSON.stringify(payload, null, 0));
+          NODE
+
+      - name: Upload preview fragment
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-fragment-${{ inputs.store_alias }}
+          path: fragment.json
+          retention-days: 2

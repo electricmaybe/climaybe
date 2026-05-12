@@ -129,9 +129,13 @@ describe('workflows', () => {
         const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
         const hasPreview = files.some((f) => f.includes('pr-update') || f.includes('preview'));
         assert.ok(hasPreview, 'expected at least one preview workflow');
+        const hasMulti = files.includes('cleanup-orphan-preview-themes.yml');
+        const hasPublish = files.includes('reusable-publish-pr-preview-store.yml');
         const prUpdate = readFileSync(join(workflowsDir, 'pr-update.yml'), 'utf-8');
-        assert.match(prUpdate, /dorny\/paths-filter/);
-        assert.match(prUpdate, /stores\/\*\*/);
+        assert.match(prUpdate, /fromJson\(needs\.validate-environment\.outputs\.preview_targets_json\)/);
+        assert.match(prUpdate, /reusable-publish-pr-preview-store\.yml/);
+        assert.ok(hasMulti, 'expected cleanup-orphan-preview-themes.yml');
+        assert.ok(hasPublish, 'expected reusable-publish-pr-preview-store.yml');
       } finally {
         teardown();
       }

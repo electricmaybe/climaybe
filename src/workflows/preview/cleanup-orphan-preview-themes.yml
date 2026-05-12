@@ -1,0 +1,59 @@
+# climaybe — Cleanup orphan preview themes (optional)
+# Weekly (and manual): on each configured store, delete themes whose name ends with -PR<n>
+# when PR #n is not open in this repo (merged/closed without theme cleanup).
+
+name: Cleanup orphan preview themes
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    outputs:
+      preview_targets_json: ${{ steps.cfg.outputs.preview_targets_json }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build store matrix from climaybe.config.json
+        id: cfg
+        run: |
+          if [ ! -f climaybe.config.json ]; then
+            {
+              echo 'preview_targets_json<<PT_JSON'
+              echo '[]'
+              echo 'PT_JSON'
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node <<'NODE' >>"$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('climaybe.config.json', 'utf8'));
+          const stores = cfg?.stores || {};
+          const keys = Object.keys(stores);
+          const aliasToSecret = (a) => String(a).toUpperCase().replace(/-/g, '_');
+          const targets = keys.map((alias) => ({ alias, alias_secret: aliasToSecret(alias) }));
+          console.log('preview_targets_json<<PT_JSON');
+          console.log(JSON.stringify(targets));
+          console.log('PT_JSON');
+          NODE
+
+  cleanup-orphans:
+    needs: [configure]
+    if: needs.configure.outputs.preview_targets_json != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.configure.outputs.preview_targets_json) }}
+    uses: ./.github/workflows/reusable-cleanup-themes.yml
+    with:
+      cleanup_mode: orphan_pr
+      pr_number: ''
+      store_alias_secret: ${{ matrix.alias_secret }}
+    secrets: inherit
