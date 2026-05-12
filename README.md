@@ -94,7 +94,11 @@ Switch your local dev environment to a specific store (multi-store only).
 npx climaybe switch voldt-norway
 ```
 
-Copies `stores/<alias>/` JSON files to the repo root so you can preview that store locally, and sets `default_store` in `climaybe.config.json` so `climaybe serve` / `shopify theme dev` targets that store. If your current git branch is `staging-<alias>` or `live-<alias>`, `climaybe serve` uses that store’s domain from config (even if `default_store` differs), matching CI preview behavior.
+Copies `stores/<alias>/` JSON files to the repo root so you can preview that store locally, and sets `default_store` in `climaybe.config.json` so `climaybe serve` / `shopify theme dev` targets that store. If your current git branch is `staging-<alias>` or `live-<alias>`, `climaybe serve` still passes that branch’s store to Shopify for `--store` (even if `default_store` differs), matching CI preview behavior.
+
+### `climaybe serve` / `climaybe theme serve`
+
+Runs Tailwind/scripts/schema watchers and `shopify theme dev` (see the theme dev kit section for flags). In **multi-store** mode, the first step asks **which store to serve** (interactive terminal); the default choice is the store matching `default_store` (same as after `climaybe switch`). If you pick a **different** store, the CLI saves the current root `config/`, `templates/`, and `sections/` JSON files into `stores/<previous-alias>/` (same paths as `climaybe sync`), then copies the selected store’s JSONs to the root and updates `default_store`, so work in progress is not lost. In **CI** or when **stdin is not a TTY**, there is no prompt: it uses `default_store` unless you set **`CLIMAYBE_SERVE_STORE=<alias>`** to a configured alias.
 
 ### `climaybe sync [alias]` / `climaybe theme sync`
 
@@ -227,12 +231,14 @@ Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`; defau
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `pr-update.yml` | PR opened/synchronize/reopened (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs; uses default store for main/staging/develop, or the store for staging-&lt;alias&gt;/live-&lt;alias&gt;. **Path filter:** runs only when the PR changes theme paths (`assets/`, `blocks/`, `config/`, `layout/`, `locales/`, `sections/`, `snippets/`, `templates/`, `_scripts/`, `_styles/`, `shopify.theme.toml`, `stores/**`); docs-only or tooling-only PRs skip preview work. |
-| `pr-close.yml` | PR closed (same branch set) | Deletes matching preview themes and comments deleted count + names |
-| `reusable-share-theme.yml` | workflow_call | Shares Shopify draft theme and returns `theme_id` |
-| `reusable-rename-theme.yml` | workflow_call | Renames shared theme to include `PR<number>` (fails job on rename failure) |
-| `reusable-comment-on-pr.yml` | workflow_call | Posts preview comment including Customize URL |
-| `reusable-cleanup-themes.yml` | workflow_call | Deletes preview themes by PR number and exposes cleanup outputs |
+| `pr-update.yml` | PR opened/synchronize/reopened (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs. **Multi-store + base not** `staging-<alias>` **or** `live-<alias>`**:** publishes to **every** configured store (matrix) and posts **all** links in one PR comment. For `staging-<alias>` / `live-<alias>` bases, only that store is used. **Path filter:** theme paths only (`assets/`, `blocks/`, `config/`, `layout/`, `locales/`, `sections/`, `snippets/`, `templates/`, `_scripts/`, `_styles/`, `shopify.theme.toml`, `stores/**`). |
+| `pr-close.yml` | PR closed (same branch set) | Deletes this PR’s preview themes using the **same store matrix rule** as `pr-update`; PR comment shows **total** deleted count across stores. |
+| `cleanup-orphan-preview-themes.yml` | Weekly (Mon 06:00 UTC) + `workflow_dispatch` | Per store: deletes themes ending with `-PR<n>` when PR `#n` is **not** open (merged/closed without cleanup). Uses `gh pr list` (limit 1000 open PRs). |
+| `reusable-publish-pr-preview-store.yml` | workflow_call | Share + rename + upload comment fragment for **one** store (matrix leg in `pr-update`). |
+| `reusable-share-theme.yml` | workflow_call | Shares Shopify draft theme and returns `theme_id` (still available if you call it elsewhere) |
+| `reusable-rename-theme.yml` | workflow_call | Renames shared theme to include `PR<number>` (still available for custom flows) |
+| `reusable-comment-on-pr.yml` | workflow_call | Posts preview comment; aggregates `preview-fragment-*` artifacts when `use_preview_fragments` is true |
+| `reusable-cleanup-themes.yml` | workflow_call | `cleanup_mode: by_pr` deletes names ending with `-PR{padded}`; `orphan_pr` deletes `-PR<n>` when PR `n` is not open. Optional `result_artifact_prefix` for matrix fan-in on `pr-close` |
 | `reusable-extract-pr-number.yml` | workflow_call | Extracts padded/unpadded PR number outputs for naming and API-safe usage |
 
 ### Optional build + Lighthouse package
@@ -374,7 +380,7 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 
 **Store URL:** During `climaybe init` (or `add-store`), store URL secret(s) are set from your configured store domain(s); theme tokens are optional prompts.
 
-**Multi-store:** Per-store secrets `SHOPIFY_STORE_URL_<ALIAS>` and `SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>` — the URL is set from config; you must provide the theme token per store. `<ALIAS>` is uppercase with hyphens as underscores (e.g. `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`). Preview and cleanup: for PRs targeting **main**, **staging**, or **develop** the workflows use the **default store** (from `config.default_store` or first in `config.stores`); for PRs targeting **staging-&lt;alias&gt;** or **live-&lt;alias&gt;** they use that store’s credentials. Set either the plain `SHOPIFY_*` secrets or the `_<ALIAS>` pair for each store you use in preview.
+**Multi-store:** Per-store secrets `SHOPIFY_STORE_URL_<ALIAS>` and `SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>` — the URL is set from config; you must provide the theme token per store. `<ALIAS>` is uppercase with hyphens as underscores (e.g. `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`). **Preview:** for PRs targeting **staging-&lt;alias&gt;** or **live-&lt;alias&gt;** only that store is used. For **main**, **staging**, **develop**, or other bases with **multiple** stores in `climaybe.config.json`, **pr-update** publishes the preview theme to **every** store (each must have secrets); **pr-close** cleans that PR’s preview themes on **all** stores. For a **single** store in config, behavior matches the default-store case. Optional **cleanup-orphan-preview-themes** (weekly + manual) removes stale `-PR<n>` themes when PR `n` is no longer open.
 
 ## Directory Structure (Multi-store)
 

@@ -202,6 +202,13 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
   - `matched_count`, `matched_themes`, `skipped_reason`, `store_hint`
 - Updated `pr-close.yml` PR comment to include the resolved store alias.
 
+## 18) Preview themes: multi-store matrix, orphan cleanup, stricter `-PR` matching
+
+- **`pr-update.yml` / `pr-close.yml`:** If `climaybe.config.json` has **multiple** stores and the PR base is **not** `staging-<alias>` or `live-<alias>`, preview **publish** and **cleanup** run in a **matrix over all stores**; `pr-update` posts one comment with links per store (via `preview-fragment-*` artifacts). Staging/live base PRs still target a single store.
+- **`reusable-publish-pr-preview-store.yml`:** Share + rename + fragment upload per store (replaces matrix-chaining `share` → `rename`, which cannot pass outputs per leg reliably).
+- **`reusable-cleanup-themes.yml`:** `cleanup_mode: by_pr` matches theme names ending with `-PR{padded}` only; `cleanup_mode: orphan_pr` deletes `-PR<n>` themes when PR `n` is not in the open list (`gh pr list`, limit 1000). Optional `result_artifact_prefix` uploads deleted counts for `pr-close` fan-in.
+- **`cleanup-orphan-preview-themes.yml`:** Weekly + manual orphan cleanup per configured store.
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.
