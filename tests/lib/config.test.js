@@ -11,6 +11,7 @@ import {
   readClimaybeConfig,
   migrateLegacyPackageConfigToClimaybe,
   getStoreAliases,
+  getAliasForDefaultStore,
   getMode,
   getStoreDomainFromBranch,
   isPreviewWorkflowsEnabled,
@@ -286,6 +287,37 @@ describe('config', () => {
       try {
         writeConfig({ project_type: 'app', commitlint: true }, dir);
         assert.strictEqual(isThemeProjectForAppInit(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('getAliasForDefaultStore', () => {
+    it('returns null when default_store is missing or does not match any store', () => {
+      const dir = setup();
+      try {
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+        writeConfig({ stores: { foo: 'foo.myshopify.com' } }, dir);
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+        writeConfig({ stores: { foo: 'foo.myshopify.com' }, default_store: 'other.myshopify.com' }, dir);
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns the alias whose domain equals default_store', () => {
+      const dir = setup();
+      try {
+        writeConfig(
+          {
+            stores: { norway: 'norway.myshopify.com', uk: 'uk.myshopify.com' },
+            default_store: 'uk.myshopify.com',
+          },
+          dir
+        );
+        assert.strictEqual(getAliasForDefaultStore(dir), 'uk');
       } finally {
         teardown();
       }

@@ -181,6 +181,23 @@ export function getStoreAliases(cwd = process.cwd()) {
 }
 
 /**
+ * Resolve the store alias for `default_store` (the domain last set by `climaybe switch` or serve).
+ * @param {string} [cwd]
+ * @returns {string | null}
+ */
+export function getAliasForDefaultStore(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  const domain = config?.default_store;
+  const stores = config?.stores;
+  if (!domain || !stores || typeof stores !== 'object') return null;
+  const normalized = String(domain).trim();
+  for (const [alias, storeDomain] of Object.entries(stores)) {
+    if (String(storeDomain).trim() === normalized) return alias;
+  }
+  return null;
+}
+
+/**
  * Determine the current mode: 'single' or 'multi'.
  */
 export function getMode(cwd = process.cwd()) {

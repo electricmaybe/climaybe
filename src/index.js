@@ -64,8 +64,12 @@ function registerThemeCommands(cmd) {
     .command('serve')
     .description('Run local theme dev (Shopify + assets; Theme Check off by default)')
     .option('--theme-check', 'Enable Theme Check watcher')
-    .action((opts) => serveAll({ includeThemeCheck: opts.themeCheck === true }));
-  cmd.command('serve:shopify').description('Run Shopify theme dev server').action(() => serveShopify());
+    .action(async (opts) => {
+      await serveAll({ includeThemeCheck: opts.themeCheck === true });
+    });
+  cmd.command('serve:shopify').description('Run Shopify theme dev server').action(async () => {
+    await serveShopify();
+  });
   cmd
     .command('serve:assets')
     .description('Run assets watch (Tailwind + scripts; Theme Check off by default)')

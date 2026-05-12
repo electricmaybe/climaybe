@@ -4,6 +4,7 @@ import { watchTree } from './watch.js';
 import { isAbsolute, join, relative } from 'node:path';
 import pc from 'picocolors';
 import { readConfig, getStoreDomainFromBranch } from './config.js';
+import { prepareMultiStoreForServe } from './serve-multi-store.js';
 import { buildScripts } from './build-scripts.js';
 import { buildSchemas } from './schema-builder.js';
 import { runShopify } from './shopify-cli.js';
@@ -209,7 +210,15 @@ function runThemeCheckFiltered({ cwd = process.cwd() } = {}) {
   return child;
 }
 
-export function serveShopify({ cwd = process.cwd() } = {}) {
+/**
+ * @param {{ cwd?: string; skipMultiStorePrep?: boolean }} [opts]
+ * @returns {Promise<import('node:child_process').ChildProcess | null>} Null when multi-store prep failed or was cancelled.
+ */
+export async function serveShopify({ cwd = process.cwd(), skipMultiStorePrep = false } = {}) {
+  if (!skipMultiStorePrep) {
+    const ok = await prepareMultiStoreForServe(cwd);
+    if (!ok) return null;
+  }
   const config = readConfig(cwd) || {};
   const branchStore = getStoreDomainFromBranch(cwd);
   const store = branchStore || config.default_store || config.store || '';
@@ -365,16 +374,28 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
   return { tailwind, devMcp, scriptsWatch, schemasWatch, themeCheckWatch, cleanup };
 }
 
-export function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
+export async function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
+  const prepOk = await prepareMultiStoreForServe(cwd);
+  if (!prepOk) {
+    const noop = () => {};
+    return { cleanup: noop };
+  }
+
   // Start assets first, then bring up Shopify after a short delay.
   const assets = serveAssets({ cwd, includeThemeCheck });
   let shopify = null;
   const shopifyStartDelayMs = 2500;
   const shopifyTimer = setTimeout(() => {
-    shopify = serveShopify({ cwd });
-    shopify.on('exit', () => {
-      cleanup();
-    });
+    void (async () => {
+      shopify = await serveShopify({ cwd, skipMultiStorePrep: true });
+      if (shopify) {
+        shopify.on('exit', () => {
+          cleanup();
+        });
+      } else {
+        cleanup();
+      }
+    })();
   }, shopifyStartDelayMs);
   console.log(pc.dim(`  Waiting ${shopifyStartDelayMs}ms before starting Shopify...`));
 

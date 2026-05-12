@@ -230,6 +230,28 @@ export async function promptProjectName(cwd = process.cwd()) {
 }
 
 /**
+ * Ask which store to use for local theme dev (multi-store `climaybe serve`).
+ * @param {{ aliases: string[]; stores: Record<string, string>; suggestedAlias: string }} opts
+ * @returns {Promise<string | null>} Selected alias, or null if cancelled.
+ */
+export async function promptServeStore({ aliases, stores, suggestedAlias }) {
+  const sorted = [...aliases].sort();
+  const choices = sorted.map((alias) => ({
+    title: `${alias} (${stores[alias]})`,
+    value: alias,
+  }));
+  const initialIndex = sorted.indexOf(suggestedAlias);
+  const { alias } = await prompts({
+    type: 'select',
+    name: 'alias',
+    message: 'Which store should we serve?',
+    choices,
+    initial: initialIndex >= 0 ? initialIndex : 0,
+  });
+  return alias ?? null;
+}
+
+/**
  * Prompt for a single new store (used by add-store command).
  * Takes existing aliases to prevent duplicates.
  */
