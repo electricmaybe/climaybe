@@ -253,8 +253,11 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
   const scriptsDir = join(cwd, '_scripts');
   if (existsSync(scriptsDir)) {
     try {
-      buildScripts({ cwd });
+      const { removed } = buildScripts({ cwd });
       writeTaggedLine('scripts', pc.yellow, 'built (initial)');
+      if (removed?.length) {
+        writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+      }
     } catch (err) {
       writeTaggedLine('scripts', pc.yellow, `initial build failed: ${err.message}`, process.stderr);
     }
@@ -268,8 +271,11 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
         debounceMs: 300,
         onChange: () => {
           try {
-            buildScripts({ cwd });
+            const { removed } = buildScripts({ cwd });
             writeTaggedLine('scripts', pc.yellow, 'rebuilt');
+            if (removed?.length) {
+              writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+            }
           } catch (err) {
             writeTaggedLine('scripts', pc.yellow, `build failed: ${err.message}`, process.stderr);
           }
@@ -449,7 +455,10 @@ export function buildAll({ cwd = process.cwd() } = {}) {
 
   let scriptsOk = true;
   try {
-    buildScripts({ cwd });
+    const { removed } = buildScripts({ cwd });
+    if (removed?.length) {
+      writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+    }
   } catch (err) {
     console.log(pc.red(`\n  build-scripts failed: ${err.message}\n`));
     scriptsOk = false;
