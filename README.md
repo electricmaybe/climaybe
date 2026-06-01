@@ -250,6 +250,8 @@ When enabled, builds are **resilient**:
 - `init` may offer to create entrypoints; **default answer is No**.
 - Script bundling preserves comments/spacing and emits bundles only for root entry files (files imported by other top-level `_scripts/*.js` are inlined, not emitted separately).
 - Script bundles are written to `assets/*.js` (readable by default; use `climaybe build-scripts --minify` if you want minified output).
+- `assets/*.js`, `assets/style.css`, and the injected `{% schema %}` blocks are **generated outputs** — edit the source in `_scripts/`, `_styles/`, and `_schemas/` instead, since the watcher/build regenerate (and overwrite) the outputs on save and in CI.
+- **Orphan cleanup:** when `_scripts/` is in use, a full build (`climaybe build`, `climaybe build-scripts`, and the `serve` watcher) deletes any `assets/*.js` that no longer has a matching `_scripts/` source. Add new JS via a top-level `_scripts/<name>.js` entry, not by hand-editing `assets/`. Liquid-processed `*.js.liquid` assets and non-JS files are left untouched; targeted single-entry builds (`build-scripts <entry>`) skip pruning.
 - Live minified `assets/*` changes are intentionally excluded from hotfix backports to `main` (no branch-specific `.gitignore` split required).
 
 Build workflows install deps with `npm ci` and run `npx --no-install climaybe build-scripts` plus `npx --no-install climaybe build`, so CI uses lockfile-pinned versions (no `@latest` drift).

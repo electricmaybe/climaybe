@@ -8,6 +8,7 @@ alwaysApply: true
 
 When you perform any of the following, **read and apply** the corresponding rule file from `.cursor/rules/`:
 
+- **Editing `assets/*.js` or `assets/style.css`, build outputs vs source, where to edit JS/CSS** → `project-overview.mdc` (Build Outputs vs Source — edit `_scripts/`/`_styles/`, never the generated `assets/` files)
 - **Git commits, commit messages** → `commit-rules.mdc`
 - **Accessibility, a11y, focus, WCAG, UI behavior** → `accessibility-rules.mdc`
 - **JavaScript, web components, _scripts/, *.js** → `javascript-standards.mdc`

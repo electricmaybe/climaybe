@@ -3,12 +3,13 @@ description: Tailwind CSS and theme token standards for Liquid and theme styles.
 globs:
   - "**/*.liquid"
   - "_styles/**/*.css"
-  - "assets/*.css"
 alwaysApply: false
 ---
 # Tailwind CSS Development Rules
 
 Apply when editing Liquid templates or theme CSS that use Tailwind classes or theme tokens. Use semantic tokens (surface, subtle, emphasis, accent, text-primary, border-secondary) from this project's `@theme`; see `_styles/02_base/02.02_colors.css`.
+
+> **Source vs build output:** Edit CSS in `_styles/` (entrypoint `_styles/main.css`). The CLI compiles it into `assets/style.css` on every save and in CI, so `assets/style.css` is a **generated artifact** — never edit it directly, your changes will be overwritten. See `project-overview.mdc` (Build Outputs vs Source).
 
 ## Core Principles
 

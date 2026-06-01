@@ -6,6 +6,10 @@
 
 This document summarizes past CI workflow hardening changes applied in `climaybe`.
 
+## Orphan script asset cleanup
+
+`climaybe build-scripts` (and `build` / the `serve` watcher) now prune stale outputs: on a **full build**, any `assets/*.js` that the current `_scripts/` build does not produce is deleted. This keeps `assets/` in sync when a `_scripts/` entry is renamed or removed. Guardrails: only plain `*.js` files are affected (Liquid-processed `*.js.liquid` and non-JS files are preserved), builds with no `_scripts/` entrypoints prune nothing, and targeted single-entry builds (`build-scripts <entry>`) skip pruning so sibling bundles survive. `buildScripts()` now returns `{ bundles, removed }`.
+
 ## Path filters (reduce Actions minutes)
 
 Scaffolded **build** and **preview** workflows use `dorny/paths-filter` (and `build-pipeline.yml` uses `paths-ignore`) so script/Tailwind builds, Lighthouse, and PR preview deploys skip when changes are limited to docs, tooling, or paths outside the theme. Script builds also match `assets/**/*.js`; Tailwind does not use a blanket `**/*.js` so compiled asset edits trigger `build-scripts` only. **`github-actions[bot]`** pushes with the standard `chore(assets): …` message skip the build job. On **`live-*`** branches, pushes where **`github.actor`** contains **`[bot]`** skip the whole build job so automated commits do not compile JS/CSS. **Lighthouse** runs only on the **`staging`** branch (not `staging-*`). The **climaybe** repo’s own **CI** workflow runs tests only when `src/`, `tests/`, `scripts/`, lockfile, or `ci.yml` change; **commitlint** still runs on every PR. See [docs/CI_CD_REFERENCE.md](docs/CI_CD_REFERENCE.md) for the exact globs.
