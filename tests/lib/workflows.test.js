@@ -93,6 +93,21 @@ describe('workflows', () => {
       }
     });
 
+    it('backports store sync commits without waiting for next root edit', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('multi', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'multistore-hotfix-to-main.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+
+        assert.match(workflow, /STORE_CHANGED/);
+        assert.match(workflow, /git diff --quiet "\$MERGE_BASE" "origin\/\$SOURCE" -- "stores\/\$\{SOURCE_ALIAS\}\/"/);
+        assert.match(workflow, /\[ -n "\$COMMITS" \] \|\| \[ -n "\$STORE_CHANGED" \]/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('keeps live minified assets out of main hotfix backports', () => {
       const dir = setup();
       try {
