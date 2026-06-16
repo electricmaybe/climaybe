@@ -5,6 +5,9 @@
 name: Cleanup orphan preview themes
 
 on:
+  pull_request:
+    types: [closed]
+    branches: [main, staging, develop, 'staging-*', 'live-*']
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:

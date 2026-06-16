@@ -56,6 +56,7 @@ jobs:
             const path = require('path');
             const issueNumber = parseInt(process.env.PR_NUMBER);
             const useFragments = process.env.USE_PREVIEW_FRAGMENTS === 'true';
+            const marker = '<!-- climaybe-preview-comment -->';
 
             const walkJsonFiles = (dir) => {
               const out = [];
@@ -84,6 +85,7 @@ jobs:
             }
 
             const parts = [
+              marker,
               '## 🎨 Theme Preview Generated',
               '',
               `**Branch:** ${context.payload.pull_request?.head?.ref || context.ref.replace('refs/heads/', '')}`,
@@ -92,7 +94,12 @@ jobs:
 
             if (fragments.length > 0) {
               parts.push('', '### Preview links (per store)');
-              const byAlias = [...fragments].sort((a, b) => String(a.alias).localeCompare(String(b.alias)));
+              const uniqueByAlias = new Map();
+              for (const f of fragments) {
+                const alias = String(f.alias || '').trim() || 'store';
+                uniqueByAlias.set(alias, f);
+              }
+              const byAlias = [...uniqueByAlias.values()].sort((a, b) => String(a.alias).localeCompare(String(b.alias)));
               for (const f of byAlias) {
                 const host = (f.store_host || '').replace(/\/$/, '');
                 const tid = f.theme_id || '';
@@ -129,10 +136,43 @@ jobs:
             }
 
             parts.push('', '---', '*This preview will be available for 7 days.*');
+            const body = parts.join('\n');
 
-            await github.rest.issues.createComment({
-              issue_number: issueNumber,
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: parts.join('\n')
+              issue_number: issueNumber,
+              per_page: 100
             });
+            const managed = comments
+              .filter((c) => {
+                const text = String(c.body || '');
+                const botLike = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+                const previewLike = text.includes(marker) || text.includes('## 🎨 Theme Preview Generated');
+                return botLike && previewLike;
+              })
+              .sort((a, b) => a.id - b.id);
+
+            if (managed.length > 0) {
+              const keep = managed[managed.length - 1];
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: keep.id,
+                body
+              });
+              for (const c of managed.slice(0, -1)) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: c.id
+                });
+              }
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: issueNumber,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body
+              });
+            }

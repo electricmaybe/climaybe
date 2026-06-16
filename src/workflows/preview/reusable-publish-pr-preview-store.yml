@@ -143,20 +143,23 @@ jobs:
         run: |
           node <<'NODE'
           const fs = require('fs');
+          const alias = process.env.STORE_ALIAS || 'store';
+          const safeAlias = alias.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+          const fileName = `fragment-${safeAlias || 'store'}.json`;
           const url = (process.env.SHOPIFY_STORE_URL || '')
             .replace(/^https?:\/\//, '')
             .replace(/\/.*$/, '');
           const payload = {
-            alias: process.env.STORE_ALIAS || '',
+            alias,
             theme_id: process.env.THEME_ID || '',
             store_host: url,
           };
-          fs.writeFileSync('fragment.json', JSON.stringify(payload, null, 0));
+          fs.writeFileSync(fileName, JSON.stringify(payload, null, 0));
           NODE
 
       - name: Upload preview fragment
         uses: actions/upload-artifact@v4
         with:
           name: preview-fragment-${{ inputs.store_alias }}
-          path: fragment.json
+          path: fragment-*.json
           retention-days: 2

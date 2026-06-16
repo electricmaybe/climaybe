@@ -233,11 +233,11 @@ Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`; defau
 |----------|---------|-------------|
 | `pr-update.yml` | PR opened/synchronize/reopened (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs. **Multi-store + source branch (`pull_request.head.ref`) not** `staging-<alias>` **or** `live-<alias>`**:** publishes to **every** configured store (matrix) and posts **all** links in one PR comment. For `staging-<alias>` / `live-<alias>` source branches, only that store is used. **Path filter:** theme paths only (`assets/`, `blocks/`, `config/`, `layout/`, `locales/`, `sections/`, `snippets/`, `templates/`, `_scripts/`, `_styles/`, `shopify.theme.toml`, `stores/**`). |
 | `pr-close.yml` | PR closed (same branch set) | Deletes this PR’s preview themes using the **same store matrix rule** as `pr-update`; PR comment shows **total** deleted count across stores. |
-| `cleanup-orphan-preview-themes.yml` | Weekly (Mon 06:00 UTC) + `workflow_dispatch` | Per store: deletes themes ending with `-PR<n>` when PR `#n` is **not** open (merged/closed without cleanup). Uses `gh pr list` (limit 1000 open PRs). |
+| `cleanup-orphan-preview-themes.yml` | PR closed (same branch set) + weekly (Mon 06:00 UTC) + `workflow_dispatch` | Per store: deletes themes ending with `-PR<n>` when PR `#n` is **not** open (merged/closed without cleanup). Uses `gh pr list` (limit 1000 open PRs). |
 | `reusable-publish-pr-preview-store.yml` | workflow_call | Share + rename + upload comment fragment for **one** store (matrix leg in `pr-update`). |
 | `reusable-share-theme.yml` | workflow_call | Shares Shopify draft theme and returns `theme_id` (still available if you call it elsewhere) |
 | `reusable-rename-theme.yml` | workflow_call | Renames shared theme to include `PR<number>` (still available for custom flows) |
-| `reusable-comment-on-pr.yml` | workflow_call | Posts preview comment; aggregates `preview-fragment-*` artifacts when `use_preview_fragments` is true |
+| `reusable-comment-on-pr.yml` | workflow_call | Upserts one bot preview comment; aggregates `preview-fragment-*` artifacts when `use_preview_fragments` is true and removes older bot preview comments |
 | `reusable-cleanup-themes.yml` | workflow_call | `cleanup_mode: by_pr` deletes names ending with `-PR{padded}`; `orphan_pr` deletes `-PR<n>` when PR `n` is not open. Optional `result_artifact_prefix` for matrix fan-in on `pr-close` |
 | `reusable-extract-pr-number.yml` | workflow_call | Extracts padded/unpadded PR number outputs for naming and API-safe usage |
 

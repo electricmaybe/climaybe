@@ -149,6 +149,8 @@ describe('workflows', () => {
         const prUpdate = readFileSync(join(workflowsDir, 'pr-update.yml'), 'utf-8');
         const prClose = readFileSync(join(workflowsDir, 'pr-close.yml'), 'utf-8');
         const orphanCleanup = readFileSync(join(workflowsDir, 'cleanup-orphan-preview-themes.yml'), 'utf-8');
+        const publishPreview = readFileSync(join(workflowsDir, 'reusable-publish-pr-preview-store.yml'), 'utf-8');
+        const commentWorkflow = readFileSync(join(workflowsDir, 'reusable-comment-on-pr.yml'), 'utf-8');
         assert.match(prUpdate, /fromJson\(needs\.validate-environment\.outputs\.preview_targets_json\)/);
         assert.match(
           prUpdate,
@@ -159,6 +161,11 @@ describe('workflows', () => {
         assert.match(prClose, /HEAD_REF:\s*\$\{\{\s*github\.event\.pull_request\.head\.ref\s*\}\}/);
         assert.match(prClose, /const branchRef = headRef \|\| baseRef;/);
         assert.match(orphanCleanup, /actions:\s*write/);
+        assert.match(orphanCleanup, /pull_request:\s*\n\s*types:\s*\[closed\]/m);
+        assert.match(publishPreview, /path:\s*fragment-\*\.json/);
+        assert.match(commentWorkflow, /climaybe-preview-comment/);
+        assert.match(commentWorkflow, /issues\.updateComment/);
+        assert.match(commentWorkflow, /issues\.deleteComment/);
         assert.match(prUpdate, /reusable-publish-pr-preview-store\.yml/);
         assert.ok(hasMulti, 'expected cleanup-orphan-preview-themes.yml');
         assert.ok(hasPublish, 'expected reusable-publish-pr-preview-store.yml');
