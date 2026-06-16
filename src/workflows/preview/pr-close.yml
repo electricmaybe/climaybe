@@ -26,10 +26,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Resolve preview store targets from base branch
+      - name: Resolve preview store targets from source branch
         id: resolve
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           node <<'NODE' >>"$GITHUB_OUTPUT"
           const fs = require('fs');
@@ -37,9 +38,11 @@ jobs:
           const stores = cfg?.stores || {};
           const keys = Object.keys(stores);
           const baseRef = process.env.BASE_REF || '';
+          const headRef = process.env.HEAD_REF || '';
+          const branchRef = headRef || baseRef;
           const isMulti = keys.length > 1;
           const isStagingLive =
-            baseRef && (/^staging-/.test(baseRef) || /^live-/.test(baseRef));
+            branchRef && (/^staging-/.test(branchRef) || /^live-/.test(branchRef));
 
           const aliasToSecret = (a) => String(a).toUpperCase().replace(/-/g, '_');
           const normalizeDomain = (v) =>
@@ -52,7 +55,7 @@ jobs:
           if (isMulti && !isStagingLive) {
             targets = keys.map((alias) => ({ alias, alias_secret: aliasToSecret(alias) }));
           } else if (isStagingLive) {
-            let a = baseRef.replace(/^staging-/, '').replace(/^live-/, '');
+            let a = branchRef.replace(/^staging-/, '').replace(/^live-/, '');
             targets = [{ alias: a, alias_secret: aliasToSecret(a) }];
           } else {
             const defaultStoreNorm = normalizeDomain(cfg?.default_store);
