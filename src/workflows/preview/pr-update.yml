@@ -135,7 +135,7 @@ jobs:
           echo "Shopify credentials OK for ${{ matrix.alias }}"
 
   cleanup-themes:
-    needs: [extract-pr-number, validate-secrets-per-store]
+    needs: [validate-environment, extract-pr-number, validate-secrets-per-store]
     strategy:
       fail-fast: false
       matrix:

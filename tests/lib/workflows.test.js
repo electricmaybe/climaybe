@@ -148,6 +148,10 @@ describe('workflows', () => {
         const hasPublish = files.includes('reusable-publish-pr-preview-store.yml');
         const prUpdate = readFileSync(join(workflowsDir, 'pr-update.yml'), 'utf-8');
         assert.match(prUpdate, /fromJson\(needs\.validate-environment\.outputs\.preview_targets_json\)/);
+        assert.match(
+          prUpdate,
+          /cleanup-themes:\s*\n\s*needs:\s*\[validate-environment,\s*extract-pr-number,\s*validate-secrets-per-store\]/m
+        );
         assert.match(prUpdate, /reusable-publish-pr-preview-store\.yml/);
         assert.ok(hasMulti, 'expected cleanup-orphan-preview-themes.yml');
         assert.ok(hasPublish, 'expected reusable-publish-pr-preview-store.yml');
