@@ -201,6 +201,19 @@ describe('workflows', () => {
       }
     });
 
+    it('reads head commit message safely in post-merge-tag detect step', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'post-merge-tag.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+        assert.match(workflow, /COMMIT_MESSAGE:\s*\$\{\{\s*github\.event\.head_commit\.message\s*\}\}/);
+        assert.match(workflow, /COMMIT_MSG=\$\(printf '%s\\n' "\$COMMIT_MESSAGE" \| head -1\)/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('wires create-release to tagging workflow completion', () => {
       const dir = setup();
       try {
