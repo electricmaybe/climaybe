@@ -135,7 +135,8 @@ jobs:
               }
             }
 
-            parts.push('', '---', '*This preview will be available for 7 days.*');
+            const updatedAt = new Date().toISOString().replace('T', ' ').replace('Z', ' UTC');
+            parts.push('', '---', `*Updated: ${updatedAt}*`, '*This preview will be available for 7 days.*');
             const body = parts.join('\n');
 
             const comments = await github.paginate(github.rest.issues.listComments, {
