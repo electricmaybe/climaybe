@@ -81,7 +81,7 @@
     "@shopify/prettier-plugin-liquid": "^1.6.3",
     "@tailwindcss/cli": "^4.1.17",
     "@tailwindcss/typography": "^0.5.16",
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "eslint": "^10.1.0",
     "picocolors": "^1.1.1",
     "prettier": "^3.4.2",
