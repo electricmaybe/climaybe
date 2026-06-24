@@ -141,7 +141,10 @@ jobs:
             exit 0
           fi
 
-          if ! git merge origin/main --no-ff -m "Sync main → $BRANCH"; then
+          # Keep generated assets branch-local to avoid chronic merge conflicts on staging branches.
+          # This does NOT prevent main changes from landing; it only resolves conflicts in favor
+          # of the current staging-<alias> branch when the same file was modified on both sides.
+          if ! git merge -X ours origin/main --no-ff -m "Sync main → $BRANCH"; then
             echo "Merge had conflicts; aborting. Manual resolution may be needed."
             git merge --abort 2>/dev/null || true
             exit 1

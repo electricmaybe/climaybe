@@ -120,6 +120,18 @@ export function hasOriginRemote(cwd = process.cwd()) {
 }
 
 /**
+ * Add an `origin` remote from an "owner/repo" slug for the given host ('github' | 'gitlab').
+ * No-op (returns the existing URL) if origin already exists. Returns the remote URL on success.
+ */
+export function addOriginRemote(slug, host = 'github', cwd = process.cwd()) {
+  if (hasOriginRemote(cwd)) return exec('git remote get-url origin', cwd);
+  const base = host === 'gitlab' ? 'https://gitlab.com' : 'https://github.com';
+  const url = `${base}/${slug}.git`;
+  exec(`git remote add origin ${url}`, cwd);
+  return url;
+}
+
+/**
  * Push branches to origin if remote exists.
  */
 export function pushBranchesToOrigin(branches = [], cwd = process.cwd()) {

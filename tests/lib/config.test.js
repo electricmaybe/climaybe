@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
@@ -10,7 +11,9 @@ import {
   readClimaybeConfig,
   migrateLegacyPackageConfigToClimaybe,
   getStoreAliases,
+  getAliasForDefaultStore,
   getMode,
+  getStoreDomainFromBranch,
   isPreviewWorkflowsEnabled,
   isBuildWorkflowsEnabled,
   isProfileWorkflowsEnabled,
@@ -166,6 +169,69 @@ describe('config', () => {
     });
   });
 
+  describe('getStoreDomainFromBranch', () => {
+    it('returns null when not a git repository', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { norway: 'n.myshopify.com' } }, dir);
+        assert.strictEqual(getStoreDomainFromBranch(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns domain when branch is staging-<alias>', () => {
+      const dir = setup();
+      try {
+        writeConfig(
+          { stores: { norway: 'norway.myshopify.com', other: 'other.myshopify.com' } },
+          dir
+        );
+        execSync('git init', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.email "t@test.com"', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+        writeFileSync(join(dir, 'f.txt'), 'x', 'utf-8');
+        execSync('git add -A && git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+        execSync('git checkout -b staging-norway', { cwd: dir, stdio: 'pipe' });
+        assert.strictEqual(getStoreDomainFromBranch(dir), 'norway.myshopify.com');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns domain when branch is live-<alias>', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { norway: 'norway.myshopify.com' } }, dir);
+        execSync('git init', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.email "t@test.com"', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+        writeFileSync(join(dir, 'f.txt'), 'x', 'utf-8');
+        execSync('git add -A && git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+        execSync('git checkout -b live-norway', { cwd: dir, stdio: 'pipe' });
+        assert.strictEqual(getStoreDomainFromBranch(dir), 'norway.myshopify.com');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns null when branch alias is not in stores', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: { norway: 'norway.myshopify.com' } }, dir);
+        execSync('git init', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.email "t@test.com"', { cwd: dir, stdio: 'pipe' });
+        execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+        writeFileSync(join(dir, 'f.txt'), 'x', 'utf-8');
+        execSync('git add -A && git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+        execSync('git checkout -b staging-unknown', { cwd: dir, stdio: 'pipe' });
+        assert.strictEqual(getStoreDomainFromBranch(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
   describe('getProjectType', () => {
     it('returns theme when project_type missing or theme', () => {
       const dir = setup();
@@ -222,6 +288,37 @@ describe('config', () => {
       try {
         writeConfig({ project_type: 'app', commitlint: true }, dir);
         assert.strictEqual(isThemeProjectForAppInit(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('getAliasForDefaultStore', () => {
+    it('returns null when default_store is missing or does not match any store', () => {
+      const dir = setup();
+      try {
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+        writeConfig({ stores: { foo: 'foo.myshopify.com' } }, dir);
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+        writeConfig({ stores: { foo: 'foo.myshopify.com' }, default_store: 'other.myshopify.com' }, dir);
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns the alias whose domain equals default_store', () => {
+      const dir = setup();
+      try {
+        writeConfig(
+          {
+            stores: { norway: 'norway.myshopify.com', uk: 'uk.myshopify.com' },
+            default_store: 'uk.myshopify.com',
+          },
+          dir
+        );
+        assert.strictEqual(getAliasForDefaultStore(dir), 'uk');
       } finally {
         teardown();
       }

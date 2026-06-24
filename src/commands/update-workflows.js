@@ -4,6 +4,7 @@ import {
   isBuildWorkflowsEnabled,
   isCommitlintEnabled,
   isCursorSkillsEnabled,
+  getAiEditors,
   isPreviewWorkflowsEnabled,
   isProfileWorkflowsEnabled,
   readConfig,
@@ -12,7 +13,7 @@ import { scaffoldWorkflows } from '../lib/workflows.js';
 import { requireThemeProject } from '../lib/theme-guard.js';
 import { scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
-import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
+import { scaffoldAiConfig } from '../lib/cursor-bundle.js';
 
 export async function updateCommand() {
   console.log(pc.bold('\n  climaybe — Update\n'));
@@ -40,7 +41,7 @@ export async function updateCommand() {
     scaffoldCommitlint(process.cwd(), { skipInstall: true });
   }
   if (isCursorSkillsEnabled()) {
-    scaffoldCursorBundle();
+    scaffoldAiConfig(process.cwd(), { editors: getAiEditors() });
   }
 
   scaffoldWorkflows(mode, { includePreview, includeBuild, includeProfile });

@@ -38,6 +38,7 @@ console.log("main");
       buildScripts({ cwd: dir });
 
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
       assert.match(out, /console\.log\(["']utils["']\)/, out);
       assert.match(out, /console\.log\(["']helper["']\)/, out);
       assert.match(out, /console\.log\(["']main["']\)/, out);
@@ -78,6 +79,43 @@ export { a };
       assert.match(out, /\bconst a = 1;/);
       assert.match(out, /\bfunction run\(\)/);
       assert.match(out, /\bclass Demo/);
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
+    } finally {
+      teardown();
+    }
+  });
+
+  it('strips multiline named export blocks from output bundle', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'main.js'),
+        `import { run } from "./helpers.js";
+console.log(run());
+`,
+        'utf-8'
+      );
+
+      writeFileSync(
+        join(dir, '_scripts', 'helpers.js'),
+        `function run() { return "ok"; }
+export {
+  run,
+};
+`,
+        'utf-8'
+      );
+
+      buildScripts({ cwd: dir });
+
+      const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
+      assert.ok(!/\bexport\b/.test(out), `bundle should not contain export statements\n${out}`);
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
+      assert.match(out, /\bfunction run\(\)/);
+      assert.match(out, /console\.log\(run\(\)\)/);
     } finally {
       teardown();
     }
@@ -113,6 +151,7 @@ console.log("main");
       assert.match(out, /console\.log\(["']helpers["']\)/, out);
       assert.match(out, /console\.log\(["']core["']\)/, out);
       assert.match(out, /console\.log\(["']main["']\)/, out);
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
     } finally {
       teardown();
     }
@@ -148,6 +187,7 @@ console.log(run());
       assert.match(out, /\bfunction run\(\)/);
       assert.match(out, /console\.log\("flags"\)/);
       assert.match(out, /console\.log\(run\(\)\)/);
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
     } finally {
       teardown();
     }
@@ -183,6 +223,7 @@ import "./electric-variant-link-converter.js"
       const out = readFileSync(join(dir, 'assets', 'index.js'), 'utf-8');
       assert.ok(!/\bimport\b/.test(out), `bundle should not contain import statements\n${out}`);
       assert.match(out, /console\.log\(["']variant["']\)/, out);
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
     } finally {
       teardown();
     }
@@ -201,6 +242,8 @@ import "./electric-variant-link-converter.js"
 
       assert.ok(existsSync(join(dir, 'assets', 'index.js')));
       assert.ok(existsSync(join(dir, 'assets', 'productpage.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'productpage.min.js')));
       assert.match(readFileSync(join(dir, 'assets', 'productpage.js'), 'utf-8'), /product/);
     } finally {
       teardown();
@@ -222,6 +265,8 @@ import "./electric-variant-link-converter.js"
 
       assert.ok(existsSync(join(dir, 'assets', 'index.js')));
       assert.ok(existsSync(join(dir, 'assets', 'other.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'other.min.js')));
       assert.ok(!existsSync(join(dir, 'assets', 'productpage.js')));
       assert.ok(!existsSync(join(dir, 'assets', 'helpers.js')));
     } finally {
@@ -243,8 +288,49 @@ import "./electric-variant-link-converter.js"
 
       assert.ok(existsSync(join(dir, 'assets', 'index.js')));
       assert.ok(existsSync(join(dir, 'assets', 'deferred.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'deferred.min.js')));
       assert.ok(!existsSync(join(dir, 'assets', 'footer-newsletter.js')));
       assert.match(readFileSync(join(dir, 'assets', 'deferred.js'), 'utf-8'), /newsletter/);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('isolates side-effect-only imports to avoid duplicate top-level identifier collisions', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(
+        join(dir, '_scripts', 'deferred.js'),
+        `import "./feature-a.js";
+import "./feature-b.js";
+console.log("deferred");
+`,
+        'utf-8'
+      );
+      writeFileSync(
+        join(dir, '_scripts', 'feature-a.js'),
+        `const ON_CHANGE_DEBOUNCE_TIMER = 150;
+console.log("a", ON_CHANGE_DEBOUNCE_TIMER);
+`,
+        'utf-8'
+      );
+      writeFileSync(
+        join(dir, '_scripts', 'feature-b.js'),
+        `const ON_CHANGE_DEBOUNCE_TIMER = 250;
+console.log("b", ON_CHANGE_DEBOUNCE_TIMER);
+`,
+        'utf-8'
+      );
+
+      buildScripts({ cwd: dir, entry: 'deferred' });
+
+      const out = readFileSync(join(dir, 'assets', 'deferred.js'), 'utf-8');
+      assert.doesNotThrow(() => new Function(out), out);
+      assert.ok(!existsSync(join(dir, 'assets', 'deferred.min.js')));
     } finally {
       teardown();
     }
@@ -273,8 +359,98 @@ console.log("main");
       assert.match(out, /Keep this banner/);
       assert.match(out, /Keep this inline comment/);
       assert.match(out, /console\.log\(["']main["']\)/);
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
+      teardown();
+    }
+  });
+
+  it('removes orphan assets/*.js that have no _scripts source on a full build', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("main");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'productpage.js'), 'console.log("product");\n', 'utf-8');
+
+      // Pre-existing stale outputs with no matching _scripts source.
+      writeFileSync(join(dir, 'assets', 'legacy.js'), 'console.log("legacy");\n', 'utf-8');
+      writeFileSync(join(dir, 'assets', 'index.min.js'), 'console.log("old-min");\n', 'utf-8');
+
+      const { removed } = buildScripts({ cwd: dir });
+
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'productpage.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'legacy.js')), 'orphan legacy.js should be removed');
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')), 'stale index.min.js should be removed');
+      assert.deepStrictEqual([...removed].sort(), ['index.min.js', 'legacy.js']);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('does not remove non-js assets or *.js.liquid files', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("main");\n', 'utf-8');
+
+      writeFileSync(join(dir, 'assets', 'theme.js.liquid'), 'console.log("{{ x }}");\n', 'utf-8');
+      writeFileSync(join(dir, 'assets', 'style.css'), 'body{}\n', 'utf-8');
+      writeFileSync(join(dir, 'assets', 'logo.svg'), '<svg></svg>\n', 'utf-8');
+
+      const { removed } = buildScripts({ cwd: dir });
+
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'theme.js.liquid')), 'Liquid-processed JS must be preserved');
+      assert.ok(existsSync(join(dir, 'assets', 'style.css')));
+      assert.ok(existsSync(join(dir, 'assets', 'logo.svg')));
+      assert.deepStrictEqual(removed, []);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('does not remove other bundle outputs during a targeted single-entry build', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("main");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'productpage.js'), 'console.log("product");\n', 'utf-8');
+
+      // A previously built sibling output should survive a single-entry rebuild.
+      writeFileSync(join(dir, 'assets', 'index.js'), 'console.log("old-index");\n', 'utf-8');
+
+      const { removed } = buildScripts({ cwd: dir, entry: 'productpage' });
+
+      assert.ok(existsSync(join(dir, 'assets', 'productpage.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')), 'single-entry build must not prune sibling outputs');
+      assert.deepStrictEqual(removed, []);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('does not touch assets when _scripts has no entrypoints', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, 'assets', 'vendor.js'), 'console.log("vendor");\n', 'utf-8');
+
+      const { bundles, removed } = buildScripts({ cwd: dir });
+
+      assert.deepStrictEqual(bundles, []);
+      assert.deepStrictEqual(removed, []);
+      assert.ok(existsSync(join(dir, 'assets', 'vendor.js')), 'no entrypoints means no pruning');
+    } finally {
       teardown();
     }
   });
@@ -302,6 +478,7 @@ console.log(value);
       assert.doesNotMatch(out, /Keep this inline comment/);
       assert.match(out, /const value=42;/);
       assert.match(out, /console\.log\(value\);/);
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')));
     } finally {
       teardown();
     }

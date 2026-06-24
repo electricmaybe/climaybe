@@ -6,8 +6,9 @@ alwaysApply: true
 ---
 # Rule Index
 
-When you perform any of the following, **read and apply** the corresponding rule file from `.cursor/rules/`:
+When you perform any of the following, **read and apply** the corresponding rule file from `.config/ai/rules/`:
 
+- **Editing `assets/*.js` or `assets/style.css`, build outputs vs source, where to edit JS/CSS** → `project-overview.mdc` (Build Outputs vs Source — edit `_scripts/`/`_styles/`, never the generated `assets/` files)
 - **Git commits, commit messages** → `commit-rules.mdc`
 - **Accessibility, a11y, focus, WCAG, UI behavior** → `accessibility-rules.mdc`
 - **JavaScript, web components, _scripts/, *.js** → `javascript-standards.mdc`
@@ -15,7 +16,7 @@ When you perform any of the following, **read and apply** the corresponding rule
 - **Liquid syntax and usage** → `liquid.mdc`
 - **Section files (sections/*.liquid)** → `sections.mdc`
 - **Snippets (snippets/*.liquid)** → `snippets.mdc`
-- **Schema definitions (section/layout schemas)** → `schemas.mdc`
+- **Schema definitions (section/layout schemas), _schemas/ builder** → `schemas.mdc`
 - **Liquid documentation comments** → `liquid-doc-rules.mdc`
 - **JS refactor tasks / current refactoring work** → `js-refactor-tasks.mdc`
 - **Adding or editing Cursor rules** → `cursor-rule-template.mdc`

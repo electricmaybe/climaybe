@@ -11,8 +11,8 @@ Runs a structured a11y audit on specified file(s) and reports findings with fix 
 
 Before auditing, read and apply:
 
-1. `.cursor/rules/00-rule-index.mdc` — rule index
-2. `.cursor/rules/accessibility-rules.mdc` — WCAG 2.1 AA, semantic HTML, ARIA, keyboard, focus, screen readers
+1. `.config/ai/rules/00-rule-index.mdc` — rule index
+2. `.config/ai/rules/accessibility-rules.mdc` — WCAG 2.1 AA, semantic HTML, ARIA, keyboard, focus, screen readers
 
 ## Workflow
 

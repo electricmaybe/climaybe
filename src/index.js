@@ -12,6 +12,7 @@ import { appInitCommand } from './commands/app-init.js';
 import { migrateLegacyConfigCommand } from './commands/migrate-legacy-config.js';
 import { buildScriptsCommand } from './commands/build-scripts.js';
 import { createEntrypointsCommand } from './commands/create-entrypoints.js';
+import { buildSchemasCommand } from './commands/build-schemas.js';
 import { serveAll, serveAssets, serveShopify, lintAll, buildAll } from './lib/dev-runtime.js';
 
 /**
@@ -63,8 +64,12 @@ function registerThemeCommands(cmd) {
     .command('serve')
     .description('Run local theme dev (Shopify + assets; Theme Check off by default)')
     .option('--theme-check', 'Enable Theme Check watcher')
-    .action((opts) => serveAll({ includeThemeCheck: opts.themeCheck === true }));
-  cmd.command('serve:shopify').description('Run Shopify theme dev server').action(() => serveShopify());
+    .action(async (opts) => {
+      await serveAll({ includeThemeCheck: opts.themeCheck === true });
+    });
+  cmd.command('serve:shopify').description('Run Shopify theme dev server').action(async () => {
+    await serveShopify();
+  });
   cmd
     .command('serve:assets')
     .description('Run assets watch (Tailwind + scripts; Theme Check off by default)')
@@ -76,13 +81,20 @@ function registerThemeCommands(cmd) {
   cmd.command('build').description('Build assets (Tailwind + scripts build)').action(() => buildAll());
   cmd
     .command('build-scripts')
-    .description('Build _scripts → assets/index.js')
+    .description('Build _scripts → assets/*.js')
     .option('--minify', 'Minify output bundles')
     .action(buildScriptsCommand);
   cmd
     .command('create-entrypoints')
     .description('Create _scripts/main.js and _styles/main.css (optional)')
     .action(createEntrypointsCommand);
+
+  cmd
+    .command('build-schemas')
+    .description('Generate schemas from _schemas/ JS/JSON into sections/ and blocks/ (uses inline-comment markers)')
+    .option('--dry-run', 'Show what would be injected without writing files')
+    .option('--list', 'List available schema files and section references')
+    .action(buildSchemasCommand);
 
   cmd
     .command('update')
@@ -108,7 +120,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
   program
     .name('climaybe')
     .description(
-      'Shopify CLI — theme CI/CD (workflows, branches, stores) and app repo helpers (commitlint, Cursor bundle)'
+      'Shopify CLI — theme CI/CD (workflows, branches, stores) and app repo helpers (commitlint, AI ruleset)'
     )
     .version(versionDisplay);
 
@@ -122,7 +134,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
   const app = program.command('app').description('Shopify app repo helpers (no theme workflows)');
   app
     .command('init')
-    .description('Set up commitlint, Cursor bundle (rules/skills/agents), and project_type: app in climaybe.config.json')
+    .description('Set up commitlint, AI ruleset (rules/skills/agents), and project_type: app in climaybe.config.json')
     .action(appInitCommand);
 
   program
@@ -134,7 +146,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
     .command('add-cursor')
     .alias('add-cursor-skill')
     .description(
-      'Install Electric Maybe Cursor bundle (.cursor/rules, .cursor/skills, .cursor/agents)',
+      'Install Electric Maybe AI ruleset into .config/ai/ and bridge it to your editors',
     )
     .action(addCursorSkillCommand);
 

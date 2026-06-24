@@ -15,6 +15,8 @@ import {
   ensureGitRepo,
   getLatestTagVersion,
   getSuggestedTagForRelease,
+  addOriginRemote,
+  hasOriginRemote,
 } from '../../src/lib/git.js';
 
 function exec(cmd, cwd) {
@@ -298,6 +300,48 @@ describe('git', () => {
         exec('git commit -m "first"', dir);
         exec('git tag v2.3.1', dir);
         assert.strictEqual(getSuggestedTagForRelease(dir), 'v2.3.2');
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('addOriginRemote', () => {
+    it('adds a GitHub origin from an owner/repo slug', () => {
+      const dir = setup();
+      try {
+        exec('git init', dir);
+        assert.strictEqual(hasOriginRemote(dir), false);
+        const url = addOriginRemote('electricmaybe/climaybe', 'github', dir);
+        assert.strictEqual(url, 'https://github.com/electricmaybe/climaybe.git');
+        assert.strictEqual(hasOriginRemote(dir), true);
+        // get-url may be rewritten by a sandbox insteadOf rule; check the slug, not the host.
+        assert.match(exec('git remote get-url origin', dir), /electricmaybe\/climaybe\.git$/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('builds a GitLab URL when host is gitlab', () => {
+      const dir = setup();
+      try {
+        exec('git init', dir);
+        const url = addOriginRemote('group/proj', 'gitlab', dir);
+        assert.strictEqual(url, 'https://gitlab.com/group/proj.git');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('is a no-op when origin already exists (returns existing URL)', () => {
+      const dir = setup();
+      try {
+        exec('git init', dir);
+        exec('git remote add origin https://github.com/owner/existing.git', dir);
+        const url = addOriginRemote('owner/other', 'github', dir);
+        // Keeps the existing remote (does not switch to owner/other).
+        assert.match(url, /owner\/existing\.git$/);
+        assert.ok(!url.includes('owner/other'));
       } finally {
         teardown();
       }

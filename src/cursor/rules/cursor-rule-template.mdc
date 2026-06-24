@@ -7,9 +7,9 @@ alwaysApply: false
 
 How to add new cursor rules to the project
 
-1. Always place rule files in PROJECT_ROOT/.cursor/rules/:
+1. Always place rule files in PROJECT_ROOT/.config/ai/rules/:
     ```
-    .cursor/rules/
+    .config/ai/rules/
     ├── your-rule-name.mdc
     ├── another-rule.mdc
     └── ...
@@ -23,16 +23,17 @@ How to add new cursor rules to the project
 3. Directory structure:
     ```
     PROJECT_ROOT/
-    ├── .cursor/
-    │   └── rules/
-    │       ├── your-rule-name.mdc
-    │       └── ...
+    ├── .config/
+    │   └── ai/
+    │       └── rules/
+    │           ├── your-rule-name.mdc
+    │           └── ...
     └── ...
     ```
 
 4. Never place rule files:
     - In the project root
-    - In subdirectories outside .cursor/rules
+    - In subdirectories outside .config/ai/rules
     - In any other location
 
 5. Cursor rules have the following structure:

@@ -3,8 +3,10 @@ import { existsSync } from 'node:fs';
 import { watchTree } from './watch.js';
 import { isAbsolute, join, relative } from 'node:path';
 import pc from 'picocolors';
-import { readConfig } from './config.js';
+import { readConfig, getStoreDomainFromBranch } from './config.js';
+import { prepareMultiStoreForServe } from './serve-multi-store.js';
 import { buildScripts } from './build-scripts.js';
+import { buildSchemas } from './schema-builder.js';
 import { runShopify } from './shopify-cli.js';
 
 function tagLabel(tag, color = (s) => s) {
@@ -208,9 +210,18 @@ function runThemeCheckFiltered({ cwd = process.cwd() } = {}) {
   return child;
 }
 
-export function serveShopify({ cwd = process.cwd() } = {}) {
+/**
+ * @param {{ cwd?: string; skipMultiStorePrep?: boolean }} [opts]
+ * @returns {Promise<import('node:child_process').ChildProcess | null>} Null when multi-store prep failed or was cancelled.
+ */
+export async function serveShopify({ cwd = process.cwd(), skipMultiStorePrep = false } = {}) {
+  if (!skipMultiStorePrep) {
+    const ok = await prepareMultiStoreForServe(cwd);
+    if (!ok) return null;
+  }
   const config = readConfig(cwd) || {};
-  const store = config.default_store || config.store || '';
+  const branchStore = getStoreDomainFromBranch(cwd);
+  const store = branchStore || config.default_store || config.store || '';
   const args = ['theme', 'dev', '--theme-editor-sync'];
   if (store) args.push(`--store=${store}`);
   // Keep Shopify on inherited stdio so reconciliation prompts remain interactive.
@@ -230,14 +241,23 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
     writeTaggedLine('tailwind', pc.blue, 'watching _styles/main.css -> assets/style.css');
   }
 
-  // Optional dev MCP (non-blocking if missing)
-  const devMcp = spawnLogged('npx', ['-y', '@shopify/dev-mcp@latest'], { name: 'dev-mcp', cwd });
+  // Optional dev MCP (non-blocking if missing). @shopify/dev-mcp pulls hydrogen (peers react-router 7.12)
+  // alongside react-router 7.13 — npm warns with ERESOLVE unless legacy peer resolution is enabled.
+  const devMcpEnv = { ...process.env, npm_config_legacy_peer_deps: 'true' };
+  const devMcp = spawnLogged('npx', ['-y', '@shopify/dev-mcp@latest'], {
+    name: 'dev-mcp',
+    cwd,
+    env: devMcpEnv,
+  });
 
   const scriptsDir = join(cwd, '_scripts');
   if (existsSync(scriptsDir)) {
     try {
-      buildScripts({ cwd });
+      const { removed } = buildScripts({ cwd });
       writeTaggedLine('scripts', pc.yellow, 'built (initial)');
+      if (removed?.length) {
+        writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+      }
     } catch (err) {
       writeTaggedLine('scripts', pc.yellow, `initial build failed: ${err.message}`, process.stderr);
     }
@@ -251,10 +271,56 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
         debounceMs: 300,
         onChange: () => {
           try {
-            buildScripts({ cwd });
+            const { removed } = buildScripts({ cwd });
             writeTaggedLine('scripts', pc.yellow, 'rebuilt');
+            if (removed?.length) {
+              writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+            }
           } catch (err) {
             writeTaggedLine('scripts', pc.yellow, `build failed: ${err.message}`, process.stderr);
+          }
+        },
+      })
+    : null;
+
+  const schemasDir = join(cwd, '_schemas');
+  const hasSchemas = existsSync(schemasDir);
+  if (hasSchemas) {
+    try {
+      const result = buildSchemas({ cwd });
+      if (result.processed.length > 0) {
+        writeTaggedLine('schema', pc.green, `built ${result.processed.length} file(s) (initial)`);
+      }
+      if (result.errors.length > 0) {
+        for (const e of result.errors) {
+          writeTaggedLine('schema', pc.green, `error: ${e.section} — ${e.error}`, process.stderr);
+        }
+      }
+    } catch (err) {
+      writeTaggedLine('schema', pc.green, `initial build failed: ${err.message}`, process.stderr);
+    }
+  } else {
+    writeTaggedLine('schema', pc.green, 'skipped (missing _schemas/)');
+  }
+
+  const schemasWatch = hasSchemas
+    ? watchTree({
+        rootDir: schemasDir,
+        ignore: (p) => p.includes('node_modules') || p.includes('/.git/'),
+        debounceMs: 300,
+        onChange: () => {
+          try {
+            const result = buildSchemas({ cwd });
+            if (result.processed.length > 0) {
+              writeTaggedLine('schema', pc.green, `rebuilt ${result.processed.length} file(s)`);
+            }
+            if (result.errors.length > 0) {
+              for (const e of result.errors) {
+                writeTaggedLine('schema', pc.green, `error: ${e.section} — ${e.error}`, process.stderr);
+              }
+            }
+          } catch (err) {
+            writeTaggedLine('schema', pc.green, `build failed: ${err.message}`, process.stderr);
           }
         },
       })
@@ -287,7 +353,8 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
             p.includes('/assets/') ||
             p.includes('/.git/') ||
             p.includes('/_scripts/') ||
-            p.includes('/_styles/'),
+            p.includes('/_styles/') ||
+            p.includes('/_schemas/'),
           debounceMs: 800,
           onChange: () => {
             runThemeCheck();
@@ -304,24 +371,37 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
 
   const cleanup = () => {
     safeClose(scriptsWatch);
+    safeClose(schemasWatch);
     safeClose(themeCheckWatch);
     safeKill(tailwind);
     safeKill(devMcp);
   };
 
-  return { tailwind, devMcp, scriptsWatch, themeCheckWatch, cleanup };
+  return { tailwind, devMcp, scriptsWatch, schemasWatch, themeCheckWatch, cleanup };
 }
 
-export function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
+export async function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
+  const prepOk = await prepareMultiStoreForServe(cwd);
+  if (!prepOk) {
+    const noop = () => {};
+    return { cleanup: noop };
+  }
+
   // Start assets first, then bring up Shopify after a short delay.
   const assets = serveAssets({ cwd, includeThemeCheck });
   let shopify = null;
   const shopifyStartDelayMs = 2500;
   const shopifyTimer = setTimeout(() => {
-    shopify = serveShopify({ cwd });
-    shopify.on('exit', () => {
-      cleanup();
-    });
+    void (async () => {
+      shopify = await serveShopify({ cwd, skipMultiStorePrep: true });
+      if (shopify) {
+        shopify.on('exit', () => {
+          cleanup();
+        });
+      } else {
+        cleanup();
+      }
+    })();
   }, shopifyStartDelayMs);
   console.log(pc.dim(`  Waiting ${shopifyStartDelayMs}ms before starting Shopify...`));
 
@@ -355,9 +435,30 @@ export function lintAll({ cwd = process.cwd() } = {}) {
 
 export function buildAll({ cwd = process.cwd() } = {}) {
   const env = { ...process.env, NODE_ENV: 'production' };
+
+  let schemasOk = true;
+  try {
+    const schemaResult = buildSchemas({ cwd });
+    if (schemaResult.processed.length > 0) {
+      writeTaggedLine('schema', pc.green, `built ${schemaResult.processed.length} section(s)`);
+    }
+    if (schemaResult.errors.length > 0) {
+      for (const e of schemaResult.errors) {
+        writeTaggedLine('schema', pc.green, `error: ${e.section} — ${e.error}`, process.stderr);
+      }
+      schemasOk = false;
+    }
+  } catch (err) {
+    console.log(pc.red(`\n  build-schemas failed: ${err.message}\n`));
+    schemasOk = false;
+  }
+
   let scriptsOk = true;
   try {
-    buildScripts({ cwd });
+    const { removed } = buildScripts({ cwd });
+    if (removed?.length) {
+      writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+    }
   } catch (err) {
     console.log(pc.red(`\n  build-scripts failed: ${err.message}\n`));
     scriptsOk = false;
@@ -367,6 +468,6 @@ export function buildAll({ cwd = process.cwd() } = {}) {
     env,
     name: 'tailwind',
   });
-  return { scriptsOk, tailwind };
+  return { schemasOk, scriptsOk, tailwind };
 }
 

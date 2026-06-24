@@ -1,23 +1,27 @@
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, basename, dirname, normalize } from 'node:path';
 
-function extractImports(content) {
+function extractImportRecords(content) {
   const imports = [];
   // Supports compact imports (import{a}from"./x"), multiline forms,
   // and import attributes (with { type: "json" }).
   const fromImportRegex =
-    /(^|\n)\s*import(?:\s+type)?\s*[\s\S]*?\s*\bfrom\b\s*['"]([^'"]+)['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g;
+    /(^|\n)\s*import(?:\s+type)?\s*([\s\S]*?)\s*\bfrom\b\s*['"]([^'"]+)['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g;
   const sideEffectImportRegex = /(^|\n)\s*import\s*['"]([^'"]+)['"](?:\s+with\s*\{[\s\S]*?\})?\s*;?/g;
   let match;
 
   while ((match = fromImportRegex.exec(content)) !== null) {
-    imports.push(match[2]);
+    imports.push({ importPath: match[3], hasBindings: Boolean(match[2]?.trim()) });
   }
   while ((match = sideEffectImportRegex.exec(content)) !== null) {
-    imports.push(match[2]);
+    imports.push({ importPath: match[2], hasBindings: false });
   }
 
   return imports;
+}
+
+function extractImports(content) {
+  return extractImportRecords(content).map((record) => record.importPath);
 }
 
 function stripModuleSyntax(content) {
@@ -36,6 +40,8 @@ function stripModuleSyntax(content) {
   );
 
   cleaned = cleaned.replace(/^\s*export\s+default\s+/gm, '');
+  // Remove named exports (single-line and multiline forms).
+  cleaned = cleaned.replace(/(^|\n)\s*export\s*\{[\s\S]*?\}\s*;?/g, '$1');
   cleaned = cleaned.replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, '');
   cleaned = cleaned.replace(/^\s*export\s+(?=(const|let|var|function|class)\b)/gm, '');
   return cleaned;
@@ -58,7 +64,7 @@ function minifyScriptContent(content) {
   return minified;
 }
 
-function processScriptFile({ scriptsDir, filePath, processedFiles, minify = false }) {
+function processScriptFile({ scriptsDir, filePath, processedFiles, minify = false, isolateFiles = new Set() }) {
   if (processedFiles.has(filePath)) return '';
   processedFiles.add(filePath);
 
@@ -78,11 +84,20 @@ function processScriptFile({ scriptsDir, filePath, processedFiles, minify = fals
   for (const importPath of imports) {
     const resolvedImport = resolveImportPath(filePath, importPath);
     if (!resolvedImport) continue;
-    importedContent += processScriptFile({ scriptsDir, filePath: resolvedImport, processedFiles, minify });
+    importedContent += processScriptFile({
+      scriptsDir,
+      filePath: resolvedImport,
+      processedFiles,
+      minify,
+      isolateFiles
+    });
   }
 
   content = stripModuleSyntax(content);
   if (minify) content = minifyScriptContent(content);
+  if (isolateFiles.has(filePath)) {
+    content = `(function () {\n${content.trim()}\n})();`;
+  }
 
   return importedContent + '\n' + content;
 }
@@ -113,6 +128,63 @@ function collectImportedFiles({ scriptsDir, entryFile, seen = new Set() }) {
   return seen;
 }
 
+function collectFilesToIsolate({ scriptsDir, entryFile }) {
+  const seen = new Set();
+  const importedWithBindings = new Set();
+
+  function visit(filePath) {
+    if (seen.has(filePath)) return;
+    seen.add(filePath);
+
+    const fullPath = join(scriptsDir, filePath);
+    if (!existsSync(fullPath)) return;
+    const content = readFileSync(fullPath, 'utf8');
+    const imports = extractImportRecords(content);
+
+    for (const record of imports) {
+      const resolved = resolveImportPath(filePath, record.importPath);
+      if (!resolved) continue;
+      if (record.hasBindings) importedWithBindings.add(resolved);
+      visit(resolved);
+    }
+  }
+
+  visit(entryFile);
+
+  const isolateFiles = new Set();
+  for (const file of seen) {
+    if (file !== entryFile && !importedWithBindings.has(file)) {
+      isolateFiles.add(file);
+    }
+  }
+
+  return isolateFiles;
+}
+
+function removeOrphanScriptAssets({ cwd, keepNames }) {
+  // Delete assets/*.js that this build did not produce. The Electric Maybe build
+  // model treats assets/*.js as generated output of _scripts/, so any *.js without
+  // a matching bundle output is stale and should be removed. Only plain *.js files
+  // are considered — Liquid-processed assets (e.g. *.js.liquid) are left untouched.
+  const assetsDir = join(cwd, 'assets');
+  if (!existsSync(assetsDir)) return [];
+
+  const removed = [];
+  for (const dirent of readdirSync(assetsDir, { withFileTypes: true })) {
+    if (!dirent.isFile()) continue;
+    const name = dirent.name;
+    if (!name.endsWith('.js')) continue;
+    if (keepNames.has(name)) continue;
+    try {
+      unlinkSync(join(assetsDir, name));
+      removed.push(name);
+    } catch {
+      // Best effort: a failed unlink shouldn't break the build.
+    }
+  }
+  return removed;
+}
+
 function listTopLevelEntrypoints(scriptsDir) {
   if (!existsSync(scriptsDir)) return [];
   return readdirSync(scriptsDir, { withFileTypes: true })
@@ -133,19 +205,38 @@ function buildSingleEntrypoint({ cwd, entryFile, minify = false }) {
     throw new Error(`Missing required file: _scripts/${entryFile}`);
   }
 
-  const processedFiles = new Set();
-  let finalContent = processScriptFile({ scriptsDir, filePath: entryFile, processedFiles, minify });
-  finalContent = stripModuleSyntax(finalContent);
-  if (minify) finalContent = minifyScriptContent(finalContent);
+  const processedFilesReadable = new Set();
+  const processedFilesMinified = new Set();
+  const isolateFiles = collectFilesToIsolate({ scriptsDir, entryFile });
+  const readableContent = processScriptFile({
+    scriptsDir,
+    filePath: entryFile,
+    processedFiles: processedFilesReadable,
+    minify: false,
+    isolateFiles
+  });
+
+  const minifiedContent = processScriptFile({
+    scriptsDir,
+    filePath: entryFile,
+    processedFiles: processedFilesMinified,
+    minify: true,
+    isolateFiles
+  });
 
   const assetsDir = join(cwd, 'assets');
   mkdirSync(assetsDir, { recursive: true });
 
   const outFile = outputNameForEntrypoint(entryFile);
   const outputPath = join(assetsDir, outFile);
-  writeFileSync(outputPath, finalContent.trim() + '\n', 'utf-8');
+  const outReadable = stripModuleSyntax(readableContent).trim() + '\n';
+  const outMinified = minifyScriptContent(stripModuleSyntax(minifiedContent)).trim() + '\n';
 
-  return { entryFile, fileCount: processedFiles.size, outputPath };
+  // When minify=true, the primary output file is minified.
+  writeFileSync(outputPath, (minify ? outMinified : outReadable), 'utf-8');
+
+  const fileCount = Math.max(processedFilesReadable.size, processedFilesMinified.size);
+  return { entryFile, fileCount, outputPath };
 }
 
 export function buildScripts({ cwd = process.cwd(), entry = null, minify = false } = {}) {
@@ -167,9 +258,18 @@ export function buildScripts({ cwd = process.cwd(), entry = null, minify = false
     }
   }
   if (entrypoints.length === 0) {
-    return { bundles: [] };
+    return { bundles: [], removed: [] };
   }
   const bundles = entrypoints.map((entryFile) => buildSingleEntrypoint({ cwd, entryFile, minify }));
-  return { bundles };
+
+  // Only prune orphans on a full build (no explicit entry). A targeted single-entry
+  // build must not delete the other bundles' outputs.
+  let removed = [];
+  if (!entry) {
+    const keepNames = new Set(bundles.map((b) => basename(b.outputPath)));
+    removed = removeOrphanScriptAssets({ cwd, keepNames });
+  }
+
+  return { bundles, removed };
 }
 

@@ -14,11 +14,18 @@ ignore:
 `,
   '.shopifyignore': `_styles
 _scripts
+.cursor
 .cursorrules
 .config
+.windsurf
+.clinerules
+AGENTS.md
+CLAUDE.md
 .backups
 .github
 .vscode
+tools
+stores
 node_modules
 .gitignore
 LICENSE

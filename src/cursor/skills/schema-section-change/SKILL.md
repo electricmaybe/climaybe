@@ -11,9 +11,9 @@ Safely adds or changes a section setting: updates both the section Liquid and th
 
 Before making changes, read and apply:
 
-1. `.cursor/rules/00-rule-index.mdc` — rule index
-2. `.cursor/rules/schemas.mdc` — minimal settings, no redundancy, translation keys, max 5 settings, "question every setting"
-3. `.cursor/rules/sections.mdc` — section structure and schema requirement
+1. `.config/ai/rules/00-rule-index.mdc` — rule index
+2. `.config/ai/rules/schemas.mdc` — minimal settings, no redundancy, translation keys, max 5 settings, "question every setting"
+3. `.config/ai/rules/sections.mdc` — section structure and schema requirement
 
 ## Workflow
 

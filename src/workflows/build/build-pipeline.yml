@@ -5,21 +5,42 @@ name: Build Pipeline
 on:
   push:
     branches: ['**']
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/**'
+      - '.cursor/**'
+      - '.config/**'
+      - '.windsurf/**'
+      - '.clinerules/**'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - '.claude/**'
+      - '.eser/**'
+      - 'README*'
+      - 'LICENSE*'
+      - 'CHANGELOG*'
+      - 'CONTRIBUTING*'
 
 jobs:
   build:
     # Skip pure store-sync + hotfix-backport commits; those are infrastructure-only
     # syncs from staging/live stores back to main and should not trigger heavy theme
     # review / build pipelines.
+    # On live-<alias>, skip when the pusher is a GitHub bot (actor name contains "[bot]")
+    # so automated commits do not run script/Tailwind compilation.
     if: >
       !contains(github.event.head_commit.message, '[hotfix-backport]')
       && !contains(github.event.head_commit.message, '[stores-to-root]')
       && !contains(github.event.head_commit.message, '[root-to-stores]')
+      && !(github.actor == 'github-actions[bot]' && contains(github.event.head_commit.message, 'chore(assets): update compiled javascript and css'))
+      && !(startsWith(github.ref_name, 'live-') && contains(github.actor, '[bot]'))
     uses: ./.github/workflows/reusable-build.yml
 
   lighthouse-gate:
     runs-on: ubuntu-latest
     needs: [build]
+    if: needs.build.outputs.build_ran == 'true'
     outputs:
       run_lighthouse: ${{ steps.check.outputs.run_lighthouse }}
     env:
@@ -27,12 +48,24 @@ jobs:
       SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
       LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Check if Lighthouse CI should run
         id: check
         run: |
           SKIP_REASONS=()
-          if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.ref }}" != "refs/heads/staging" ]; then
-            SKIP_REASONS+=("Not on main or staging branch (current: ${{ github.ref }})")
+          BR="${{ github.ref_name }}"
+          # Lighthouse is opt-in via climaybe.config.json (lighthouse_workflows).
+          # Default to enabled when the flag is absent (older configs).
+          LH_ENABLED=$(node -e "try{process.stdout.write(require('./climaybe.config.json').lighthouse_workflows===false?'false':'true')}catch(e){process.stdout.write('true')}" 2>/dev/null || echo true)
+          if [[ "$LH_ENABLED" != "true" ]]; then
+            SKIP_REASONS+=("Lighthouse disabled in climaybe.config.json (lighthouse_workflows: false)")
+          fi
+          if [[ "$BR" == "staging" ]]; then
+            :
+          else
+            SKIP_REASONS+=("Lighthouse runs only on branch staging (current branch: $BR)")
           fi
           if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOP_ACCESS_TOKEN" ] || [ -z "$LHCI_GITHUB_APP_TOKEN" ]; then
             SKIP_REASONS+=("Missing required secrets: SHOPIFY_STORE_URL, SHOP_ACCESS_TOKEN, or LHCI_GITHUB_APP_TOKEN")

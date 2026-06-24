@@ -1,6 +1,6 @@
 import prompts from 'prompts';
 import pc from 'picocolors';
-import { promptCommitlint, promptCursorSkills } from '../lib/prompts.js';
+import { promptCommitlint, promptCursorSkills, promptAiEditors } from '../lib/prompts.js';
 import {
   readConfig,
   writeConfig,
@@ -9,20 +9,22 @@ import {
 } from '../lib/config.js';
 import { ensureGitRepo, ensureInitialCommit } from '../lib/git.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
-import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
+import { scaffoldAiConfig, logAiConfigResult } from '../lib/cursor-bundle.js';
 
 /**
- * Minimal Shopify app repo setup: commitlint, Cursor bundle, project_type in config.
+ * Minimal Shopify app repo setup: commitlint, AI ruleset, project_type in config.
  * No theme stores, branches, or GitHub Actions theme workflows.
  */
 async function runAppInitFlow() {
   const enableCommitlint = await promptCommitlint();
   const enableCursorSkills = await promptCursorSkills();
+  const aiEditors = enableCursorSkills ? await promptAiEditors() : [];
 
   const config = {
     project_type: 'app',
     commitlint: enableCommitlint,
     cursor_skills: enableCursorSkills,
+    ai_editors: enableCursorSkills ? aiEditors : undefined,
   };
 
   writeConfig(config, process.cwd(), { defaultPackageName: 'shopify-app' });
@@ -40,19 +42,13 @@ async function runAppInitFlow() {
     }
   }
   if (enableCursorSkills) {
-    const cursorOk = scaffoldCursorBundle();
-    if (cursorOk) {
-      console.log(
-        pc.green('  Electric Maybe Cursor bundle → .cursor/rules, .cursor/skills, .cursor/agents'),
-      );
-    } else {
-      console.log(pc.yellow('  Cursor bundle not found in package (skipped).'));
-    }
+    const aiResult = scaffoldAiConfig(process.cwd(), { editors: aiEditors });
+    logAiConfigResult(aiResult, { pc });
   }
 
   console.log(pc.bold(pc.green('\n  App setup complete!\n')));
   console.log(pc.dim('  commitlint + Husky: ' + (enableCommitlint ? 'enabled' : 'disabled')));
-  console.log(pc.dim('  Cursor bundle: ' + (enableCursorSkills ? 'installed' : 'skipped')));
+  console.log(pc.dim('  AI ruleset: ' + (enableCursorSkills ? 'installed' : 'skipped')));
   console.log(pc.dim('\n  Next steps:'));
   console.log(pc.dim('    Use Shopify CLI (`shopify app dev`, etc.) for app development.'));
   console.log(pc.dim('    Theme CI/CD workflows are not installed; add your own deployment as needed.\n'));
