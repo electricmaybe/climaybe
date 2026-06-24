@@ -57,14 +57,17 @@ function installThemeDependencies(cwd = process.cwd()) {
 const DOCS_BASE = 'https://github.com/electricmaybe/climaybe#';
 
 /**
- * Print a dim one-line helper under a prompt, with an optional docs anchor link.
- * Keeps prompt labels short while still explaining what each answer is for.
+ * Print a short description (and optional docs link) as a preamble to the next prompt.
+ * A leading blank line detaches it from the previous answer, and there is no leading
+ * glyph, so the text reads as an intro to the question that follows — not a trailing
+ * note on the question above it.
  * @param {string} text - one sentence, what the answer is for / what it should look like
  * @param {string} [anchor] - README heading anchor (e.g. 'theme-dev-kit')
  */
 function hint(text, anchor) {
-  console.log(pc.dim(`  ↳ ${text}`));
-  if (anchor) console.log(pc.dim(`    docs: ${DOCS_BASE}${anchor}`));
+  console.log('');
+  console.log(pc.dim(text));
+  if (anchor) console.log(pc.cyan(`  ${DOCS_BASE}${anchor}`));
 }
 
 /**
