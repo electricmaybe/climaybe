@@ -1,24 +1,23 @@
 import pc from 'picocolors';
 import { writeConfig } from '../lib/config.js';
-import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
+import { scaffoldAiConfig, logAiConfigResult } from '../lib/cursor-bundle.js';
+import { promptAiEditors } from '../lib/prompts.js';
 
 /**
- * Install Electric Maybe Cursor bundle (.cursor/rules, .cursor/skills, .cursor/agents).
- * Can be run standalone or after init if Cursor bundle was skipped.
+ * Install the Electric Maybe AI ruleset into .config/ai/ and bridge it to the chosen editors.
+ * Can be run standalone or after init if the ruleset was skipped.
  */
 export async function addCursorSkillCommand() {
-  console.log(pc.bold('\n  climaybe — Add Cursor bundle\n'));
+  console.log(pc.bold('\n  climaybe — Add AI ruleset\n'));
 
-  writeConfig({ cursor_skills: true });
+  const editors = await promptAiEditors();
+  writeConfig({ cursor_skills: true, ai_editors: editors });
 
-  const ok = scaffoldCursorBundle();
-  if (ok) {
-    console.log(
-      pc.green('  Installed .cursor/rules, .cursor/skills, and .cursor/agents from climaybe bundle.'),
-    );
-    console.log(pc.dim('  See .cursor/rules/00-rule-index.mdc for which rules apply when.\n'));
+  const result = scaffoldAiConfig(process.cwd(), { editors });
+  logAiConfigResult(result, { pc });
+  if (result.ok) {
+    console.log(pc.dim('  See .config/ai/rules/00-rule-index.mdc for which rules apply when.\n'));
   } else {
-    console.log(pc.red('  Cursor bundle not found in this climaybe install.'));
     console.log(pc.dim('  Reinstall climaybe or report an issue.\n'));
   }
 }

@@ -120,7 +120,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
   program
     .name('climaybe')
     .description(
-      'Shopify CLI — theme CI/CD (workflows, branches, stores) and app repo helpers (commitlint, Cursor bundle)'
+      'Shopify CLI — theme CI/CD (workflows, branches, stores) and app repo helpers (commitlint, AI ruleset)'
     )
     .version(versionDisplay);
 
@@ -134,7 +134,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
   const app = program.command('app').description('Shopify app repo helpers (no theme workflows)');
   app
     .command('init')
-    .description('Set up commitlint, Cursor bundle (rules/skills/agents), and project_type: app in climaybe.config.json')
+    .description('Set up commitlint, AI ruleset (rules/skills/agents), and project_type: app in climaybe.config.json')
     .action(appInitCommand);
 
   program
@@ -146,7 +146,7 @@ export function createProgram(version = '0.0.0', packageDir = '') {
     .command('add-cursor')
     .alias('add-cursor-skill')
     .description(
-      'Install Electric Maybe Cursor bundle (.cursor/rules, .cursor/skills, .cursor/agents)',
+      'Install Electric Maybe AI ruleset into .config/ai/ and bridge it to your editors',
     )
     .action(addCursorSkillCommand);
 

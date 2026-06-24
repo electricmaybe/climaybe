@@ -6,7 +6,7 @@ alwaysApply: true
 ---
 # Rule Index
 
-When you perform any of the following, **read and apply** the corresponding rule file from `.cursor/rules/`:
+When you perform any of the following, **read and apply** the corresponding rule file from `.config/ai/rules/`:
 
 - **Editing `assets/*.js` or `assets/style.css`, build outputs vs source, where to edit JS/CSS** → `project-overview.mdc` (Build Outputs vs Source — edit `_scripts/`/`_styles/`, never the generated `assets/` files)
 - **Git commits, commit messages** → `commit-rules.mdc`

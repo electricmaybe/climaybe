@@ -10,6 +10,11 @@ on:
       - 'docs/**'
       - '.github/**'
       - '.cursor/**'
+      - '.config/**'
+      - '.windsurf/**'
+      - '.clinerules/**'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
       - '.claude/**'
       - '.eser/**'
       - 'README*'
@@ -43,11 +48,20 @@ jobs:
       SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
       LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Check if Lighthouse CI should run
         id: check
         run: |
           SKIP_REASONS=()
           BR="${{ github.ref_name }}"
+          # Lighthouse is opt-in via climaybe.config.json (lighthouse_workflows).
+          # Default to enabled when the flag is absent (older configs).
+          LH_ENABLED=$(node -e "try{process.stdout.write(require('./climaybe.config.json').lighthouse_workflows===false?'false':'true')}catch(e){process.stdout.write('true')}" 2>/dev/null || echo true)
+          if [[ "$LH_ENABLED" != "true" ]]; then
+            SKIP_REASONS+=("Lighthouse disabled in climaybe.config.json (lighthouse_workflows: false)")
+          fi
           if [[ "$BR" == "staging" ]]; then
             :
           else

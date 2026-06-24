@@ -142,11 +142,26 @@ export async function promptBuildWorkflows() {
   const { enableBuildWorkflows } = await prompts({
     type: 'confirm',
     name: 'enableBuildWorkflows',
-    message: 'Enable build + Lighthouse workflows?',
+    message: 'Enable build workflows? (bundle _scripts JS + compile Tailwind in CI)',
     initial: true,
   });
 
   return !!enableBuildWorkflows;
+}
+
+/**
+ * Ask whether Lighthouse CI should run as part of the build pipeline.
+ * Only meaningful when build workflows are enabled (Lighthouse runs after the build).
+ */
+export async function promptLighthouseWorkflows() {
+  const { enableLighthouseWorkflows } = await prompts({
+    type: 'confirm',
+    name: 'enableLighthouseWorkflows',
+    message: 'Also run Lighthouse CI on the staging branch? (performance + a11y budget)',
+    initial: true,
+  });
+
+  return !!enableLighthouseWorkflows;
 }
 
 /**
@@ -193,18 +208,59 @@ export async function promptCommitlint() {
 }
 
 /**
- * Ask whether to install bundled Cursor rules, skills, and subagents (.cursor/rules, .cursor/skills, .cursor/agents).
+ * Ask whether to reconcile GitHub branch protection for the configured mode
+ * (protect main in single-store, or each live-<alias> in multi-store).
+ */
+export async function promptBranchProtection() {
+  const { enableBranchProtection } = await prompts({
+    type: 'confirm',
+    name: 'enableBranchProtection',
+    message:
+      'Set up GitHub branch protection? (require PRs on production branches; needs a GitHub origin + authenticated gh CLI)',
+    initial: true,
+  });
+
+  return !!enableBranchProtection;
+}
+
+/**
+ * Ask whether to install the bundled Electric Maybe AI ruleset (rules, skills, subagents)
+ * into a single `.config/ai/` source of truth.
  */
 export async function promptCursorSkills() {
   const { enableCursorSkills } = await prompts({
     type: 'confirm',
     name: 'enableCursorSkills',
-    message:
-      'Install Electric Maybe Cursor bundle? (rules, skills, subagents e.g. theme-translator in .cursor/)',
+    message: 'Install the Electric Maybe AI ruleset? (rules, skills, subagents in .config/ai/)',
     initial: true,
   });
 
   return !!enableCursorSkills;
+}
+
+/**
+ * Ask which editors to bridge to the shared `.config/ai/` ruleset. Returns an array of
+ * editor keys understood by EDITOR_BRIDGES in cursor-bundle.js. Defaults to Cursor.
+ */
+export async function promptAiEditors() {
+  const { editors } = await prompts({
+    type: 'multiselect',
+    name: 'editors',
+    message: 'Which editors should read the ruleset? (bridged to .config/ai/, no duplication)',
+    instructions: false,
+    hint: '- space to toggle, enter to confirm',
+    choices: [
+      { title: 'Cursor', value: 'cursor', selected: true },
+      { title: 'Claude Code (CLAUDE.md)', value: 'claude', selected: true },
+      { title: 'GitHub Copilot / VS Code', value: 'copilot', selected: false },
+      { title: 'Windsurf', value: 'windsurf', selected: false },
+      { title: 'Cline / Roo Code', value: 'cline', selected: false },
+      { title: 'Other editors (AGENTS.md)', value: 'agents', selected: false },
+    ],
+  });
+
+  // `prompts` returns undefined on cancel / non-TTY; fall back to Cursor.
+  return Array.isArray(editors) && editors.length > 0 ? editors : ['cursor'];
 }
 
 /**
@@ -285,6 +341,44 @@ export async function promptConfigureCISecrets() {
     initial: 0,
   });
   return host ?? 'skip';
+}
+
+/**
+ * When no GitHub/GitLab origin remote exists, ask how to proceed at the CI secrets step.
+ * Returns 'add' (prompt for owner/repo and add origin), or 'skip' (do it later).
+ */
+export async function promptNoRemoteAction(hostName) {
+  const { action } = await prompts({
+    type: 'select',
+    name: 'action',
+    message: `CI secrets need a ${hostName} repo, but this folder has no "origin" remote. What now?`,
+    choices: [
+      { title: `Add an ${hostName} remote now and continue`, value: 'add' },
+      { title: 'Skip for now (add secrets later in repo settings)', value: 'skip' },
+    ],
+    initial: 0,
+  });
+  return action ?? 'skip';
+}
+
+/**
+ * Prompt for an owner/repo slug to wire up as the git origin remote.
+ * Returns a trimmed "owner/repo" string, or null if skipped/invalid.
+ */
+export async function promptOwnerRepo(hostName) {
+  const { slug } = await prompts({
+    type: 'text',
+    name: 'slug',
+    message: `${hostName} repository (owner/repo)`,
+    validate: (v) => {
+      const s = String(v || '').trim();
+      if (!s) return 'Enter owner/repo, or press Esc to skip';
+      if (!/^[^/\s]+\/[^/\s]+$/.test(s)) return 'Use the form owner/repo (e.g. electricmaybe/climaybe)';
+      return true;
+    },
+  });
+  const s = String(slug || '').trim();
+  return /^[^/\s]+\/[^/\s]+$/.test(s) ? s : null;
 }
 
 /**

@@ -11,9 +11,9 @@ Compares the default locale with others and reports which keys are new or change
 
 For context on how the project uses locales (e.g. in sections/snippets), the rule index is useful:
 
-1. `.cursor/rules/00-rule-index.mdc` — rule index (schemas.mdc prefers translation keys over schema text; locales live in `locales/`)
+1. `.config/ai/rules/00-rule-index.mdc` — rule index (schemas.mdc prefers translation keys over schema text; locales live in `locales/`)
 
-No single "locale rules" file is required; this skill focuses on file comparison and reporting. To **generate** translations across locales after English changes, use the **theme-translator** subagent (`/theme-translator`), installed with the Cursor bundle under `.cursor/agents/`.
+No single "locale rules" file is required; this skill focuses on file comparison and reporting. To **generate** translations across locales after English changes, use the **theme-translator** subagent (`/theme-translator`), installed with the Cursor bundle under `.config/ai/agents/`.
 
 ## Workflow
 

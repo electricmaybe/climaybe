@@ -5,21 +5,26 @@ import {
   promptStoreLoop,
   promptPreviewWorkflows,
   promptBuildWorkflows,
+  promptLighthouseWorkflows,
   promptDevKit,
   promptVSCodeDevTasks,
   promptProjectName,
   promptCommitlint,
+  promptBranchProtection,
   promptCursorSkills,
+  promptAiEditors,
   promptConfigureCISecrets,
+  promptNoRemoteAction,
+  promptOwnerRepo,
   promptUpdateExistingSecrets,
   promptSecretValue,
 } from '../lib/prompts.js';
 import { readConfig, writeConfig, getProjectType, readPkg } from '../lib/config.js';
-import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches, getSuggestedTagForRelease } from '../lib/git.js';
+import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches, getSuggestedTagForRelease, addOriginRemote } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
-import { scaffoldCursorBundle } from '../lib/cursor-bundle.js';
+import { scaffoldAiConfig, logAiConfigResult } from '../lib/cursor-bundle.js';
 import { getMissingBuildWorkflowRequirements, ensureBuildWorkflowDefaults } from '../lib/build-workflows.js';
 import { getDevKitExistingFiles, scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
 import {
@@ -36,6 +41,7 @@ import {
   setSecret,
   setGitLabVariable,
 } from '../lib/github-secrets.js';
+import { logBranchProtectionResult, syncBranchProtection } from '../lib/branch-protection.js';
 
 function installThemeDependencies(cwd = process.cwd()) {
   try {
@@ -48,23 +54,72 @@ function installThemeDependencies(cwd = process.cwd()) {
   }
 }
 
+const DOCS_BASE = 'https://github.com/electricmaybe/climaybe#';
+
+/**
+ * Print a short description (and optional docs link) as a preamble to the next prompt.
+ * A leading blank line detaches it from the previous answer, and there is no leading
+ * glyph, so the text reads as an intro to the question that follows — not a trailing
+ * note on the question above it.
+ * @param {string} text - one sentence, what the answer is for / what it should look like
+ * @param {string} [anchor] - README heading anchor (e.g. 'theme-dev-kit')
+ */
+function hint(text, anchor) {
+  console.log('');
+  console.log(pc.dim(text));
+  if (anchor) console.log(pc.cyan(`  ${DOCS_BASE}${anchor}`));
+}
+
 /**
  * Run the full init flow: prompts, config write, git, branches, workflows.
  * Used by both init (when not already inited or user confirms reinit) and reinit.
  */
 async function runInitFlow() {
   const hasPackageJson = !!readPkg();
-  const projectName = !hasPackageJson ? await promptProjectName() : undefined;
+  let projectName;
+  if (!hasPackageJson) {
+    hint("Used only when this repo has no package.json yet — the repo/folder name is usually fine.");
+    projectName = await promptProjectName();
+  }
 
   // 1. Collect stores from user
+  hint('Enter a Shopify subdomain (e.g. voldt-staging) or full domain; add 2+ stores for multi-store mode.');
   const stores = await promptStoreLoop();
   const mode = stores.length > 1 ? 'multi' : 'single';
+
+  hint('CI that publishes a preview theme per PR and cleans it up on close.', 'preview-and-cleanup-workflows');
   const enablePreviewWorkflows = await promptPreviewWorkflows();
+
+  hint('CI that bundles _scripts JS and compiles Tailwind on push. Yes if the theme uses _scripts/_styles.', 'build-and-lighthouse-workflows');
   const enableBuildWorkflows = await promptBuildWorkflows();
+
+  let enableLighthouseWorkflows = false;
+  if (enableBuildWorkflows) {
+    hint('Runs Lighthouse performance + a11y budgets on the staging branch (inside the build pipeline).', 'build-and-lighthouse-workflows');
+    enableLighthouseWorkflows = await promptLighthouseWorkflows();
+  }
+
+  hint('Local config + ignore defaults for theme work (Theme Check, Prettier, Lighthouse, gitignore).', 'theme-dev-kit');
   const enableDevKit = await promptDevKit();
-  const enableVSCodeTasks = enableDevKit ? await promptVSCodeDevTasks() : false;
+  let enableVSCodeTasks = false;
+  if (enableDevKit) {
+    hint('Adds a VS Code task that runs `climaybe serve`. Only useful if you use VS Code.');
+    enableVSCodeTasks = await promptVSCodeDevTasks();
+  }
+
+  hint('Checks commit messages locally so they follow conventional commits (feat:, fix:, …).');
   const enableCommitlint = await promptCommitlint();
+
+  hint('Requires PRs on production branches (main, or each live-<alias>). Skips cleanly without GitHub/gh.', 'branch-protection');
+  const enableBranchProtection = await promptBranchProtection();
+
+  hint('Electric Maybe rules/skills/subagents installed to a single .config/ai/ source of truth.', 'ai-ruleset');
   const enableCursorSkills = await promptCursorSkills();
+  let aiEditors = [];
+  if (enableCursorSkills) {
+    hint('Pick the editors to bridge to .config/ai/ — only the ones you select get a bridge file.', 'ai-ruleset');
+    aiEditors = await promptAiEditors();
+  }
 
   console.log(pc.dim(`\n  Mode: ${mode}-store (${stores.length} store(s))`));
 
@@ -102,11 +157,13 @@ async function runInitFlow() {
     default_store: stores[0].domain,
     preview_workflows: enablePreviewWorkflows,
     build_workflows: enableBuildWorkflows,
+    lighthouse_workflows: enableBuildWorkflows ? enableLighthouseWorkflows : undefined,
     build_entrypoints_ready: enableBuildWorkflows ? missingBuildFiles?.length === 0 : undefined,
     dev_kit: enableDevKit,
     vscode_tasks: enableVSCodeTasks,
     commitlint: enableCommitlint,
     cursor_skills: enableCursorSkills,
+    ai_editors: enableCursorSkills ? aiEditors : undefined,
     stores: {},
   };
 
@@ -134,13 +191,31 @@ async function runInitFlow() {
     }
   }
 
+  if (enableBranchProtection) {
+    const protection = syncBranchProtection({
+      mode,
+      aliases: stores.map((s) => s.alias),
+      cwd: process.cwd(),
+    });
+    logBranchProtectionResult(protection, mode);
+    if (protection.applied.length > 0 || protection.removed.length > 0) {
+      console.log(
+        pc.dim(
+          '  Rule: PR required on protected branches; live-* bypass allowed for shopify[bot], github-actions[bot], actions-user.'
+        )
+      );
+    }
+  } else {
+    console.log(pc.dim('  Branch protection: skipped (declined at prompt).'));
+  }
+
   // 6. Scaffold workflows
   scaffoldWorkflows(mode, {
     includePreview: enablePreviewWorkflows,
     includeBuild: enableBuildWorkflows,
   });
 
-  // 7. Optional commitlint + Husky and Cursor bundle (rules, skills, agents)
+  // 7. Optional commitlint + Husky and the AI ruleset (rules, skills, agents + editor bridges)
   if (enableCommitlint) {
     console.log(pc.dim('  Setting up commitlint + Husky...'));
     if (scaffoldCommitlint()) {
@@ -150,14 +225,8 @@ async function runInitFlow() {
     }
   }
   if (enableCursorSkills) {
-    const cursorOk = scaffoldCursorBundle();
-    if (cursorOk) {
-      console.log(
-        pc.green('  Electric Maybe Cursor bundle → .cursor/rules, .cursor/skills, .cursor/agents'),
-      );
-    } else {
-      console.log(pc.yellow('  Cursor bundle not found in package (skipped).'));
-    }
+    const aiResult = scaffoldAiConfig(process.cwd(), { editors: aiEditors });
+    logAiConfigResult(aiResult, { pc });
   }
 
   if (enableDevKit) {
@@ -190,12 +259,19 @@ async function runInitFlow() {
   }
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
+  if (enableBuildWorkflows) {
+    console.log(pc.dim(`  Lighthouse CI: ${enableLighthouseWorkflows ? 'enabled' : 'disabled'}`));
+  }
   console.log(pc.dim(`  Theme dev kit: ${enableDevKit ? 'enabled' : 'disabled'}`));
   if (enableDevKit) {
     console.log(pc.dim(`  VS Code tasks: ${enableVSCodeTasks ? 'enabled' : 'disabled'}`));
   }
   console.log(pc.dim(`  commitlint + Husky: ${enableCommitlint ? 'enabled' : 'disabled'}`));
-  console.log(pc.dim(`  Cursor bundle: ${enableCursorSkills ? 'installed' : 'skipped'}`));
+  console.log(
+    pc.dim(
+      `  AI ruleset: ${enableCursorSkills ? `installed (${aiEditors.join(', ') || 'cursor'})` : 'skipped'}`
+    )
+  );
 
   const suggestedTag = getSuggestedTagForRelease();
   const tagLabel = suggestedTag === 'v1.0.0' ? 'Tag your first release' : 'Tag your next release';
@@ -239,9 +315,30 @@ async function runInitFlow() {
     return;
   }
   if (!setter.checkRemote()) {
-    console.log(pc.yellow('  This repo has no ' + setter.name + ' remote (origin).'));
-    console.log(pc.dim('  Add a remote and push first, then add secrets/variables in the repo Settings.\n'));
-    return;
+    console.log(pc.yellow(`  This folder has no ${setter.name} "origin" remote yet.`));
+    const action = await promptNoRemoteAction(setter.name);
+    if (action !== 'add') {
+      console.log(pc.dim('  Skipping CI secrets. Add a remote later, then re-run "climaybe init" or set them in the repo Settings.\n'));
+      return;
+    }
+    const slug = await promptOwnerRepo(setter.name);
+    if (!slug) {
+      console.log(pc.dim('  No repository entered; skipping CI secrets for now.\n'));
+      return;
+    }
+    try {
+      const url = addOriginRemote(slug, ciHost, process.cwd());
+      console.log(pc.green(`  Added origin → ${url}`));
+      console.log(pc.dim('  Create the repo on ' + setter.name + ' and "git push -u origin --all" when ready.'));
+    } catch (err) {
+      console.log(pc.red(`  Could not add origin remote: ${err.message}`));
+      console.log(pc.dim('  Add it manually with "git remote add origin <url>", then re-run "climaybe init".\n'));
+      return;
+    }
+    if (!setter.checkRemote()) {
+      console.log(pc.dim('  Remote added, but it is not recognized as a ' + setter.name + ' URL; skipping CI secrets.\n'));
+      return;
+    }
   }
 
   const existingNames =

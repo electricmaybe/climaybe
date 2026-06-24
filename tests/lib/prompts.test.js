@@ -1,9 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import prompts from 'prompts';
 import {
   extractAlias,
   normalizeDomain,
   isValidShopifyDomain,
+  promptAiEditors,
+  promptOwnerRepo,
+  promptNoRemoteAction,
 } from '../../src/lib/prompts.js';
 
 describe('prompts (pure helpers)', () => {
@@ -73,6 +77,39 @@ describe('prompts (pure helpers)', () => {
 
     it('rejects empty', () => {
       assert.strictEqual(isValidShopifyDomain(''), false);
+    });
+  });
+});
+
+describe('prompts (interactive helpers)', () => {
+  describe('promptAiEditors', () => {
+    it('returns the selected editor keys', async () => {
+      prompts.inject([['cursor', 'claude']]);
+      assert.deepStrictEqual(await promptAiEditors(), ['cursor', 'claude']);
+    });
+
+    it('falls back to cursor when nothing is selected', async () => {
+      prompts.inject([[]]);
+      assert.deepStrictEqual(await promptAiEditors(), ['cursor']);
+    });
+  });
+
+  describe('promptOwnerRepo', () => {
+    it('returns a valid owner/repo slug', async () => {
+      prompts.inject(['electricmaybe/climaybe']);
+      assert.strictEqual(await promptOwnerRepo('GitHub'), 'electricmaybe/climaybe');
+    });
+  });
+
+  describe('promptNoRemoteAction', () => {
+    it('returns the chosen action', async () => {
+      prompts.inject(['add']);
+      assert.strictEqual(await promptNoRemoteAction('GitHub'), 'add');
+    });
+
+    it('can choose to skip', async () => {
+      prompts.inject(['skip']);
+      assert.strictEqual(await promptNoRemoteAction('GitHub'), 'skip');
     });
   });
 });
