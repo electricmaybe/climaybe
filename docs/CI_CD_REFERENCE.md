@@ -86,7 +86,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Single-store**: `climaybe init` / `climaybe ensure-branches` creates `staging` (no `staging-<alias>` / `live-<alias>` branches).
 - **Multi-store**: `climaybe init` / `climaybe ensure-branches` creates `staging` and per-store branches (`staging-<alias>`, `live-<alias>`).
 - If the repo only has `main` (e.g. after clone), run `climaybe ensure-branches` then `git push origin --all` so the mode-appropriate sync workflows can run.
-- Branch protection reconciliation (GitHub): when `gh` is authenticated and `origin` is GitHub, `init`, `add-store`, and `ensure-branches` align protection with mode:
+- Branch protection reconciliation (GitHub): when `gh` is authenticated and `origin` is GitHub, `init`, `add-store`, and `ensure-branches` align protection with mode. `init` asks first (prompt defaults to **yes**); `add-store` and `ensure-branches` reconcile automatically:
   - single-store: protect `main` (PR required)
   - multi-store: protect `live-<alias>` (PR required; bypass users: `shopify[bot]`, `github-actions[bot]`, `actions-user`)
   - on single→multi migration, old `main` protection is removed and `live-<alias>` protections are applied

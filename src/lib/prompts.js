@@ -193,6 +193,22 @@ export async function promptCommitlint() {
 }
 
 /**
+ * Ask whether to reconcile GitHub branch protection for the configured mode
+ * (protect main in single-store, or each live-<alias> in multi-store).
+ */
+export async function promptBranchProtection() {
+  const { enableBranchProtection } = await prompts({
+    type: 'confirm',
+    name: 'enableBranchProtection',
+    message:
+      'Set up GitHub branch protection? (require PRs on production branches; needs a GitHub origin + authenticated gh CLI)',
+    initial: true,
+  });
+
+  return !!enableBranchProtection;
+}
+
+/**
  * Ask whether to install bundled Cursor rules, skills, and subagents (.cursor/rules, .cursor/skills, .cursor/agents).
  */
 export async function promptCursorSkills() {

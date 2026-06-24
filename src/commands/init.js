@@ -9,6 +9,7 @@ import {
   promptVSCodeDevTasks,
   promptProjectName,
   promptCommitlint,
+  promptBranchProtection,
   promptCursorSkills,
   promptConfigureCISecrets,
   promptUpdateExistingSecrets,
@@ -65,6 +66,7 @@ async function runInitFlow() {
   const enableDevKit = await promptDevKit();
   const enableVSCodeTasks = enableDevKit ? await promptVSCodeDevTasks() : false;
   const enableCommitlint = await promptCommitlint();
+  const enableBranchProtection = await promptBranchProtection();
   const enableCursorSkills = await promptCursorSkills();
 
   console.log(pc.dim(`\n  Mode: ${mode}-store (${stores.length} store(s))`));
@@ -135,18 +137,22 @@ async function runInitFlow() {
     }
   }
 
-  const protection = syncBranchProtection({
-    mode,
-    aliases: stores.map((s) => s.alias),
-    cwd: process.cwd(),
-  });
-  logBranchProtectionResult(protection, mode);
-  if (protection.applied.length > 0 || protection.removed.length > 0) {
-    console.log(
-      pc.dim(
-        '  Rule: PR required on protected branches; live-* bypass allowed for shopify[bot], github-actions[bot], actions-user.'
-      )
-    );
+  if (enableBranchProtection) {
+    const protection = syncBranchProtection({
+      mode,
+      aliases: stores.map((s) => s.alias),
+      cwd: process.cwd(),
+    });
+    logBranchProtectionResult(protection, mode);
+    if (protection.applied.length > 0 || protection.removed.length > 0) {
+      console.log(
+        pc.dim(
+          '  Rule: PR required on protected branches; live-* bypass allowed for shopify[bot], github-actions[bot], actions-user.'
+        )
+      );
+    }
+  } else {
+    console.log(pc.dim('  Branch protection: skipped (declined at prompt).'));
   }
 
   // 6. Scaffold workflows
