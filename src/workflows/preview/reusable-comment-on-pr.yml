@@ -107,7 +107,7 @@ jobs:
                 if (host && tid) {
                   const previewUrl = `https://${host}?preview_theme_id=${tid}`;
                   const customizeUrl = `https://${host}/admin/themes/${tid}/editor`;
-                  parts.push('', `**${alias}**`, `- Customize: ${customizeUrl}`, `- Preview: ${previewUrl}`);
+                  parts.push('', `- [${alias} preview](${previewUrl}) · [customize](${customizeUrl})`);
                 }
               }
             } else if (useFragments) {
@@ -128,8 +128,11 @@ jobs:
                 previewUrl = `https://${storeDomain}?preview_theme_id=${themeId}`;
                 customizeUrl = `https://${storeDomain}/admin/themes/${themeId}/editor`;
               }
-              if (customizeUrl) parts.push('', `**Customize URL:** ${customizeUrl}`);
-              if (previewUrl) parts.push('', `**Preview URL:** ${previewUrl}`);
+              if (previewUrl) {
+                const links = [`[theme preview](${previewUrl})`];
+                if (customizeUrl) links.push(`[customize](${customizeUrl})`);
+                parts.push('', links.join(' · '));
+              }
               if (shareOutput.trim()) {
                 parts.push('', '### Share Output', '```', shareOutput, '```');
               }
