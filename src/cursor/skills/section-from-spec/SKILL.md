@@ -11,12 +11,12 @@ Creates a new section (and optional snippet) from a user spec, following project
 
 Before creating any section or snippet, read and apply (in order):
 
-1. `.cursor/rules/00-rule-index.mdc` — rule index
-2. `.cursor/rules/sections.mdc` — section structure, schema requirement, performance
-3. `.cursor/rules/snippets.mdc` — snippet patterns, LiquidDoc, parameter handling
-4. `.cursor/rules/schemas.mdc` — minimal settings, no redundancy, translation keys, max 5 settings
-5. `.cursor/rules/liquid.mdc` — Liquid syntax
-6. `.cursor/rules/liquid-doc-rules.mdc` — required `{% doc %}` block format for snippets
+1. `.config/ai/rules/00-rule-index.mdc` — rule index
+2. `.config/ai/rules/sections.mdc` — section structure, schema requirement, performance
+3. `.config/ai/rules/snippets.mdc` — snippet patterns, LiquidDoc, parameter handling
+4. `.config/ai/rules/schemas.mdc` — minimal settings, no redundancy, translation keys, max 5 settings
+5. `.config/ai/rules/liquid.mdc` — Liquid syntax
+6. `.config/ai/rules/liquid-doc-rules.mdc` — required `{% doc %}` block format for snippets
 
 ## Workflow
 

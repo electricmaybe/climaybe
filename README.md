@@ -4,16 +4,16 @@ Shopify CLI for **theme CI/CD** (GitHub Actions, branches, multi-store config) a
 
 Built by [Electric Maybe](https://electricmaybe.com) — a Shopify-focused product and development studio.
 
-**Commit linting and Cursor bundle (optional in both flows):**
+**Commit linting and AI ruleset (optional in both flows):**
 
 - **Conventional commit linting:** During `climaybe theme init` or `climaybe app init`, you can install [commitlint](https://commitlint.js.org/) and [Husky](https://typicode.github.io/husky) for [Conventional Commits](https://www.conventionalcommits.org/).
-- **Cursor bundle (rules + skills + subagents):** Opt in to Electric Maybe’s bundled [Cursor](https://cursor.com/) files under `.cursor/rules/`, `.cursor/skills/`, and `.cursor/agents/` (themes, JS, a11y, commits, changelog, Linear, **theme-translator** for locale sync, etc.).
+- **AI ruleset (rules + skills + subagents):** Opt in to Electric Maybe’s bundled rules, skills, and subagents (themes, JS, a11y, commits, changelog, Linear, **theme-translator** for locale sync, etc.). They install into a single `.config/ai/` source of truth and are bridged to the editors you pick (Cursor, Claude, Copilot, Windsurf, Cline, …). See [AI ruleset](#ai-ruleset).
 
 ## Command layout (Shopify CLI–style)
 
 - **`climaybe theme <command>`** — canonical commands for theme repos (workflows, stores, branches).
 - **Same commands at the top level** — `climaybe init` is the same as `climaybe theme init` (backward compatible).
-- **`climaybe app init`** — app repos only: writes `project_type: "app"` in `climaybe.config.json`, optional commitlint + Cursor bundle. Does **not** install theme GitHub Actions or store/branch setup.
+- **`climaybe app init`** — app repos only: writes `project_type: "app"` in `climaybe.config.json`, optional commitlint + AI ruleset. Does **not** install theme GitHub Actions or store/branch setup.
 - **`climaybe setup-commitlint`** and **`climaybe add-cursor`** — always at the top level (stack-agnostic).
 
 Theme-only commands refuse to run when `climaybe.config.json` → `project_type` is **`app`**.
@@ -48,30 +48,32 @@ npm install -D climaybe
 npx climaybe app init
 ```
 
-Installs optional commitlint/Husky and the Cursor bundle (rules, skills, agents). Use [Shopify CLI](https://shopify.dev/docs/api/shopify-cli) for app development and deployment.
+Installs optional commitlint/Husky and the [AI ruleset](#ai-ruleset) (rules, skills, agents). Use [Shopify CLI](https://shopify.dev/docs/api/shopify-cli) for app development and deployment.
 
 ## Commands
 
 ### `climaybe init` / `climaybe theme init`
 
-Interactive setup that configures your repo for CI/CD.
+Interactive setup that configures your repo for CI/CD. Each question shows a one-line
+hint (and a docs link where it helps) so you know what you're choosing. Defaults are
+shown in the prompt; press Enter to accept.
 
 1. Prompts for your store URL (e.g., `voldt-staging.myshopify.com`)
 2. Extracts subdomain as alias, lets you override
-3. Asks if you want to add more stores
-4. Asks whether to enable optional **preview + cleanup** workflows (default: yes)
-5. Asks whether to enable optional **build + Lighthouse** workflows (default: yes)
-6. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
-7. Asks whether to install the **Cursor bundle** (`.cursor/rules/`, `.cursor/skills/`, `.cursor/agents/`) — Electric Maybe conventions for themes and AI workflows
-8. Based on store count, sets up **single-store** or **multi-store** mode
-9. Writes `climaybe.config.json`
-10. Scaffolds GitHub Actions workflows
-11. Creates git branches and store directories (multi-store)
-12. Optionally installs commitlint, Husky, and the Cursor bundle (rules, skills, agents)
+3. Asks if you want to add more stores (two or more → multi-store mode)
+4. Asks whether to enable **[preview + cleanup workflows](#preview-and-cleanup-workflows)** (default: yes)
+5. Asks whether to enable **[build workflows](#build-and-lighthouse-workflows)** (default: yes)
+6. If build is on, asks separately whether to run **[Lighthouse CI](#build-and-lighthouse-workflows)** on staging (default: yes)
+7. Asks whether to install the **[theme dev kit](#theme-dev-kit)** (default: yes), and if so whether to add VS Code tasks
+8. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
+9. Asks whether to set up **[branch protection](#branch-protection)** (default: yes)
+10. Asks whether to install the **[AI ruleset](#ai-ruleset)**, and if so which editors to bridge
+11. Writes `climaybe.config.json`, scaffolds workflows, and creates branches/store directories
+12. Optionally configures CI secrets (and can add a GitHub/GitLab remote if the folder has none)
 
 ### `climaybe app init`
 
-Interactive setup for a **Shopify app** repository: optional commitlint + Husky, optional Cursor bundle, and `project_type: "app"` in `package.json` `config`. No theme workflows, stores, or staging/live branches.
+Interactive setup for a **Shopify app** repository: optional commitlint + Husky, optional [AI ruleset](#ai-ruleset), and `project_type: "app"` in `package.json` `config`. No theme workflows, stores, or staging/live branches.
 
 ### `climaybe add-store` / `climaybe theme add-store`
 
@@ -131,7 +133,7 @@ Refresh all climaybe-managed project files from your installed CLI version:
 - `package.json` managed deps (`climaybe`, `tailwindcss`)
 - optional `.vscode/tasks.json` (if enabled)
 - optional commitlint + Husky files (if enabled)
-- optional Cursor bundle files (if enabled)
+- optional AI ruleset in `.config/ai/` + editor bridges (if enabled)
 
 ```bash
 npx climaybe update
@@ -149,13 +151,13 @@ npx climaybe setup-commitlint
 
 ### `climaybe add-cursor`
 
-Install Electric Maybe **Cursor rules, skills, and subagents** into `.cursor/rules/`, `.cursor/skills/`, and `.cursor/agents/` (including **theme-translator** for `theme/locales/`). Use this if you skipped the bundle at init or want to refresh from the version of climaybe you have installed.
+Install the Electric Maybe **AI ruleset** (rules, skills, and subagents — including **theme-translator** for `theme/locales/`) into `.config/ai/`, then bridge it to the editors you select. Use this if you skipped it at init or want to refresh from the version of climaybe you have installed. See [AI ruleset](#ai-ruleset) for the layout and editor bridges.
 
 ```bash
 npx climaybe add-cursor
 ```
 
-The previous command name `add-cursor-skill` still works as an alias. Re-running replaces the bundled rules, skills, and subagent files with the copies shipped by your installed climaybe version (same idea as `update`).
+The previous command name `add-cursor-skill` still works as an alias. Re-running replaces the bundled rules, skills, and subagent files (and refreshes editor bridges) with the copies shipped by your installed climaybe version (same idea as `update`).
 
 ## Configuration
 
@@ -167,14 +169,18 @@ The CLI writes config into `climaybe.config.json`:
   "default_store": "voldt-staging.myshopify.com",
   "preview_workflows": true,
   "build_workflows": true,
+  "lighthouse_workflows": true,
   "commitlint": true,
   "cursor_skills": true,
+  "ai_editors": ["cursor", "claude"],
   "stores": {
     "voldt-staging": "voldt-staging.myshopify.com",
     "voldt-norway": "voldt-norway.myshopify.com"
   }
 }
 ```
+
+`lighthouse_workflows` gates Lighthouse CI inside the build pipeline (it still only runs on `staging` with the right secrets). `ai_editors` records which editors are bridged to `.config/ai/`. Older configs without these keys keep working: Lighthouse defaults to on when build workflows exist.
 
 Workflows read this config at runtime — no hardcoded values in YAML files.
 
@@ -204,6 +210,16 @@ staging → main → staging-<store> → live-<store>
 
 Direct pushes to `staging-<store>` or `live-<store>` are automatically synced back to `main` (no PR; multistore-hotfix-to-main merges the branch into main).
 
+### Branch protection
+
+`init` (with the prompt accepted, default **yes**), `add-store`, and `ensure-branches` reconcile GitHub branch protection to match your mode:
+
+- **single-store:** protect `main` — pull requests required, no direct pushes.
+- **multi-store:** protect each `live-<alias>` — PRs required, with bypass for the automation users `shopify[bot]`, `github-actions[bot]`, and `actions-user`; `main` is left unprotected so the sync workflows can push to it.
+- switching single → multi removes the old `main` protection and applies `live-<alias>` protection instead.
+
+It is **best-effort**: it only runs when `origin` is GitHub and the `gh` CLI is installed and authenticated. Otherwise it skips cleanly and prints why — it never fails the command.
+
 ## Workflows
 
 ### Shared (both modes)
@@ -231,9 +247,9 @@ Direct pushes to `staging-<store>` or `live-<store>` are automatically synced ba
 | `root-to-stores.yml` | Push to `live-*` | From main merge: stores→root. From elsewhere: root→stores (same as stores-to-root on staging-*) |
 | `multistore-hotfix-to-main.yml` | Push to `staging-*` or `live-*` (and after root-to-stores) | Merges store branch into main (no PR). Skips when push is a merge from main (avoids loop) and skips no-op backports when source and main trees are identical |
 
-### Optional preview + cleanup package
+### Preview and cleanup workflows
 
-Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`; default: yes).
+Optional package, enabled via the `climaybe init` prompt (`Enable preview + cleanup workflows?`; default: yes). These publish a per-PR preview theme, post preview/customize links, and clean the theme up when the PR closes.
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
@@ -247,9 +263,9 @@ Enabled via `climaybe init` prompt (`Enable preview + cleanup workflows?`; defau
 | `reusable-cleanup-themes.yml` | workflow_call | `cleanup_mode: by_pr` deletes names ending with `-PR{padded}`; `orphan_pr` deletes `-PR<n>` when PR `n` is not open. Optional `result_artifact_prefix` for matrix fan-in on `pr-close` |
 | `reusable-extract-pr-number.yml` | workflow_call | Extracts padded/unpadded PR number outputs for naming and API-safe usage |
 
-### Optional build + Lighthouse package
+### Build and Lighthouse workflows
 
-Enabled via `climaybe init` prompt (`Enable build + Lighthouse workflows?`; default: yes).
+Optional package. `climaybe init` asks two separate questions: **build workflows** (bundle `_scripts` JS + compile Tailwind in CI; default: yes) and, if build is on, **Lighthouse CI** (performance + a11y budget on the `staging` branch; default: yes, stored as `lighthouse_workflows`). Lighthouse runs inside the build pipeline, so it requires build workflows.
 
 When enabled, builds are **resilient**:
 - If `_scripts/*.js` or `_styles/main.css` are missing, the build workflow **skips** those steps and continues.
@@ -268,21 +284,50 @@ Build workflows install deps with `npm ci` and run `npx --no-install climaybe bu
 | `reusable-build.yml` | workflow_call | Path-filtered `build-scripts` / Tailwind (`climaybe build`), then commits compiled assets when changed |
 | `create-release.yml` | Push tag `v*`, or **workflow_run** after Post-Merge Tag / Nightly Hotfix Tag succeed on `main` | Builds release archive and creates GitHub Release notes from commits since the previous tag. It filters repetitive automation subjects (main→staging syncs, store/root sync chores, bot merge noise) before generating notes. If remaining subjects are low-signal and `GEMINI_API_KEY` exists, it uses Gemini to generate cleaner merchant-facing notes. Also covers tags created by workflows with `GITHUB_TOKEN`, which may not trigger tag-push workflows. |
 
-### Optional theme dev kit package
+### Theme dev kit
 
-During `climaybe init`, you can enable the Electric Maybe theme dev kit (default: yes). This installs local
-dev config defaults (`.theme-check.yml`, `.shopifyignore`, `.prettierrc`,
-`.lighthouserc.js`), writes `climaybe.config.json`, appends a managed `.gitignore` block, and optionally adds
-`.vscode/tasks.json` (default: yes) wired to run `climaybe` dev commands.
+Optional local-development bundle, enabled during `climaybe init` (default: yes). It installs the config files that make local theme work and CI consistent:
+
+| File | What it's for |
+|------|---------------|
+| `.theme-check.yml` | Theme Check defaults (`theme-check:recommended`); ignores `node_modules/` and generated `_styles/` output |
+| `.shopifyignore` | Keeps dev-only files out of theme uploads (`_scripts`, `_styles`, `stores`, editor/AI config, docs, package files, …) |
+| `.prettierrc` | Prettier with the Shopify Liquid plugin |
+| `.lighthouserc.js` | Lighthouse CI config: local URL, start command, and score thresholds |
+| `.vscode/tasks.json` *(optional)* | One background task that runs `climaybe serve` (added only if you opt in) |
+| `.gitignore` | A managed block is merged in (editor dirs, `node_modules`, generated `assets/index.js` + `assets/style.css`, `.shopify`, `.vercel`) |
+| `package.json` | Ensures the `climaybe` dependency and `tailwindcss` devDependency exist; fills default name/description/author if missing |
+| `climaybe.config.json` | The local source-of-truth config (`port`, `default_store`, `dev_kit`, `vscode_tasks`, `project_type`) |
+
+Existing files are reported before they're replaced. Install or refresh later with `climaybe add-dev-kit` (or `climaybe theme add-dev-kit`).
 
 Local serve commands keep Theme Check disabled by default for faster startup. Enable it explicitly with
 `climaybe serve --theme-check` or `climaybe serve:assets --theme-check`.
 
-You can create optional build entrypoints later with:
+You can create optional build entrypoints later with `climaybe create-entrypoints`. The scaffolded `_scripts/main.js` and `_styles/main.css` include a commented sample import showing how to pull in other files (`import './foo.js';` and `@import "./foo.css";`).
 
-`climaybe create-entrypoints`
+### AI ruleset
 
-If these files already exist, `init` warns that they will be replaced.
+Optional. Electric Maybe ships a bundle of editor rules, skills, and subagents (themes, JS, a11y, commits, changelog, Linear task creation, **theme-translator** for locale sync, …). To avoid duplicating prompt content per editor, it installs into **one** source of truth and bridges every editor to it:
+
+```
+your-repo/
+├── .config/
+│   └── ai/                <-- the only real files (rules/, skills/, agents/, rules.md)
+├── .cursor               --> bridge to .config/ai            (Cursor)
+├── .windsurf             --> bridge to .config/ai            (Windsurf)
+├── .clinerules           --> bridge to .config/ai            (Cline / Roo Code)
+├── AGENTS.md             --> bridge to .config/ai/rules.md   (generic / other editors)
+├── CLAUDE.md             --> bridge to .config/ai/rules.md   (Claude Code)
+└── .github/
+    └── copilot-instructions.md --> bridge to .config/ai/rules.md  (Copilot / VS Code)
+```
+
+- `climaybe init` (and `add-cursor` / `app init`) asks **which editors** to bridge. Only the bridges you pick are created.
+- Bridges are **symlinks** where the OS allows (relative symlinks on macOS/Linux, directory junctions on Windows), so there is zero duplication — edit a rule once under `.config/ai/` and every editor sees it. If a platform blocks symlinks, climaybe falls back to copying the file so the bridge still works.
+- The chosen editors are recorded as `ai_editors` in `climaybe.config.json`. `.config/ai/` and the bridges are kept out of theme uploads via `.shopifyignore`.
+
+Install or refresh anytime with `climaybe add-cursor` (alias `add-cursor-skill`).
 
 ### Section schema builder
 

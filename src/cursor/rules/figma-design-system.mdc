@@ -56,13 +56,13 @@ This document defines how to translate Figma designs into code for this project.
 
 - No React/Vue. UI is Liquid (sections + snippets) plus native JS web components.
 - New UI from Figma: prefer adding or composing existing snippets/sections; add new snippets/sections only when no fit exists.
-- Sections must have a valid `{% schema %}` and semantic HTML; snippets must have LiquidDoc `{%- doc -%}` and follow `.cursor/rules/snippets.mdc` and `.cursor/rules/liquid.mdc`.
+- Sections must have a valid `{% schema %}` and semantic HTML; snippets must have LiquidDoc `{%- doc -%}` and follow `.config/ai/rules/snippets.mdc` and `.config/ai/rules/liquid.mdc`.
 
 ### 1.3 Frameworks & Libraries
 
 - **Templating:** Liquid only (Shopify theme).
 - **Styling:** Tailwind CSS v4. Entry: `_styles/main.css` (imports Tailwind, tokens, component CSS). Compiled output: `assets/style.css`.
-- **Script:** Native JS only (no React/Vue). Web components with `#` private fields, AbortController for listeners, JSDoc; see `.cursor/rules/javascript-standards.mdc`.
+- **Script:** Native JS only (no React/Vue). Web components with `#` private fields, AbortController for listeners, JSDoc; see `.config/ai/rules/javascript-standards.mdc`.
 - **Build:** Tailwind processes `_styles/main.css`; content sources (for class scanning) are listed in `_styles/main.css` (`@source` for layout, blocks, sections, snippets, templates, assets).
 
 ### 1.4 Asset Management
@@ -127,8 +127,8 @@ config/                  # Theme settings
 - **Reuse existing snippets/sections** from `snippets/` and `sections/` instead of duplicating (e.g. buttons → `a--button`, icons → `a--icon`, cards → `m--*` cards, modals → `m--modal` / electric-modal).
 - Use the project’s **color system** (semantic tokens from `02.02_colors.css`), **typography** (`02.03_typography.css`, utilities), and **spacing/sizes** (`02.01_sizes.css`, Tailwind utilities that use them).
 - **Tailwind:** Only static class names; map Figma colors to semantic tokens (e.g. `bg-surface`, `text-primary`); use project breakpoints and spacing scale.
-- Respect **accessibility** (WCAG 2.1 AA): semantic HTML, ARIA where needed, keyboard and screen reader support; see `.cursor/rules/accessibility-rules.mdc`.
-- Respect **JS standards**: no new dependencies; if adding behavior, use native JS/web components per `.cursor/rules/javascript-standards.mdc`.
+- Respect **accessibility** (WCAG 2.1 AA): semantic HTML, ARIA where needed, keyboard and screen reader support; see `.config/ai/rules/accessibility-rules.mdc`.
+- Respect **JS standards**: no new dependencies; if adding behavior, use native JS/web components per `.config/ai/rules/javascript-standards.mdc`.
 - Aim for **1:1 visual parity** with the Figma design and validate with the screenshot.
 
 ### 2.3 Asset Handling
@@ -144,16 +144,16 @@ config/                  # Theme settings
 
 ### 3.1 Liquid
 
-- Follow `.cursor/rules/liquid.mdc`: e.g. assign computed values before passing to `render`; no inline `append` in `render` parameters; valid tags/filters only.
-- Use `{%- doc -%}` and LiquidDoc for all new snippets; document params and examples per `.cursor/rules/liquid-doc-rules.mdc` and `.cursor/rules/snippets.mdc`.
+- Follow `.config/ai/rules/liquid.mdc`: e.g. assign computed values before passing to `render`; no inline `append` in `render` parameters; valid tags/filters only.
+- Use `{%- doc -%}` and LiquidDoc for all new snippets; document params and examples per `.config/ai/rules/liquid-doc-rules.mdc` and `.config/ai/rules/snippets.mdc`.
 
 ### 3.2 Sections
 
-- Every section: valid `{% schema %}`, semantic HTML, section-scoped classes. Follow `.cursor/rules/sections.mdc` and `.cursor/rules/schemas.mdc` for schema definitions.
+- Every section: valid `{% schema %}`, semantic HTML, section-scoped classes. Follow `.config/ai/rules/sections.mdc` and `.config/ai/rules/schemas.mdc` for schema definitions.
 
 ### 3.3 Accessibility
 
-- Semantic structure, ARIA where needed, keyboard and focus behavior, WCAG 2.1 AA. See `.cursor/rules/accessibility-rules.mdc`. Use the accessibility-pass skill when asked for an a11y audit.
+- Semantic structure, ARIA where needed, keyboard and focus behavior, WCAG 2.1 AA. See `.config/ai/rules/accessibility-rules.mdc`. Use the accessibility-pass skill when asked for an a11y audit.
 
 ### 3.4 Performance
 

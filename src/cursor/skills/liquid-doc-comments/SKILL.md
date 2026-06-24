@@ -11,8 +11,8 @@ Adds or updates the `{%- doc -%}` block at the top of a snippet or block so it m
 
 Before writing or editing doc blocks, read and apply:
 
-1. `.cursor/rules/00-rule-index.mdc` — rule index
-2. `.cursor/rules/liquid-doc-rules.mdc` — required structure, @param format, @example, types, placement
+1. `.config/ai/rules/00-rule-index.mdc` — rule index
+2. `.config/ai/rules/liquid-doc-rules.mdc` — required structure, @param format, @example, types, placement
 
 ## Workflow
 
