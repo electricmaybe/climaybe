@@ -52,6 +52,7 @@ These rules are synced from ~/.claude/rules/:
 ### Project-Specific Rules
 These rules are unique to this project:
 - `project-overview.mdc` - Electric Maybe theme overview
+- `performance-guide.mdc` - Store performance architecture (CSS/JS tiering, third-party containment, LCP)
 - `js-refactor-tasks.mdc` - Current refactoring tasks
 
 ## Important Notes
