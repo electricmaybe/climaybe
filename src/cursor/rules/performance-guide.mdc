@@ -1,0 +1,436 @@
+---
+description: Store performance architecture for our themes — CSS/JS tiering, third-party containment, images, Section API, and maintenance checklist
+globs:
+  - "_scripts/**"
+  - "_styles/**"
+  - "snippets/_head*.liquid"
+  - "snippets/_body*.liquid"
+  - "layout/theme.liquid"
+  - "snippets/a--image*.liquid"
+alwaysApply: false
+---
+# Store Performance Guide
+
+Reference for how this theme optimizes storefront performance. Read this before adding scripts, third-party tags, CSS, or heavy Liquid to `<head>`.
+
+## Goals & budgets
+
+| Metric | Target | Primary levers |
+|--------|--------|----------------|
+| LCP | < 2.5s | Critical CSS, LCP preloads, font discipline, hero image sizing |
+| INP / TBT | Low main-thread blocking | Deferred JS, idle third-parties, smaller `index.js` |
+| CLS | Stable layout | Explicit image dimensions, `font-display: swap`, reserved space |
+| Third-party cost | Contained | Resource blocker, `content_for_header` sanitization, deferred analytics |
+
+**Source of truth for JS:** `_scripts/` → built to `assets/` via `npm run scripts:build`. Never edit `assets/*.js` directly.
+
+---
+
+## Page load timeline
+
+```
+┌─ HEAD (critical path) ─────────────────────────────────────────────────────┐
+│ 1. _head-resource-blocker     Network + DOM patches (first script)         │
+│ 2. _head-urgent-script        Geoblock / track-my-order redirect           │
+│ 3. _meta-tags, _head-seo      Meta, favicons (low fetchpriority)           │
+│ 4. _product-preload-slider    PDP: up to 5 slider images (portrait)        │
+│ 5. _index-preload-hero        Homepage: mobile LCP hero preload            │
+│ 6. _head-style                Fonts, :root tokens, critical.css, style.css │
+│ 7. _script-variables          window.theme, routes, icons SVG, Klaviyo cfg │
+│ 8. debug-proxy (conditional)  API proxy for preview/dev only               │
+│ 9. index.js [+ page bundles]  Route-specific modules in head             │
+│10. speculationrules           Conservative prerender for internal links     │
+│11. _head-console-filter       Suppresses noisy third-party console (LH)   │
+│12. content_for_header         Shopify apps — sanitized after capture        │
+│13. Post-header cleanup         Removes blocked script/link nodes            │
+└────────────────────────────────────────────────────────────────────────────┘
+┌─ BODY ─────────────────────────────────────────────────────────────────────┐
+│ Main content (sections/snippets)                                           │
+│ _body-script → deferred.js (module, end of body)                           │
+│   → scheduleIdle → deferred-integrations.js (conditional)                  │
+│   → klaviyo-cart-tracking.js, hotjar-deferred.js                           │
+└────────────────────────────────────────────────────────────────────────────┘
+┌─ IDLE / INTERACTION ───────────────────────────────────────────────────────┐
+│ Hotjar (8s idle or first scroll/click/touch/keydown)                       │
+│ Rebuy product view analytics (PDP, 2s idle)                                  │
+│ Variant image prefetch (hover; touch: max 3 after 5s idle)                   │
+│ cart.js injected when cart drawer opens                                    │
+│ electric-section lazy fetch (IntersectionObserver, often 1200px margin)    │
+└────────────────────────────────────────────────────────────────────────────┘
+┌─ window.load ──────────────────────────────────────────────────────────────┐
+│ AddShoppers referral widget (async)                                        │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 1. CSS tiering
+
+### Critical bundle (render-blocking)
+
+- **Source:** `_styles/critical.css` → `assets/critical.css`
+- **Scope:** Header + homepage hero shell only; narrow `@source` list (~12 Liquid files)
+- **Loaded in:** `snippets/_head-style.liquid` via `stylesheet_tag`
+
+When adding above-the-fold UI to header or index hero, ensure Tailwind classes are covered by critical `@source` paths or accept FOUC until full CSS loads.
+
+### Full stylesheet (non-blocking)
+
+- **Source:** `_styles/main.css` → `assets/style.css`
+- **Pattern:** `media="print" onload="this.media='all'"` + `<noscript>` fallback
+- **Also:** `rel="preload" as="style" fetchpriority="high"` for early discovery
+
+Build: `npm run tailwind:build` or `tailwind:watch` (builds both critical + main).
+
+### Theme tokens
+
+- `_styles/theme-tokens.css` — shared `@theme` imported by both CSS entry points
+- Inline `:root` variables in `_head-style.liquid` for fonts, spacing, buttons
+
+### Disabled / deferred CSS ideas
+
+- `content-visibility: auto` on sections — **commented out** in `_styles/main.css` (evaluate before enabling)
+- Lazysizes CSS — removed; native `loading="lazy"` only
+
+---
+
+## 2. Font strategy
+
+### Self-hosted fonts (no Typekit / Google Fonts on storefront)
+
+| Family | File | Preload? | Usage |
+|--------|------|----------|-------|
+| Grosa Medium | `grosa-medium.woff2` | **Yes** | Above-the-fold body emphasis |
+| Ivy Presto Headline Light | `ivypresto-headline-light.woff2` | **Yes** | Headings (`iheadline`) |
+| Grosa Regular | `grosa-regular.woff2` | No | Body text; loads via `@font-face` |
+
+All use `font-display: swap`.
+
+### Font blocking
+
+`_head-resource-blocker.liquid` + `layout/theme.liquid` sanitization block:
+
+- Adobe Typekit (`use.typekit.net`, `p.typekit.net`)
+- Google Fonts
+- Shopify Font CDN webfonts (`fonts.shopifycdn.com`, Nunito)
+- Klaviyo legacy brand fonts (`kl-custom-fonts`, Shopify Files `.woff`)
+- Rebuy onsite CDN (`cdn.rebuyengine.com`, `/onsite/`) — **API** (`rebuyengine.com/api/*`) still allowed
+
+### Preconnect budget
+
+- `_head-typography.liquid`: `cdn.shopify.com`, `cdn.shopifycloud.com`; dns-prefetch `v.shopify.com`
+- Unused preconnects removed: `fonts.shopifycdn.com`, `shop.app`
+
+---
+
+## 3. JavaScript architecture
+
+### Build system
+
+**File:** `.climaybe/build-scripts.js` (via `npm run scripts:build`)
+
+| Entry (`_scripts/`) | Output (`assets/`) | Loaded |
+|---------------------|-------------------|--------|
+| `main.js` | `index.js` | All pages, `<head>` module |
+| `deferred.js` | `deferred.js` | End of `<body>` |
+| `deferred-integrations.js` | `deferred-integrations.js` | Idle inject when DOM matches |
+| `productpage.js` | `productpage.js` | PDP `<head>` |
+| `product--variant-radios.js` | `product--variant-radios.js` | PDP `<head>` |
+| `debug-proxy.js` | `debug-proxy.js` | Conditional `<head>` |
+
+**Also in head (not in bundler — manual sync risk):**
+
+- `collectionpage.js` ← `_scripts/collectionpage.js`
+- `cart.js` ← `_scripts/cart.js`
+
+**Per-section assets** (loaded with `defer` / `type="module"` from sections): `wishlist-feed.js`, `irl.js`, `reviews-custom.js`, `product--form.js`, `product-model.js`, `loading-banner.js`, etc.
+
+Production build strips JSDoc and `console.*` from bundled output.
+
+### `index.js` (critical bundle)
+
+**Entry:** `_scripts/main.js`
+
+Includes: `core-components.js`, `header.js`, `electric-section.js`, `electric-slider.js`, `electric-search.js`, `cart-dynamic.js`, `electric-cart-upsell-tabs.js`, pagination, checkout spinner delegation.
+
+**Keep lean.** New features belong in `deferred.js`, page bundles, or lazy-loaded section scripts unless needed for first paint.
+
+### `deferred.js` (body bundle)
+
+**Entry:** `_scripts/deferred.js`
+
+Always loads: product card scripts, quick ATC modal, Klaviyo cart tracking, Hotjar deferred, chat button visibility.
+
+**Conditionally loads** `deferred-integrations.js` when DOM contains:
+`electric-wish`, `electric-wish-counter`, `promo-banner`, `electric-rebuy-simplify`, `footer-newsletter`, `[data-gorgias-widget]`, `.js-promo-banner-text`
+
+Uses `scheduleIdle(..., { timeout: 3000 })` from `_scripts/utils/perf.js`.
+
+### `productpage.js` (PDP bundle)
+
+Includes: gallery, video player, variant preview, variant prefetch, Rebuy product view, gift card sync.
+
+### Idle scheduling utility
+
+**Canonical:** `_scripts/utils/perf.js` → `scheduleIdle(callback, { timeout })`
+
+Falls back to `setTimeout(1)` when `requestIdleCallback` unavailable.
+
+**Consumers:** `deferred.js`, `hotjar-deferred.js`, `rebuy-product-view.js`, `product-variant-prefetch.js`, `recently-viewed.js`
+
+---
+
+## 4. Third-party containment
+
+### Layer 1: Resource blocker (runtime)
+
+`snippets/_head-resource-blocker.liquid` — **must stay first in `<head>`**
+
+Patches: `fetch`, `XHR`, `createElement`, `setAttribute`, DOM insertion, inline style mutation, `MutationObserver` for late injections.
+
+### Layer 2: Header sanitization (Liquid)
+
+`layout/theme.liquid` captures `content_for_header`, replaces blocked host strings with `blocked.invalid/*`, then runs a cleanup script.
+
+### Layer 3: Deferred / conditional loading
+
+| Service | File | Strategy |
+|---------|------|----------|
+| Hotjar | `_scripts/hotjar-deferred.js` | Idle 8s or first user interaction |
+| Klaviyo cart events | `_scripts/klaviyo-cart-tracking.js` | `deferred.js`; listens `cart:added` |
+| Rebuy analytics (PDP view) | `_scripts/rebuy-product-view.js` | Idle 2s on product pages |
+| Rebuy recommendations | `_scripts/electric-rebuy-simplify.js` | Integrations bundle; IO `rootMargin: 1200px` |
+| AddShoppers | `_head-script.liquid` | `window.load`, async, `loadCss: false` |
+| Affirm | `affirm-messaging` web component | Lazy on first product form |
+| Kimonix | `_body-script.liquid` | Async only if `kimonix_void_script` in header |
+| Gorgias | App embed + `gorgias-widget.js` | App via Shopify; triggers deferred |
+
+### Layer 4: Console filter (Lighthouse only)
+
+`_head-console-filter.liquid` — suppresses known third-party `console.error/warn` patterns. **Do not rely on this for debugging** — disable mentally when investigating app bugs.
+
+### Shopify app embeds (`config/settings_data.json`)
+
+| App | Status | Notes |
+|-----|--------|-------|
+| Elevar (GTM/dataLayer) | Enabled | Primary tag orchestration — audit in GTM, not theme |
+| Klaviyo onsite embed | Enabled | Fonts may be blocked; onsite JS from Shopify |
+| Gorgias | Enabled | Chat |
+| Photolock | Enabled | Image protection |
+| Okendo, Checkout Blocks | Disabled | — |
+
+### Inactive / dead integrations
+
+| File | Status |
+|------|--------|
+| `snippets/_script-blocker.liquid` | Fully commented out |
+| `snippets/_head-rebuy-stylesheet-blocker.liquid` | Not rendered |
+| `snippets/_head-csp.liquid` | Not rendered |
+| `snippets/_criteo-tracking.liquid` | Not rendered |
+| `snippets/shoplift.liquid` | Commented out in `theme.liquid` |
+| instant.page | Removed; `data-instant-allow-query-string` on body is legacy |
+
+---
+
+## 5. Images & LCP
+
+### Snippets
+
+| Snippet | Behavior |
+|---------|----------|
+| `a--image.liquid` | Responsive `srcset`; LCP: `fetchpriority="high"`, `loading="eager"`, `decoding="async"`; else `loading="lazy"`; auto-lazy after 2nd section/item |
+| `a--image-responsive.liquid` | `<picture>` breakpoints; LCP path avoids desktop 2x retina |
+
+### Preloads
+
+| Snippet | When | What |
+|---------|------|------|
+| `_index-preload-hero.liquid` | `request.page_type == 'index'` | Mobile 420w hero from `settings.homepage_lcp_image` |
+| `_product-preload-slider-images.liquid` | PDP | Up to 5 portrait slider images, `imagesrcset` 480/960 |
+| `_head-seo.liquid` | All | Favicons `fetchpriority="low"` |
+
+### No lazysizes
+
+Theme uses **native `loading="lazy"`** only. `unveilLazyloadIn()` in `core-components.js` is a no-op kept for API compatibility.
+
+### Variant image prefetch (PDP)
+
+`_scripts/product-variant-prefetch.js`:
+
+- **Desktop:** hover/focus → fetch `?section_id=api--product-images&variant={id}` → preload image URLs from JSON payload
+- **Touch:** after 5s idle, max **3** variants, images section only (no `product--main` fetch)
+
+---
+
+## 6. Navigation & prefetch
+
+### Speculation Rules (native prerender)
+
+`snippets/_head-script.liquid` — `eagerness: "conservative"`
+
+Prerenders same-origin links except account, cart, login. Do not add instant.page alongside this.
+
+### electric-section (Section Rendering API)
+
+`_scripts/electric-section.js`:
+
+- Lazy load via `IntersectionObserver` (`data-onload`, configurable `data-onload-root-margin`)
+- Fragment cache (max 10 entries)
+- Events: `electric-section:prefetch`, `electric-section:fetch`
+- Used for collection tabs, IRL, more-to-love, header fragments, etc.
+
+### electric-pub (tab prefetch)
+
+`_scripts/electric-pub.js` — prefetches tab content on hover/focus or intersection.
+
+### Cart script on demand
+
+`core-components.js` → `loadCartScriptOnce()` injects `cart.js` with `defer` when cart drawer opens (not on every page upfront).
+
+---
+
+## 7. Shopify-specific patterns
+
+### Route-conditional head scripts
+
+From `_head-script.liquid`:
+
+```liquid
+index.js                          → all pages
+productpage.js                    → product
+product--variant-radios.js          → product
+collectionpage.js                   → collection, search
+cart.js                             → cart template
+```
+
+### Geoblock
+
+When `settings.geoblock_enabled`:
+
+- `html.geoblock-pending` hides body until `/browsing_context_suggestions.json` returns
+- Currently **disabled** in `settings_data.json`
+- **Caveat:** fetch failure only warns — body can stay hidden if enabled without a fallback
+
+### Fabric cart restoration
+
+Inline in `_head-script.liquid` — cart/product template logic for `_fabric` localStorage flow.
+
+### Debug API proxy
+
+`_scripts/debug-proxy.js` — loads only when debug cookie, `?debug_proxy*`, or Shopify design mode. Rewrites proxy API fetch URLs.
+
+---
+
+## 8. Klaviyo & analytics data flow
+
+### Cart tracking (deferred)
+
+1. `product--form.js` dispatches `cart:added` with cart payload
+2. `klaviyo-cart-tracking.js` waits for `_learnq`, pushes `Added to Cart v3` + legacy `Added to Cart`
+3. Product page context from `window.theme.klaviyoCart` in `_script-variables.liquid`
+4. Cart page replays `cart:added` from `sessionStorage cart:justAdded`
+
+### Viewed Product (not deferred)
+
+`sections/product--icons-model.liquid` — large inline Klaviyo script when comparison section renders. **Candidate for future deferral.**
+
+### Rebuy
+
+- Widget CDN blocked; custom `electric-rebuy-simplify` uses API
+- Product view POST deferred via `rebuy-product-view.js`
+- Global helpers in `_script-variables.liquid` (`rebuyTrackEvent`, session storage for added variants)
+
+---
+
+## 9. Adding new features — checklist
+
+### New JavaScript
+
+- [ ] Default to `_scripts/` source file, not `assets/`
+- [ ] If needed on every page → consider `deferred.js` not `main.js`
+- [ ] If third-party → defer (idle/interaction/load), never sync in head unless unavoidable
+- [ ] If PDP-only → `productpage.js` or section `{% javascript %}`
+- [ ] Add to `.climaybe/build-scripts.js` if new bundle entry
+- [ ] Run `npm run scripts:build`
+- [ ] Use `scheduleIdle` from `utils/perf.js` for non-critical init
+- [ ] AbortController + cleanup in web components
+
+### New third-party script
+
+- [ ] Can it go through GTM with consent + idle trigger instead of theme?
+- [ ] If app embed: expect `content_for_header` injection — add to blocker list if it conflicts (fonts, duplicate widgets)
+- [ ] Add domain to `_head-console-filter` only if noise is unavoidable
+- [ ] Never add sync analytics in `_head-script.liquid`
+
+### New above-the-fold UI
+
+- [ ] Extend `critical.css` `@source` if new classes needed at first paint
+- [ ] LCP image: use `fetchpriority="high"`, explicit dimensions, preload in dedicated snippet
+- [ ] Do not preload more than 2 fonts
+
+### New section below fold
+
+- [ ] `loading="lazy"` on images
+- [ ] Consider `<electric-section data-onload>` instead of bundling in `index.js`
+- [ ] Pass `lazyload: true` to product cards
+
+---
+
+## 10. Testing & measurement
+
+### Before shipping perf changes
+
+1. **Chrome DevTools** — Performance trace: LCP element, long tasks, third-party cost
+2. **Network** — throttle Slow 4G; verify critical.css → first paint, style.css non-blocking
+3. **Coverage** — how much of `index.js` executes on homepage vs PDP
+4. **Block third-parties test** — block `googletagmanager.com`, `static.klaviyo.com`, `static.hotjar.com`; if TBT collapses, marketing stack is the bottleneck
+5. **Theme Check** — `npm run lint:liquid`
+6. **Build** — `npm run scripts:build && npm run tailwind:build`
+
+### Debug modes
+
+| URL param | Effect |
+|-----------|--------|
+| `?debug_typekit=1` | Typekit audit (`_head-typekit-debug`) |
+| `?debug_rebuy=1` | Rebuy logging |
+| `?debug_proxy=1` | API proxy prompt |
+| `?debug_proxy_domain=` | Set proxy origin |
+
+---
+
+## 11. Known gaps & maintenance risks
+
+1. **`collectionpage.js` / `cart.js` not in build targets** — `_scripts` edits may not reach `assets/` until manual copy or build update
+2. **Many section scripts outside bundler** — verify `assets/` sync when editing `_scripts/wishlist-feed.js`, etc.
+3. **Stale LiquidDoc** in `_head-script.liquid`, `_head-urgent-script.liquid` — docs mention Rebuy head prefetch, instant.page, promo anti-flash that moved or were removed
+4. **`index.js` size (~340KB+)** — largest theme-controlled bottleneck; split `core-components.js` further if TBT regresses
+5. **GTM / Elevar** — largest real-world cost; theme cannot fix container bloat
+6. **`_head-console-filter`** — masks errors; misleading during app debugging
+7. **Klaviyo Viewed Product inline** — still heavy on PDP with icons model section
+
+---
+
+## 12. File quick reference
+
+| Concern | Primary files |
+|---------|---------------|
+| Load order | `layout/theme.liquid` |
+| Resource blocking | `snippets/_head-resource-blocker.liquid` |
+| CSS tiering | `snippets/_head-style.liquid`, `_styles/critical.css`, `_styles/main.css` |
+| JS bootstrap | `snippets/_head-script.liquid`, `snippets/_body-script.liquid` |
+| Globals | `snippets/_script-variables.liquid` |
+| Build | `.climaybe/build-scripts.js`, `package.json` |
+| Idle utils | `_scripts/utils/perf.js` |
+| Images | `snippets/a--image.liquid`, `snippets/a--image-responsive.liquid` |
+| LCP preloads | `snippets/_index-preload-hero.liquid`, `snippets/_product-preload-slider-images.liquid` |
+| Section lazy load | `_scripts/electric-section.js` |
+| Deferred 3P | `_scripts/hotjar-deferred.js`, `_scripts/klaviyo-cart-tracking.js`, `_scripts/rebuy-product-view.js` |
+| App embeds | `config/settings_data.json` |
+
+---
+
+## 13. Related rules
+
+- `javascript-standards.mdc` — web components, layout thrashing, `scheduleIdle` patterns
+- `tailwindcss-rules.mdc` — static classes, `@source` for critical CSS
+- `project-overview.mdc` — performance targets (< 16ms init, 60fps), build outputs vs source (`_scripts/` / `_styles/`, never `assets/` directly)
