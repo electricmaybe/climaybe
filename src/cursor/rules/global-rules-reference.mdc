@@ -53,6 +53,7 @@ These rules are synced from ~/.claude/rules/:
 These rules are unique to this project:
 - `project-overview.mdc` - Electric Maybe theme overview
 - `performance-guide.mdc` - Store performance architecture (CSS/JS tiering, third-party containment, LCP)
+- `docs/gtm-audit-template.md` (climaybe) - GTM container audit template; copy per store to `docs/gtm-audit-{store}.md`
 - `js-refactor-tasks.mdc` - Current refactoring tasks
 
 ## Important Notes
