@@ -213,6 +213,18 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 - **`reusable-cleanup-themes.yml`:** `cleanup_mode: by_pr` matches theme names ending with `-PR{padded}` only; `cleanup_mode: orphan_pr` deletes `-PR<n>` themes when PR `n` is not in the open list (`gh pr list`, limit 1000). Optional `result_artifact_prefix` uploads deleted counts for `pr-close` fan-in.
 - **`cleanup-orphan-preview-themes.yml`:** Weekly + manual orphan cleanup per configured store.
 
+## 19) Optional Liquid performance profiling workflows package
+
+- Added `init` prompt: `Enable Liquid performance profiling workflows?` (default: yes).
+- Persisted selection in `climaybe.config.json` via `profile_workflows` flag.
+- Updated workflow scaffolding so `update` and `add-store` preserve this flag.
+- Added optional template workflows under `src/workflows/profile`:
+  - `liquid-performance.yml` — gate job on `main` push; checks for required secrets.
+  - `reusable-liquid-profile.yml` — reusable workflow: shares a preview theme, measures TTFB for index/collection/product/cart templates (4 iterations each), reports average of last 3 (first is warm-up), cleans up preview theme.
+- Report is posted to GitHub Actions job summary as a markdown table.
+- Workflow skips gracefully when `SHOPIFY_STORE_URL` or `SHOPIFY_THEME_ACCESS_TOKEN` secrets are missing.
+- Preview theme is always cleaned up via `shopify theme delete` in an `if: always()` step.
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.
