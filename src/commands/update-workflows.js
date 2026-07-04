@@ -6,6 +6,7 @@ import {
   isCursorSkillsEnabled,
   getAiEditors,
   isPreviewWorkflowsEnabled,
+  isProfileWorkflowsEnabled,
   readConfig,
 } from '../lib/config.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
@@ -28,6 +29,7 @@ export async function updateCommand() {
   const mode = getMode();
   const includePreview = isPreviewWorkflowsEnabled();
   const includeBuild = isBuildWorkflowsEnabled();
+  const includeProfile = isProfileWorkflowsEnabled();
 
   // Keep theme project files in sync (root files, package.json, .gitignore, VS Code tasks).
   scaffoldThemeDevKit({
@@ -42,7 +44,7 @@ export async function updateCommand() {
     scaffoldAiConfig(process.cwd(), { editors: getAiEditors() });
   }
 
-  scaffoldWorkflows(mode, { includePreview, includeBuild });
+  scaffoldWorkflows(mode, { includePreview, includeBuild, includeProfile });
 
   console.log(pc.bold(pc.green('\n  Project files updated!\n')));
 }

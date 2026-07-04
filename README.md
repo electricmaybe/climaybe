@@ -169,6 +169,7 @@ The CLI writes config into `climaybe.config.json`:
   "default_store": "voldt-staging.myshopify.com",
   "preview_workflows": true,
   "build_workflows": true,
+  "profile_workflows": true,
   "lighthouse_workflows": true,
   "commitlint": true,
   "cursor_skills": true,
@@ -262,6 +263,19 @@ Optional package, enabled via the `climaybe init` prompt (`Enable preview + clea
 | `reusable-comment-on-pr.yml` | workflow_call | Upserts one bot preview comment; aggregates `preview-fragment-*` artifacts when `use_preview_fragments` is true and removes older bot preview comments |
 | `reusable-cleanup-themes.yml` | workflow_call | `cleanup_mode: by_pr` deletes names ending with `-PR{padded}`; `orphan_pr` deletes `-PR<n>` when PR `n` is not open. Optional `result_artifact_prefix` for matrix fan-in on `pr-close` |
 | `reusable-extract-pr-number.yml` | workflow_call | Extracts padded/unpadded PR number outputs for naming and API-safe usage |
+
+### Optional Liquid performance profiling package
+
+Enabled via `climaybe init` prompt (`Enable Liquid performance profiling workflows?`; default: yes).
+
+Runs on every push to `main` (skipping store-sync and hotfix-backport commits). Creates a shared preview theme, measures TTFB for four core templates (index, collection, product, cart) over 4 iterations each, discards the first (warm-up) run, and reports the average of the last 3 in the GitHub Actions job summary.
+
+Requires `SHOPIFY_STORE_URL` and `SHOPIFY_THEME_ACCESS_TOKEN` secrets. When secrets are missing, the workflow skips gracefully.
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `liquid-performance.yml` | Push to `main` | Gate check for secrets, then calls reusable profiler |
+| `reusable-liquid-profile.yml` | workflow_call | Shares theme, measures TTFB per template × 4 iterations, reports avg of last 3, cleans up theme |
 
 ### Build and Lighthouse workflows
 

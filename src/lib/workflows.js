@@ -37,7 +37,7 @@ function copyWorkflow(srcDir, fileName, destDir) {
  * but for simplicity we track known filenames instead.
  */
 function getKnownWorkflowFiles() {
-  const dirs = ['shared', 'single', 'multi', 'preview', 'build'];
+  const dirs = ['shared', 'single', 'multi', 'preview', 'build', 'profile'];
   const files = new Set();
   for (const dir of dirs) {
     const dirPath = join(TEMPLATES_DIR, dir);
@@ -72,7 +72,7 @@ function cleanWorkflows(cwd = process.cwd()) {
  * - Copies single/ or multi/ (+ single/) based on mode.
  */
 export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.cwd()) {
-  const { includePreview = false, includeBuild = false } = options;
+  const { includePreview = false, includeBuild = false, includeProfile = false } = options;
   const dest = ghWorkflowsDir(cwd);
   mkdirSync(dest, { recursive: true });
 
@@ -113,9 +113,17 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
     ensureBuildWorkflowDefaults(cwd);
   }
 
+  if (includeProfile) {
+    const profileDir = join(TEMPLATES_DIR, 'profile');
+    for (const f of listYmls(profileDir)) {
+      copyWorkflow(profileDir, f, dest);
+    }
+  }
+
   const total = readdirSync(dest).filter((f) => f.endsWith('.yml')).length;
   console.log(pc.green(`  Scaffolded ${total} workflow(s) → .github/workflows/`));
   console.log(pc.dim(`  Mode: ${mode}-store`));
   console.log(pc.dim(`  Preview workflows: ${includePreview ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${includeBuild ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Profile workflows: ${includeProfile ? 'enabled' : 'disabled'}`));
 }

@@ -5,6 +5,7 @@ import {
   promptStoreLoop,
   promptPreviewWorkflows,
   promptBuildWorkflows,
+  promptProfileWorkflows,
   promptLighthouseWorkflows,
   promptDevKit,
   promptVSCodeDevTasks,
@@ -99,6 +100,9 @@ async function runInitFlow() {
     enableLighthouseWorkflows = await promptLighthouseWorkflows();
   }
 
+  hint('CI that measures Liquid TTFB for core templates on every push to main.');
+  const enableProfileWorkflows = await promptProfileWorkflows();
+
   hint('Local config + ignore defaults for theme work (Theme Check, Prettier, Lighthouse, gitignore).', 'theme-dev-kit');
   const enableDevKit = await promptDevKit();
   let enableVSCodeTasks = false;
@@ -157,6 +161,7 @@ async function runInitFlow() {
     default_store: stores[0].domain,
     preview_workflows: enablePreviewWorkflows,
     build_workflows: enableBuildWorkflows,
+    profile_workflows: enableProfileWorkflows,
     lighthouse_workflows: enableBuildWorkflows ? enableLighthouseWorkflows : undefined,
     build_entrypoints_ready: enableBuildWorkflows ? missingBuildFiles?.length === 0 : undefined,
     dev_kit: enableDevKit,
@@ -213,6 +218,7 @@ async function runInitFlow() {
   scaffoldWorkflows(mode, {
     includePreview: enablePreviewWorkflows,
     includeBuild: enableBuildWorkflows,
+    includeProfile: enableProfileWorkflows,
   });
 
   // 7. Optional commitlint + Husky and the AI ruleset (rules, skills, agents + editor bridges)
@@ -259,6 +265,7 @@ async function runInitFlow() {
   }
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Profile workflows: ${enableProfileWorkflows ? 'enabled' : 'disabled'}`));
   if (enableBuildWorkflows) {
     console.log(pc.dim(`  Lighthouse CI: ${enableLighthouseWorkflows ? 'enabled' : 'disabled'}`));
   }
