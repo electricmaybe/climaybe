@@ -11,10 +11,12 @@ import {
   readClimaybeConfig,
   migrateLegacyPackageConfigToClimaybe,
   getStoreAliases,
+  getAliasForDefaultStore,
   getMode,
   getStoreDomainFromBranch,
   isPreviewWorkflowsEnabled,
   isBuildWorkflowsEnabled,
+  isProfileWorkflowsEnabled,
   isCommitlintEnabled,
   isCursorSkillsEnabled,
   addStoreToConfig,
@@ -292,6 +294,37 @@ describe('config', () => {
     });
   });
 
+  describe('getAliasForDefaultStore', () => {
+    it('returns null when default_store is missing or does not match any store', () => {
+      const dir = setup();
+      try {
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+        writeConfig({ stores: { foo: 'foo.myshopify.com' } }, dir);
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+        writeConfig({ stores: { foo: 'foo.myshopify.com' }, default_store: 'other.myshopify.com' }, dir);
+        assert.strictEqual(getAliasForDefaultStore(dir), null);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns the alias whose domain equals default_store', () => {
+      const dir = setup();
+      try {
+        writeConfig(
+          {
+            stores: { norway: 'norway.myshopify.com', uk: 'uk.myshopify.com' },
+            default_store: 'uk.myshopify.com',
+          },
+          dir
+        );
+        assert.strictEqual(getAliasForDefaultStore(dir), 'uk');
+      } finally {
+        teardown();
+      }
+    });
+  });
+
   describe('getStoreAliases', () => {
     it('returns empty array when no config or no stores', () => {
       const dir = setup();
@@ -380,6 +413,28 @@ describe('config', () => {
       try {
         writeConfig({ stores: {}, build_workflows: true }, dir);
         assert.strictEqual(isBuildWorkflowsEnabled(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('isProfileWorkflowsEnabled', () => {
+    it('returns false when not set or false', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {} }, dir);
+        assert.strictEqual(isProfileWorkflowsEnabled(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns true when profile_workflows is true', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {}, profile_workflows: true }, dir);
+        assert.strictEqual(isProfileWorkflowsEnabled(dir), true);
       } finally {
         teardown();
       }

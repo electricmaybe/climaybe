@@ -19,11 +19,29 @@ on:
         required: false
         type: string
         description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_STORE_URL_<this>; else uses SHOPIFY_STORE_URL."
+      use_preview_fragments:
+        required: false
+        type: string
+        default: 'false'
+        description: "When 'true', download preview-fragment-* artifacts (from publish matrix) and post one comment with all preview URLs."
 
 jobs:
   comment:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
     steps:
+      - name: Download preview fragments (multi-store / matrix publish)
+        if: inputs.use_preview_fragments == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: preview-fragment-*
+          merge-multiple: true
+          path: preview-fragments
+
       - name: Post preview comment
         uses: actions/github-script@v7
         env:
@@ -31,44 +49,134 @@ jobs:
           THEME_ID: ${{ inputs.theme_id }}
           SHARE_OUTPUT: ${{ inputs.share_output }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          USE_PREVIEW_FRAGMENTS: ${{ inputs.use_preview_fragments }}
         with:
           script: |
+            const fs = require('fs');
+            const path = require('path');
             const issueNumber = parseInt(process.env.PR_NUMBER);
-            const storeDomain = (process.env.SHOPIFY_STORE_URL || '')
-              .replace(/^https?:\/\//, '')
-              .replace(/\/$/, '');
-            const themeId = process.env.THEME_ID || '';
-            const shareOutput = process.env.SHARE_OUTPUT || '';
+            const useFragments = process.env.USE_PREVIEW_FRAGMENTS === 'true';
+            const marker = '<!-- climaybe-preview-comment -->';
 
-            let previewUrl = '';
-            let customizeUrl = '';
-            if (storeDomain && themeId) {
-              previewUrl = `https://${storeDomain}?preview_theme_id=${themeId}`;
-              customizeUrl = `https://${storeDomain}/admin/themes/${themeId}/editor`;
+            const walkJsonFiles = (dir) => {
+              const out = [];
+              if (!fs.existsSync(dir)) return out;
+              const stack = [dir];
+              while (stack.length) {
+                const d = stack.pop();
+                for (const ent of fs.readdirSync(d, { withFileTypes: true })) {
+                  const p = path.join(d, ent.name);
+                  if (ent.isDirectory()) stack.push(p);
+                  else if (ent.name === 'fragment.json' || ent.name.endsWith('.json')) {
+                    try {
+                      out.push(JSON.parse(fs.readFileSync(p, 'utf8')));
+                    } catch {
+                      // ignore
+                    }
+                  }
+                }
+              }
+              return out;
+            };
+
+            let fragments = [];
+            if (useFragments) {
+              fragments = walkJsonFiles('preview-fragments');
             }
 
             const parts = [
+              marker,
               '## 🎨 Theme Preview Generated',
               '',
-              `**Store:** ${process.env.SHOPIFY_STORE_URL || 'N/A'}`,
               `**Branch:** ${context.payload.pull_request?.head?.ref || context.ref.replace('refs/heads/', '')}`,
               `**Commit:** ${(context.payload.pull_request?.head?.sha || context.sha || '').substring(0, 7)}`
             ];
 
-            if (customizeUrl) {
-              parts.push('', `**Customize URL:** ${customizeUrl}`);
+            if (fragments.length > 0) {
+              parts.push('', '### Preview links (per store)');
+              const uniqueByAlias = new Map();
+              for (const f of fragments) {
+                const alias = String(f.alias || '').trim() || 'store';
+                uniqueByAlias.set(alias, f);
+              }
+              const byAlias = [...uniqueByAlias.values()].sort((a, b) => String(a.alias).localeCompare(String(b.alias)));
+              for (const f of byAlias) {
+                const host = (f.store_host || '').replace(/\/$/, '');
+                const tid = f.theme_id || '';
+                const alias = f.alias || 'store';
+                if (host && tid) {
+                  const previewUrl = `https://${host}?preview_theme_id=${tid}`;
+                  const customizeUrl = `https://${host}/admin/themes/${tid}/editor`;
+                  parts.push('', `- [${alias} preview](${previewUrl}) · [customize](${customizeUrl})`);
+                }
+              }
+            } else if (useFragments) {
+              parts.push(
+                '',
+                '*(Could not load per-store preview fragments from workflow artifacts; see the publish job logs.)*'
+              );
+            } else {
+              const storeDomain = (process.env.SHOPIFY_STORE_URL || '')
+                .replace(/^https?:\/\//, '')
+                .replace(/\/$/, '');
+              const themeId = process.env.THEME_ID || '';
+              const shareOutput = process.env.SHARE_OUTPUT || '';
+              parts.push('', `**Store:** ${process.env.SHOPIFY_STORE_URL || 'N/A'}`);
+              let previewUrl = '';
+              let customizeUrl = '';
+              if (storeDomain && themeId) {
+                previewUrl = `https://${storeDomain}?preview_theme_id=${themeId}`;
+                customizeUrl = `https://${storeDomain}/admin/themes/${themeId}/editor`;
+              }
+              if (previewUrl) {
+                const links = [`[theme preview](${previewUrl})`];
+                if (customizeUrl) links.push(`[customize](${customizeUrl})`);
+                parts.push('', links.join(' · '));
+              }
+              if (shareOutput.trim()) {
+                parts.push('', '### Share Output', '```', shareOutput, '```');
+              }
             }
-            if (previewUrl) {
-              parts.push('', `**Preview URL:** ${previewUrl}`);
-            }
-            if (shareOutput.trim()) {
-              parts.push('', '### Share Output', '```', shareOutput, '```');
-            }
-            parts.push('', '---', '*This preview will be available for 7 days.*');
 
-            await github.rest.issues.createComment({
-              issue_number: issueNumber,
+            const updatedAt = new Date().toISOString().replace('T', ' ').replace('Z', ' UTC');
+            parts.push('', '---', `*Updated: ${updatedAt}*`, '*This preview will be available for 7 days.*');
+            const body = parts.join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: parts.join('\n')
+              issue_number: issueNumber,
+              per_page: 100
             });
+            const managed = comments
+              .filter((c) => {
+                const text = String(c.body || '');
+                const botLike = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+                const previewLike = text.includes(marker) || text.includes('## 🎨 Theme Preview Generated');
+                return botLike && previewLike;
+              })
+              .sort((a, b) => a.id - b.id);
+
+            if (managed.length > 0) {
+              const keep = managed[managed.length - 1];
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: keep.id,
+                body
+              });
+              for (const c of managed.slice(0, -1)) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: c.id
+                });
+              }
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: issueNumber,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body
+              });
+            }

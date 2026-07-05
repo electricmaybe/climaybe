@@ -9,7 +9,7 @@ Creates a Linear issue in the **Voldt Redesign** project with a PRD-style descri
 
 ## Rules to Apply
 
-Before creating a task, read `.cursor/rules/00-rule-index.mdc`. No other rule file is required; mention commit-rules only if the user wants a branch name convention.
+Before creating a task, read `.config/ai/rules/00-rule-index.mdc`. No other rule file is required; mention commit-rules only if the user wants a branch name convention.
 
 ## Linear Context
 

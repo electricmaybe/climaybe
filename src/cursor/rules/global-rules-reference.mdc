@@ -6,7 +6,7 @@ alwaysApply: false
 ---
 # Global Rules Reference
 
-This project uses global rules from ~/.claude/rules/ (when using Claude). **In Cursor, project rules live in `.cursor/rules/` and are applied per the rule index (`00-rule-index.mdc`).**
+This project uses global rules from ~/.claude/rules/ (when using Claude). **In Cursor, project rules live in `.config/ai/rules/` and are applied per the rule index (`00-rule-index.mdc`).**
 
 ## Global Rules Location
 All reusable rules are stored in:
@@ -52,6 +52,8 @@ These rules are synced from ~/.claude/rules/:
 ### Project-Specific Rules
 These rules are unique to this project:
 - `project-overview.mdc` - Electric Maybe theme overview
+- `performance-guide.mdc` - Store performance architecture (CSS/JS tiering, third-party containment, LCP)
+- `docs/gtm-audit-template.md` (climaybe) - GTM container audit template; copy per store to `docs/gtm-audit-{store}.md`
 - `js-refactor-tasks.mdc` - Current refactoring tasks
 
 ## Important Notes

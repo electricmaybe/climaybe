@@ -94,16 +94,22 @@ jobs:
 
           # Default store: commits outside stores/ and assets/ trigger backport.
           # Live-branch minified assets should never backport into main.
-          # Non-default store: only commits under stores/<alias>/ trigger backport; root JSON must not overwrite main.
           if [ -n "$DEFAULT_ALIAS" ] && [ "$SOURCE_ALIAS" = "$DEFAULT_ALIAS" ]; then
             COMMITS=$(git log --oneline ${MERGE_BASE}..origin/$SOURCE -- . ':!stores/' ':!assets/' 2>/dev/null | \
               grep -v "\[stores-to-root\]" | grep -v "\[root-to-stores\]" | grep -v "chore(release)" | grep -v "chore(assets)" || true)
           else
-            COMMITS=$(git log --oneline ${MERGE_BASE}..origin/$SOURCE -- "stores/${SOURCE_ALIAS}/" 2>/dev/null | \
-              grep -v "\[stores-to-root\]" | grep -v "\[root-to-stores\]" | grep -v "chore(release)" || true)
+            COMMITS=""
           fi
 
-          if [ -n "$COMMITS" ]; then
+          # Store-specific changes (including root-to-stores sync commits) must
+          # backport immediately. Use tree-diff detection so commit-message
+          # filtering cannot hide valid changes.
+          STORE_CHANGED=""
+          if ! git diff --quiet "$MERGE_BASE" "origin/$SOURCE" -- "stores/${SOURCE_ALIAS}/"; then
+            STORE_CHANGED="yes"
+          fi
+
+          if [ -n "$COMMITS" ] || [ -n "$STORE_CHANGED" ]; then
             # Skip no-op history merges when source and main already have identical content.
             MAIN_TREE=$(git rev-parse origin/main^{tree} 2>/dev/null || echo "")
             SOURCE_TREE=$(git rev-parse origin/$SOURCE^{tree} 2>/dev/null || echo "")

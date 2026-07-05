@@ -4,6 +4,7 @@ import { watchTree } from './watch.js';
 import { isAbsolute, join, relative } from 'node:path';
 import pc from 'picocolors';
 import { readConfig, getStoreDomainFromBranch } from './config.js';
+import { prepareMultiStoreForServe } from './serve-multi-store.js';
 import { buildScripts } from './build-scripts.js';
 import { buildSchemas } from './schema-builder.js';
 import { runShopify } from './shopify-cli.js';
@@ -209,7 +210,15 @@ function runThemeCheckFiltered({ cwd = process.cwd() } = {}) {
   return child;
 }
 
-export function serveShopify({ cwd = process.cwd() } = {}) {
+/**
+ * @param {{ cwd?: string; skipMultiStorePrep?: boolean }} [opts]
+ * @returns {Promise<import('node:child_process').ChildProcess | null>} Null when multi-store prep failed or was cancelled.
+ */
+export async function serveShopify({ cwd = process.cwd(), skipMultiStorePrep = false } = {}) {
+  if (!skipMultiStorePrep) {
+    const ok = await prepareMultiStoreForServe(cwd);
+    if (!ok) return null;
+  }
   const config = readConfig(cwd) || {};
   const branchStore = getStoreDomainFromBranch(cwd);
   const store = branchStore || config.default_store || config.store || '';
@@ -232,14 +241,23 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
     writeTaggedLine('tailwind', pc.blue, 'watching _styles/main.css -> assets/style.css');
   }
 
-  // Optional dev MCP (non-blocking if missing)
-  const devMcp = spawnLogged('npx', ['-y', '@shopify/dev-mcp@latest'], { name: 'dev-mcp', cwd });
+  // Optional dev MCP (non-blocking if missing). @shopify/dev-mcp pulls hydrogen (peers react-router 7.12)
+  // alongside react-router 7.13 — npm warns with ERESOLVE unless legacy peer resolution is enabled.
+  const devMcpEnv = { ...process.env, npm_config_legacy_peer_deps: 'true' };
+  const devMcp = spawnLogged('npx', ['-y', '@shopify/dev-mcp@latest'], {
+    name: 'dev-mcp',
+    cwd,
+    env: devMcpEnv,
+  });
 
   const scriptsDir = join(cwd, '_scripts');
   if (existsSync(scriptsDir)) {
     try {
-      buildScripts({ cwd });
+      const { removed } = buildScripts({ cwd });
       writeTaggedLine('scripts', pc.yellow, 'built (initial)');
+      if (removed?.length) {
+        writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+      }
     } catch (err) {
       writeTaggedLine('scripts', pc.yellow, `initial build failed: ${err.message}`, process.stderr);
     }
@@ -253,8 +271,11 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
         debounceMs: 300,
         onChange: () => {
           try {
-            buildScripts({ cwd });
+            const { removed } = buildScripts({ cwd });
             writeTaggedLine('scripts', pc.yellow, 'rebuilt');
+            if (removed?.length) {
+              writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+            }
           } catch (err) {
             writeTaggedLine('scripts', pc.yellow, `build failed: ${err.message}`, process.stderr);
           }
@@ -359,16 +380,28 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
   return { tailwind, devMcp, scriptsWatch, schemasWatch, themeCheckWatch, cleanup };
 }
 
-export function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
+export async function serveAll({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
+  const prepOk = await prepareMultiStoreForServe(cwd);
+  if (!prepOk) {
+    const noop = () => {};
+    return { cleanup: noop };
+  }
+
   // Start assets first, then bring up Shopify after a short delay.
   const assets = serveAssets({ cwd, includeThemeCheck });
   let shopify = null;
   const shopifyStartDelayMs = 2500;
   const shopifyTimer = setTimeout(() => {
-    shopify = serveShopify({ cwd });
-    shopify.on('exit', () => {
-      cleanup();
-    });
+    void (async () => {
+      shopify = await serveShopify({ cwd, skipMultiStorePrep: true });
+      if (shopify) {
+        shopify.on('exit', () => {
+          cleanup();
+        });
+      } else {
+        cleanup();
+      }
+    })();
   }, shopifyStartDelayMs);
   console.log(pc.dim(`  Waiting ${shopifyStartDelayMs}ms before starting Shopify...`));
 
@@ -422,7 +455,10 @@ export function buildAll({ cwd = process.cwd() } = {}) {
 
   let scriptsOk = true;
   try {
-    buildScripts({ cwd });
+    const { removed } = buildScripts({ cwd });
+    if (removed?.length) {
+      writeTaggedLine('scripts', pc.yellow, `removed ${removed.length} orphan asset(s): ${removed.join(', ')}`);
+    }
   } catch (err) {
     console.log(pc.red(`\n  build-scripts failed: ${err.message}\n`));
     scriptsOk = false;

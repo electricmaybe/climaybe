@@ -9,7 +9,7 @@ export async function buildScriptsCommand(opts = {}) {
   try {
     const minify = opts.minify === true;
     if (global.gc) global.gc();
-    const { bundles } = buildScripts({ cwd: process.cwd(), minify });
+    const { bundles, removed } = buildScripts({ cwd: process.cwd(), minify });
     if (!bundles || bundles.length === 0) {
       console.log(pc.yellow('  No _scripts/*.js entrypoints found; nothing to build.'));
       return;
@@ -19,6 +19,12 @@ export async function buildScriptsCommand(opts = {}) {
     console.log(pc.green(`  Scripts built (${bundles.length} bundle(s), ${totalFiles} files total, ${mode})`));
     for (const b of bundles) {
       console.log(pc.dim(`  - ${b.entryFile} → ${b.outputPath}`));
+    }
+    if (removed && removed.length > 0) {
+      console.log(pc.yellow(`  Removed ${removed.length} orphan asset(s) with no _scripts source:`));
+      for (const name of removed) {
+        console.log(pc.dim(`  - assets/${name}`));
+      }
     }
     if (global.gc) global.gc();
   } catch (err) {

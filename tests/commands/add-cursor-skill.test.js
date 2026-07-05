@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import prompts from 'prompts';
 import { addCursorSkillCommand } from '../../src/commands/add-cursor-skill.js';
 import { readConfig } from '../../src/lib/config.js';
 
@@ -22,19 +23,24 @@ describe('add-cursor-skill command', () => {
     if (cwd && existsSync(cwd)) rmSync(cwd, { recursive: true });
   }
 
-  it('writes config.cursor_skills, rules, skills, and agents (theme-translator)', async () => {
+  it('writes config (cursor_skills + ai_editors) and installs the ruleset + bridges', async () => {
     setup();
     try {
       writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'theme', version: '1.0.0' }), 'utf-8');
+      prompts.inject([['cursor', 'claude']]); // editor multiselect answer
       await addCursorSkillCommand();
       const config = readConfig(cwd);
       assert.strictEqual(config.cursor_skills, true);
-      const skillPath = join(cwd, '.cursor', 'skills', 'commit', 'SKILL.md');
+      assert.deepStrictEqual(config.ai_editors, ['cursor', 'claude']);
+      const skillPath = join(cwd, '.config', 'ai', 'skills', 'commit', 'SKILL.md');
       assert.ok(existsSync(skillPath));
-      const content = readFileSync(skillPath, 'utf-8');
-      assert.ok(content.includes('name: commit'));
+      assert.ok(readFileSync(skillPath, 'utf-8').includes('name: commit'));
+      assert.ok(existsSync(join(cwd, '.config', 'ai', 'rules', '00-rule-index.mdc')));
+      assert.ok(existsSync(join(cwd, '.config', 'ai', 'agents', 'theme-translator.md')));
+      // Selected bridges exist; unselected ones do not.
       assert.ok(existsSync(join(cwd, '.cursor', 'rules', '00-rule-index.mdc')));
-      assert.ok(existsSync(join(cwd, '.cursor', 'agents', 'theme-translator.md')));
+      assert.ok(existsSync(join(cwd, 'CLAUDE.md')));
+      assert.ok(!existsSync(join(cwd, '.windsurf')));
     } finally {
       teardown();
     }
@@ -43,10 +49,11 @@ describe('add-cursor-skill command', () => {
   it('does not throw when no package.json (writes climaybe.config.json instead)', async () => {
     setup();
     try {
+      prompts.inject([['cursor']]);
       await addCursorSkillCommand();
       assert.ok(existsSync(join(cwd, 'climaybe.config.json')));
-      assert.ok(existsSync(join(cwd, '.cursor', 'skills', 'commit', 'SKILL.md')));
-      assert.ok(existsSync(join(cwd, '.cursor', 'agents', 'theme-translator.md')));
+      assert.ok(existsSync(join(cwd, '.config', 'ai', 'skills', 'commit', 'SKILL.md')));
+      assert.ok(existsSync(join(cwd, '.config', 'ai', 'agents', 'theme-translator.md')));
     } finally {
       teardown();
     }

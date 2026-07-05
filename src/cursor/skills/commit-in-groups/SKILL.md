@@ -13,8 +13,8 @@ Analyzes uncommitted changes, groups them into logical commits, and suggests one
 
 Before suggesting any commit messages, read and apply:
 
-1. `.cursor/rules/00-rule-index.mdc` — rule index
-2. `.cursor/rules/commit-rules.mdc` — commit format (type + description), types (fix, feat, refactor, style, etc.), imperative mood, optional scope
+1. `.config/ai/rules/00-rule-index.mdc` — rule index
+2. `.config/ai/rules/commit-rules.mdc` — commit format (type + description), types (fix, feat, refactor, style, etc.), imperative mood, optional scope
 
 Use the exact format and types from commit-rules; no period at end; lowercase description.
 

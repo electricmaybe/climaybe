@@ -8,6 +8,10 @@ on:
     types: [closed]
     branches: [main, staging, develop, 'staging-*', 'live-*']
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   extract-pr-number:
     uses: ./.github/workflows/reusable-extract-pr-number.yml
@@ -15,72 +19,126 @@ jobs:
   resolve-store:
     runs-on: ubuntu-latest
     outputs:
-      store_alias_secret: ${{ steps.resolve.outputs.alias_secret }}
+      store_alias: ${{ steps.resolve.outputs.store_alias }}
+      store_alias_secret: ${{ steps.resolve.outputs.store_alias_secret }}
+      preview_targets_json: ${{ steps.resolve.outputs.preview_targets_json }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Resolve store alias from base branch
+      - name: Resolve preview store targets from source branch
         id: resolve
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          if [[ -n "$BASE_REF" && ("$BASE_REF" == staging-* || "$BASE_REF" == live-*) ]]; then
-            ALIAS="${BASE_REF#staging-}"
-            ALIAS="${ALIAS#live-}"
-          else
-            ALIAS=$(node -e "
-              const fs = require('fs');
-              const cfg = JSON.parse(fs.readFileSync('./climaybe.config.json', 'utf8'));
-              const stores = cfg?.stores || {};
-              const defaultStoreRaw = cfg?.default_store;
-              const normalize = (v) => String(v || '')
-                .toLowerCase()
-                .replace(/^https?:\\/\\//, '')
-                .replace(/\\/.*$/, '');
-              const defaultStore = normalize(defaultStoreRaw);
-              let alias = '';
-              if (defaultStore) {
-                for (const [k, d] of Object.entries(stores)) {
-                  if (normalize(d) === defaultStore) {
-                    alias = k;
-                    break;
-                  }
+          node <<'NODE' >>"$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('climaybe.config.json', 'utf8'));
+          const stores = cfg?.stores || {};
+          const keys = Object.keys(stores);
+          const baseRef = process.env.BASE_REF || '';
+          const headRef = process.env.HEAD_REF || '';
+          const branchRef = headRef || baseRef;
+          const isMulti = keys.length > 1;
+          const isStagingLive =
+            branchRef && (/^staging-/.test(branchRef) || /^live-/.test(branchRef));
+
+          const aliasToSecret = (a) => String(a).toUpperCase().replace(/-/g, '_');
+          const normalizeDomain = (v) =>
+            String(v || '')
+              .toLowerCase()
+              .replace(/^https?:\/\//, '')
+              .replace(/\/.*$/, '');
+
+          let targets = [];
+          if (isMulti && !isStagingLive) {
+            targets = keys.map((alias) => ({ alias, alias_secret: aliasToSecret(alias) }));
+          } else if (isStagingLive) {
+            let a = branchRef.replace(/^staging-/, '').replace(/^live-/, '');
+            targets = [{ alias: a, alias_secret: aliasToSecret(a) }];
+          } else {
+            const defaultStoreNorm = normalizeDomain(cfg?.default_store);
+            let alias = '';
+            if (defaultStoreNorm) {
+              for (const [k, d] of Object.entries(stores)) {
+                if (normalizeDomain(d) === defaultStoreNorm) {
+                  alias = k;
+                  break;
                 }
               }
-              if (!alias) {
-                alias = Object.keys(stores)[0] || '';
-              }
-              if (!alias && defaultStore) {
-                const subdomain = defaultStore.split('.')[0] || 'default';
-                alias = subdomain.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'default';
-              }
-              if (!alias) {
-                alias = 'default';
-              }
-              process.stdout.write(alias);
-            ")
-          fi
+            }
+            if (!alias) alias = keys[0] || '';
+            if (!alias && cfg?.default_store) {
+              const sub = normalizeDomain(cfg.default_store).split('.')[0] || 'default';
+              alias = sub.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'default';
+            }
+            if (!alias) alias = 'default';
+            targets = [{ alias, alias_secret: aliasToSecret(alias) }];
+          }
 
-          if [ -z "$ALIAS" ]; then
-            echo "Could not resolve store alias from climaybe.config.json config or base branch."
-            exit 1
-          fi
+          if (targets.length === 0 || targets.some((t) => !t.alias)) {
+            console.error('Could not resolve store targets from climaybe.config.json');
+            process.exit(1);
+          }
 
-          ALIAS_SECRET=$(echo "$ALIAS" | tr '[:lower:]-' '[:upper:]_')
-          echo "alias=$ALIAS" >> $GITHUB_OUTPUT
-          echo "alias_secret=$ALIAS_SECRET" >> $GITHUB_OUTPUT
+          console.log('preview_targets_json<<PT_JSON');
+          console.log(JSON.stringify(targets));
+          console.log('PT_JSON');
+          console.log(`store_alias=${targets[0].alias}`);
+          console.log(`store_alias_secret=${targets[0].alias_secret}`);
+          NODE
 
   cleanup-theme:
     needs: [extract-pr-number, resolve-store]
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.resolve-store.outputs.preview_targets_json) }}
     uses: ./.github/workflows/reusable-cleanup-themes.yml
     with:
+      cleanup_mode: by_pr
       pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
-      store_alias_secret: ${{ needs.resolve-store.outputs.store_alias_secret }}
+      store_alias_secret: ${{ matrix.alias_secret }}
+      result_artifact_prefix: pr-close-cleanup
     secrets: inherit
 
+  cleanup-totals:
+    needs: [cleanup-theme]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      deleted_count: ${{ steps.sum.outputs.deleted_count }}
+    steps:
+      - name: Download cleanup result fragments
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pr-close-cleanup-*
+          merge-multiple: true
+          path: cleanup-counts
+
+      - name: Sum deleted themes across stores
+        id: sum
+        run: |
+          total=0
+          if [ -d cleanup-counts ]; then
+            while IFS= read -r -d '' f; do
+              [ -z "$f" ] && continue
+              [ ! -f "$f" ] && continue
+              n="$(tr -d ' \n\r' < "$f" 2>/dev/null || echo 0)"
+              n="${n:-0}"
+              total=$((total + n))
+            done < <(find cleanup-counts -name 'deleted-count.txt' -type f -print0 2>/dev/null || true)
+          fi
+          echo "deleted_count=$total" >> "$GITHUB_OUTPUT"
+          echo "Total deleted across stores: $total"
+
   comment-on-pr:
-    needs: cleanup-theme
+    needs: [cleanup-totals, resolve-store]
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Comment on PR about cleanup
@@ -88,8 +146,8 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
-            const deletedCount = parseInt('${{ needs.cleanup-theme.outputs.deleted_count }}') || 0;
-            const deletedThemesRaw = `${{ needs.cleanup-theme.outputs.deleted_themes }}`.trim();
+            const storeAlias = '${{ needs.resolve-store.outputs.store_alias }}' || '';
+            const deletedCount = parseInt('${{ needs.cleanup-totals.outputs.deleted_count }}') || 0;
 
             const lines = [
               '## 🧹 Theme Cleanup Complete',
@@ -98,20 +156,9 @@ jobs:
               '',
               `**Branch:** ${context.payload.pull_request.head.ref}`,
               `**PR Status:** ${context.payload.pull_request.state}`,
-              `**Deleted Themes:** ${deletedCount}`
-            ];
-
-            if (deletedCount > 0 && deletedThemesRaw) {
-              const deletedThemeLines = deletedThemesRaw
-                .split('\n')
-                .map(name => name.trim())
-                .filter(Boolean)
-                .map(name => `- ${name}`);
-
-              if (deletedThemeLines.length > 0) {
-                lines.push('', '### Deleted Theme Names', ...deletedThemeLines);
-              }
-            }
+              storeAlias ? `**Primary store (config):** ${storeAlias}` : null,
+              `**Deleted themes (all preview stores):** ${deletedCount}`
+            ].filter(Boolean);
 
             lines.push('', '---', '*Theme cleanup runs automatically when a PR is closed.*');
 

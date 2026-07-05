@@ -11,8 +11,8 @@ Builds a changelog or release notes from commits since a ref (e.g. last tag), gr
 
 When grouping and labeling commits, read and apply:
 
-1. `.cursor/rules/00-rule-index.mdc` — rule index
-2. `.cursor/rules/commit-rules.mdc` — commit types (fix, feat, refactor, style, etc.) and format
+1. `.config/ai/rules/00-rule-index.mdc` — rule index
+2. `.config/ai/rules/commit-rules.mdc` — commit types (fix, feat, refactor, style, etc.) and format
 
 Use the same type labels for changelog sections so the output matches how the team writes commits.
 

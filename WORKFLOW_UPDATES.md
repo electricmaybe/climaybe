@@ -6,6 +6,10 @@
 
 This document summarizes past CI workflow hardening changes applied in `climaybe`.
 
+## Orphan script asset cleanup
+
+`climaybe build-scripts` (and `build` / the `serve` watcher) now prune stale outputs: on a **full build**, any `assets/*.js` that the current `_scripts/` build does not produce is deleted. This keeps `assets/` in sync when a `_scripts/` entry is renamed or removed. Guardrails: only plain `*.js` files are affected (Liquid-processed `*.js.liquid` and non-JS files are preserved), builds with no `_scripts/` entrypoints prune nothing, and targeted single-entry builds (`build-scripts <entry>`) skip pruning so sibling bundles survive. `buildScripts()` now returns `{ bundles, removed }`.
+
 ## Path filters (reduce Actions minutes)
 
 Scaffolded **build** and **preview** workflows use `dorny/paths-filter` (and `build-pipeline.yml` uses `paths-ignore`) so script/Tailwind builds, Lighthouse, and PR preview deploys skip when changes are limited to docs, tooling, or paths outside the theme. Script builds also match `assets/**/*.js`; Tailwind does not use a blanket `**/*.js` so compiled asset edits trigger `build-scripts` only. **`github-actions[bot]`** pushes with the standard `chore(assets): …` message skip the build job. On **`live-*`** branches, pushes where **`github.actor`** contains **`[bot]`** skip the whole build job so automated commits do not compile JS/CSS. **Lighthouse** runs only on the **`staging`** branch (not `staging-*`). The **climaybe** repo’s own **CI** workflow runs tests only when `src/`, `tests/`, `scripts/`, lockfile, or `ci.yml` change; **commitlint** still runs on every PR. See [docs/CI_CD_REFERENCE.md](docs/CI_CD_REFERENCE.md) for the exact globs.
@@ -193,6 +197,33 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 
 - **Problem:** Passing `inputs.changelog` into the shell via `CHANGELOG="${{ inputs.changelog }}"` expanded multiline markdown into the script body. Newlines broke the assignment; lines starting with `-` ran as commands; stray tokens (e.g. a heading word) could invoke bogus binaries (`markdown: command not found`).
 - **Fix:** Set `env: CHANGELOG: ${{ inputs.changelog }}` on the commit/tag step and pipe the message into `git tag -a "$NEW_VERSION" -F -` so the annotation is read from stdin. Empty changelog still uses `git tag -m "Release …"`.
+
+## 17) Preview cleanup: actionable job summaries
+
+- Updated `reusable-cleanup-themes.yml` to write a clear **Job Summary** including PR number, selected store alias (default vs scoped), store host (best-effort), total themes found, matched themes for `PR<number>`, and deleted count.
+- Stopped swallowing CLI errors (previously `2>/dev/null`) so failures show actionable stderr snippets in both logs and the job summary.
+- Added reusable outputs for diagnosis and chaining:
+  - `matched_count`, `matched_themes`, `skipped_reason`, `store_hint`
+- Updated `pr-close.yml` PR comment to include the resolved store alias.
+
+## 18) Preview themes: multi-store matrix, orphan cleanup, stricter `-PR` matching
+
+- **`pr-update.yml` / `pr-close.yml`:** If `climaybe.config.json` has **multiple** stores and the PR base is **not** `staging-<alias>` or `live-<alias>`, preview **publish** and **cleanup** run in a **matrix over all stores**; `pr-update` posts one comment with links per store (via `preview-fragment-*` artifacts). Staging/live base PRs still target a single store.
+- **`reusable-publish-pr-preview-store.yml`:** Share + rename + fragment upload per store (replaces matrix-chaining `share` → `rename`, which cannot pass outputs per leg reliably).
+- **`reusable-cleanup-themes.yml`:** `cleanup_mode: by_pr` matches theme names ending with `-PR{padded}` only; `cleanup_mode: orphan_pr` deletes `-PR<n>` themes when PR `n` is not in the open list (`gh pr list`, limit 1000). Optional `result_artifact_prefix` uploads deleted counts for `pr-close` fan-in.
+- **`cleanup-orphan-preview-themes.yml`:** Weekly + manual orphan cleanup per configured store.
+
+## 19) Optional Liquid performance profiling workflows package
+
+- Added `init` prompt: `Enable Liquid performance profiling workflows?` (default: yes).
+- Persisted selection in `climaybe.config.json` via `profile_workflows` flag.
+- Updated workflow scaffolding so `update` and `add-store` preserve this flag.
+- Added optional template workflows under `src/workflows/profile`:
+  - `liquid-performance.yml` — gate job on `main` push; checks for required secrets.
+  - `reusable-liquid-profile.yml` — reusable workflow: shares a preview theme, measures TTFB for index/collection/product/cart templates (4 iterations each), reports average of last 3 (first is warm-up), cleans up preview theme.
+- Report is posted to GitHub Actions job summary as a markdown table.
+- Workflow skips gracefully when `SHOPIFY_STORE_URL` or `SHOPIFY_THEME_ACCESS_TOKEN` secrets are missing.
+- Preview theme is always cleaned up via `shopify theme delete` in an `if: always()` step.
 
 ## Why these changes were made
 

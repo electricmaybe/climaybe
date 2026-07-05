@@ -1,0 +1,199 @@
+name: Reusable Liquid Profile
+
+on:
+  workflow_call:
+    inputs:
+      iterations:
+        required: false
+        type: number
+        default: 4
+        description: "Total profiling iterations per template (first is discarded as warm-up)"
+      store_alias_secret:
+        required: false
+        type: string
+        description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_*_<this>; else uses SHOPIFY_STORE_URL / SHOPIFY_THEME_ACCESS_TOKEN."
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate theme root
+        run: |
+          if [ ! -f "layout/theme.liquid" ]; then
+            echo "layout/theme.liquid not found. Ensure workflow runs at theme repository root."
+            exit 1
+          fi
+
+      - name: Install Shopify CLI
+        run: npm install -g @shopify/cli @shopify/theme
+
+      - name: Share preview theme
+        id: share
+        env:
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
+            echo "Missing Shopify secrets."
+            exit 1
+          fi
+
+          OUTPUT=$(shopify theme share \
+            --store "$SHOPIFY_STORE_URL" \
+            --password "$SHOPIFY_THEME_ACCESS_TOKEN" 2>&1)
+          STATUS=$?
+
+          echo "$OUTPUT"
+          if [ $STATUS -ne 0 ]; then
+            echo "Theme share failed."
+            exit $STATUS
+          fi
+
+          THEME_ID=$(echo "$OUTPUT" | sed -n 's/.*#\([0-9]*\).*/\1/p' | head -1)
+          if [ -z "$THEME_ID" ]; then
+            echo "Could not parse theme id from share output."
+            exit 1
+          fi
+
+          echo "theme_id=$THEME_ID" >> $GITHUB_OUTPUT
+          echo "Shared theme ID: $THEME_ID"
+
+      - name: Resolve profiling URLs
+        id: urls
+        run: |
+          URLS_JSON='[
+            {"template": "index",      "path": "/"},
+            {"template": "collection", "path": "/collections"},
+            {"template": "product",    "path": "/products"},
+            {"template": "cart",       "path": "/cart"}
+          ]'
+          echo "urls=$URLS_JSON" >> $GITHUB_OUTPUT
+
+      - name: Profile Liquid performance
+        id: profile
+        env:
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_CLI_THEME_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          THEME_ID: ${{ steps.share.outputs.theme_id }}
+          ITERATIONS: ${{ inputs.iterations }}
+        run: |
+          STORE=$(echo "$SHOPIFY_STORE_URL" | sed 's|^https\?://||; s|/.*||')
+          REPORT_FILE="liquid-profile-report.md"
+          RESULTS_JSON="[]"
+
+          TEMPLATES=("index" "collection" "product" "cart")
+          PATHS=("/" "/collections" "/products" "/cart")
+
+          echo "## Liquid Performance Report" > "$REPORT_FILE"
+          echo "" >> "$REPORT_FILE"
+          echo "| Template | Avg TTFB (last 3) | Run 1 (warm-up) | Run 2 | Run 3 | Run 4 |" >> "$REPORT_FILE"
+          echo "|----------|-------------------|-----------------|-------|-------|-------|" >> "$REPORT_FILE"
+
+          HAS_ERROR=false
+
+          for i in "${!TEMPLATES[@]}"; do
+            TEMPLATE="${TEMPLATES[$i]}"
+            URL_PATH="${PATHS[$i]}"
+            echo ""
+            echo "=== Profiling $TEMPLATE ($URL_PATH) ==="
+
+            TIMES=()
+            ALL_TIMES_DISPLAY=()
+
+            for ((iter=1; iter<=ITERATIONS; iter++)); do
+              echo "  Iteration $iter/$ITERATIONS for $TEMPLATE..."
+
+              START_MS=$(date +%s%N)
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                --connect-timeout 30 \
+                --max-time 60 \
+                "https://${STORE}${URL_PATH}?preview_theme_id=${THEME_ID}" \
+                -H "Accept: text/html") || true
+              END_MS=$(date +%s%N)
+
+              TTFB_MS=$(( (END_MS - START_MS) / 1000000 ))
+              echo "    HTTP $HTTP_CODE — TTFB: ${TTFB_MS}ms"
+
+              TIMES+=("$TTFB_MS")
+              ALL_TIMES_DISPLAY+=("${TTFB_MS}ms")
+
+              if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "301" ] && [ "$HTTP_CODE" != "302" ]; then
+                echo "    Warning: unexpected HTTP status $HTTP_CODE"
+              fi
+
+              sleep 2
+            done
+
+            WARMUP="${ALL_TIMES_DISPLAY[0]}"
+
+            if [ ${#TIMES[@]} -ge 4 ]; then
+              SUM=0
+              COUNT=0
+              for ((j=1; j<${#TIMES[@]}; j++)); do
+                SUM=$((SUM + TIMES[j]))
+                COUNT=$((COUNT + 1))
+              done
+              AVG=$((SUM / COUNT))
+            else
+              SUM=0
+              for t in "${TIMES[@]}"; do
+                SUM=$((SUM + t))
+              done
+              AVG=$((SUM / ${#TIMES[@]}))
+            fi
+
+            RUN2="${ALL_TIMES_DISPLAY[1]:-n/a}"
+            RUN3="${ALL_TIMES_DISPLAY[2]:-n/a}"
+            RUN4="${ALL_TIMES_DISPLAY[3]:-n/a}"
+
+            echo "| \`$TEMPLATE\` | **${AVG}ms** | $WARMUP | $RUN2 | $RUN3 | $RUN4 |" >> "$REPORT_FILE"
+
+            RESULTS_JSON=$(echo "$RESULTS_JSON" | jq --arg t "$TEMPLATE" --argjson avg "$AVG" \
+              --argjson times "$(printf '%s\n' "${TIMES[@]}" | jq -s '.')" \
+              '. + [{"template": $t, "avg_ms": $avg, "times_ms": $times}]')
+
+            echo "  → $TEMPLATE average (last 3): ${AVG}ms"
+          done
+
+          echo "" >> "$REPORT_FILE"
+          echo "_${ITERATIONS} iterations per template; average excludes the first (warm-up) run._" >> "$REPORT_FILE"
+          echo "_Theme ID: ${THEME_ID} | Store: ${STORE}_" >> "$REPORT_FILE"
+
+          echo ""
+          echo "=== Report ==="
+          cat "$REPORT_FILE"
+
+          {
+            echo "report<<REPORT_EOF"
+            cat "$REPORT_FILE"
+            echo "REPORT_EOF"
+          } >> $GITHUB_OUTPUT
+
+          echo "results_json=$(echo "$RESULTS_JSON" | jq -c '.')" >> $GITHUB_OUTPUT
+
+      - name: Post results as job summary
+        env:
+          REPORT: ${{ steps.profile.outputs.report }}
+        run: |
+          echo "$REPORT" >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup preview theme
+        if: always()
+        env:
+          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          THEME_ID: ${{ steps.share.outputs.theme_id }}
+        run: |
+          if [ -z "$THEME_ID" ]; then
+            echo "No theme ID to clean up."
+            exit 0
+          fi
+
+          echo "Deleting preview theme $THEME_ID..."
+          shopify theme delete --theme "$THEME_ID" \
+            --store "$SHOPIFY_STORE_URL" \
+            --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
+            --force 2>&1 || echo "Theme cleanup failed (non-fatal)."

@@ -131,4 +131,4 @@ Include testing scenarios in comments:
 {% endcomment %}
 ```
 
-[snippet-example.liquid](mdc:.cursor/rules/examples/snippet-example.liquid)
+[snippet-example.liquid](mdc:.config/ai/rules/examples/snippet-example.liquid)

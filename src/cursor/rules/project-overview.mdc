@@ -55,14 +55,32 @@ Use `_scripts/electric-modal.js` as the gold standard for all web components.
 
 ## File Organization
 ```
-_scripts/        # Web components and utilities
-assets/          # Compiled CSS/JS and static assets
+_scripts/        # Source: web components and JS utilities (edit here)
+_styles/         # Source: Tailwind/CSS entrypoint (_styles/main.css)
+_schemas/        # Source: section/block schema definitions
+assets/          # GENERATED build outputs + static assets (do not hand-edit generated files)
 sections/        # Liquid section files
 snippets/        # Reusable Liquid snippets
 templates/       # Page templates
 locales/         # Translation files
 config/          # Theme settings
 ```
+
+## Build Outputs vs Source
+
+`assets/` contains both static assets and **generated** build outputs. The CLI (`climaybe serve` / `climaybe build`) compiles sources into `assets/` and regenerates them on every save and in CI. Always edit the **source**, never the generated output:
+
+| Source (edit this) | Generated output (do NOT edit) |
+| --- | --- |
+| `_scripts/main.js` | `assets/index.js` |
+| `_scripts/<name>.js` (top-level entry) | `assets/<name>.js` |
+| `_styles/main.css` | `assets/style.css` |
+| `_schemas/<name>.js` / `.json` | injected `{% schema %}` block in `sections/*.liquid` & `blocks/*.liquid` |
+
+Notes:
+- JS bundling follows `import` statements: files imported by a top-level `_scripts/*.js` entry are **inlined** into that bundle, not emitted separately.
+- Any manual edit to `assets/index.js`, `assets/*.js`, or `assets/style.css` is **overwritten** on the next save (watcher) or build. Make JS changes in `_scripts/`, CSS in `_styles/`, and schema changes in `_schemas/`.
+- **Orphan cleanup:** on a full build (`climaybe build` / `climaybe build-scripts`, and the `serve` watcher), any `assets/*.js` that the current `_scripts/` build does not produce is **deleted** as a stale artifact. To add a new JS asset, create a top-level `_scripts/<name>.js` entry — do not drop a hand-written `.js` into `assets/` (it will be removed). Liquid-processed assets (`*.js.liquid`) and non-JS files are never touched.
 
 ## Code Review Requirements
 All code must pass the checklist in `javascript-standards.mdc` before merge.

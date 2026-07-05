@@ -1,7 +1,7 @@
 ---
 description: JavaScript component refactor tasks and improvement tracking
 globs:
-  - "**/*.js"
+  - "_scripts/**/*.js"
 alwaysApply: false
 ---
 # JavaScript Component Refactor Tasks

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, basename, dirname, normalize } from 'node:path';
 
 function extractImportRecords(content) {
@@ -161,6 +161,30 @@ function collectFilesToIsolate({ scriptsDir, entryFile }) {
   return isolateFiles;
 }
 
+function removeOrphanScriptAssets({ cwd, keepNames }) {
+  // Delete assets/*.js that this build did not produce. The Electric Maybe build
+  // model treats assets/*.js as generated output of _scripts/, so any *.js without
+  // a matching bundle output is stale and should be removed. Only plain *.js files
+  // are considered — Liquid-processed assets (e.g. *.js.liquid) are left untouched.
+  const assetsDir = join(cwd, 'assets');
+  if (!existsSync(assetsDir)) return [];
+
+  const removed = [];
+  for (const dirent of readdirSync(assetsDir, { withFileTypes: true })) {
+    if (!dirent.isFile()) continue;
+    const name = dirent.name;
+    if (!name.endsWith('.js')) continue;
+    if (keepNames.has(name)) continue;
+    try {
+      unlinkSync(join(assetsDir, name));
+      removed.push(name);
+    } catch {
+      // Best effort: a failed unlink shouldn't break the build.
+    }
+  }
+  return removed;
+}
+
 function listTopLevelEntrypoints(scriptsDir) {
   if (!existsSync(scriptsDir)) return [];
   return readdirSync(scriptsDir, { withFileTypes: true })
@@ -234,9 +258,18 @@ export function buildScripts({ cwd = process.cwd(), entry = null, minify = false
     }
   }
   if (entrypoints.length === 0) {
-    return { bundles: [] };
+    return { bundles: [], removed: [] };
   }
   const bundles = entrypoints.map((entryFile) => buildSingleEntrypoint({ cwd, entryFile, minify }));
-  return { bundles };
+
+  // Only prune orphans on a full build (no explicit entry). A targeted single-entry
+  // build must not delete the other bundles' outputs.
+  let removed = [];
+  if (!entry) {
+    const keepNames = new Set(bundles.map((b) => basename(b.outputPath)));
+    removed = removeOrphanScriptAssets({ cwd, keepNames });
+  }
+
+  return { bundles, removed };
 }
 

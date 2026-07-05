@@ -11,10 +11,10 @@ Runs theme linting (e.g. Shopify Theme Check) and maps each finding to project r
 
 When interpreting results and suggesting fixes, read and apply:
 
-1. `.cursor/rules/00-rule-index.mdc` — rule index
-2. `.cursor/rules/liquid.mdc` — Liquid syntax and usage
-3. `.cursor/rules/sections.mdc` — section structure and schema
-4. `.cursor/rules/snippets.mdc` — snippet patterns
+1. `.config/ai/rules/00-rule-index.mdc` — rule index
+2. `.config/ai/rules/liquid.mdc` — Liquid syntax and usage
+3. `.config/ai/rules/sections.mdc` — section structure and schema
+4. `.config/ai/rules/snippets.mdc` — snippet patterns
 
 ## Workflow
 

@@ -93,6 +93,21 @@ describe('workflows', () => {
       }
     });
 
+    it('backports store sync commits without waiting for next root edit', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('multi', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'multistore-hotfix-to-main.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+
+        assert.match(workflow, /STORE_CHANGED/);
+        assert.match(workflow, /git diff --quiet "\$MERGE_BASE" "origin\/\$SOURCE" -- "stores\/\$\{SOURCE_ALIAS\}\/"/);
+        assert.match(workflow, /\[ -n "\$COMMITS" \] \|\| \[ -n "\$STORE_CHANGED" \]/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('keeps live minified assets out of main hotfix backports', () => {
       const dir = setup();
       try {
@@ -129,9 +144,82 @@ describe('workflows', () => {
         const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
         const hasPreview = files.some((f) => f.includes('pr-update') || f.includes('preview'));
         assert.ok(hasPreview, 'expected at least one preview workflow');
+        const hasMulti = files.includes('cleanup-orphan-preview-themes.yml');
+        const hasPublish = files.includes('reusable-publish-pr-preview-store.yml');
         const prUpdate = readFileSync(join(workflowsDir, 'pr-update.yml'), 'utf-8');
-        assert.match(prUpdate, /dorny\/paths-filter/);
-        assert.match(prUpdate, /stores\/\*\*/);
+        const prClose = readFileSync(join(workflowsDir, 'pr-close.yml'), 'utf-8');
+        const orphanCleanup = readFileSync(join(workflowsDir, 'cleanup-orphan-preview-themes.yml'), 'utf-8');
+        const publishPreview = readFileSync(join(workflowsDir, 'reusable-publish-pr-preview-store.yml'), 'utf-8');
+        const commentWorkflow = readFileSync(join(workflowsDir, 'reusable-comment-on-pr.yml'), 'utf-8');
+        assert.match(prUpdate, /fromJson\(needs\.validate-environment\.outputs\.preview_targets_json\)/);
+        assert.match(
+          prUpdate,
+          /cleanup-themes:\s*\n\s*needs:\s*\[validate-environment,\s*extract-pr-number,\s*validate-secrets-per-store\]/m
+        );
+        assert.match(prUpdate, /HEAD_REF:\s*\$\{\{\s*github\.event\.pull_request\.head\.ref\s*\}\}/);
+        assert.match(prUpdate, /const branchRef = headRef \|\| baseRef;/);
+        assert.match(prClose, /HEAD_REF:\s*\$\{\{\s*github\.event\.pull_request\.head\.ref\s*\}\}/);
+        assert.match(prClose, /const branchRef = headRef \|\| baseRef;/);
+        assert.match(orphanCleanup, /actions:\s*write/);
+        assert.match(orphanCleanup, /pull_request:\s*\n\s*types:\s*\[closed\]/m);
+        assert.match(publishPreview, /path:\s*fragment-\*\.json/);
+        assert.match(commentWorkflow, /climaybe-preview-comment/);
+        assert.match(commentWorkflow, /issues\.updateComment/);
+        assert.match(commentWorkflow, /issues\.deleteComment/);
+        assert.match(prUpdate, /reusable-publish-pr-preview-store\.yml/);
+        assert.ok(hasMulti, 'expected cleanup-orphan-preview-themes.yml');
+        assert.ok(hasPublish, 'expected reusable-publish-pr-preview-store.yml');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('includes profile workflows when includeProfile is true', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeProfile: true }, dir);
+        const workflowsDir = join(dir, '.github', 'workflows');
+        const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
+        const hasProfile = files.some((f) => f.includes('liquid-performance') || f.includes('liquid-profile'));
+        assert.ok(hasProfile, 'expected at least one profile workflow');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('does not include profile workflows by default', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', {}, dir);
+        const workflowsDir = join(dir, '.github', 'workflows');
+        const files = readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'));
+        const hasProfile = files.some((f) => f.includes('liquid-performance') || f.includes('liquid-profile'));
+        assert.ok(!hasProfile, 'expected no profile workflows when not opted in');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('profile workflow measures 4 templates with TTFB averaging', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeProfile: true }, dir);
+        const reusable = readFileSync(join(dir, '.github', 'workflows', 'reusable-liquid-profile.yml'), 'utf-8');
+        assert.match(reusable, /index/);
+        assert.match(reusable, /collection/);
+        assert.match(reusable, /product/);
+        assert.match(reusable, /cart/);
+        assert.match(reusable, /iterations/);
+        assert.match(reusable, /warm-up/);
+        assert.match(reusable, /shopify theme share/);
+        assert.match(reusable, /shopify theme delete/);
+        assert.match(reusable, /GITHUB_STEP_SUMMARY/);
+
+        const pipeline = readFileSync(join(dir, '.github', 'workflows', 'liquid-performance.yml'), 'utf-8');
+        assert.match(pipeline, /push:/);
+        assert.match(pipeline, /branches:.*main/);
+        assert.match(pipeline, /reusable-liquid-profile\.yml/);
+        assert.match(pipeline, /hotfix-backport/);
       } finally {
         teardown();
       }
@@ -159,6 +247,19 @@ describe('workflows', () => {
         const buildPipeline = readFileSync(join(workflowsDir, 'build-pipeline.yml'), 'utf-8');
         assert.match(buildPipeline, /startsWith\(github\.ref_name, 'live-'\)/);
         assert.match(buildPipeline, /contains\(github\.actor, '\[bot\]'\)/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('reads head commit message safely in post-merge-tag detect step', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', {}, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'post-merge-tag.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+        assert.match(workflow, /COMMIT_MESSAGE:\s*\$\{\{\s*github\.event\.head_commit\.message\s*\}\}/);
+        assert.match(workflow, /COMMIT_MSG=\$\(printf '%s\\n' "\$COMMIT_MESSAGE" \| head -1\)/);
       } finally {
         teardown();
       }

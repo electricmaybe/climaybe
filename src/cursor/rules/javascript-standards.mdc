@@ -1,13 +1,15 @@
 ---
 description: Professional JavaScript standards for Electric Maybe Shopify Theme. All JavaScript files must follow these patterns for consistency, performance, and maintainability.
 globs:
-  - "**/*.js"
+  - "_scripts/**/*.js"
   - "sections/*.liquid"
   - "snippets/*.liquid"
 alwaysApply: false
 ---
 
 # JavaScript Development Standards
+
+> **Source vs build output:** Edit JavaScript in `_scripts/`. The CLI bundles `_scripts/*.js` into `assets/*.js` (`main.js` → `assets/index.js`) on every save and in CI, so `assets/*.js` is a **generated artifact** — never edit it directly, your changes will be overwritten. See `project-overview.mdc` (Build Outputs vs Source).
 
 ## Core Principles
 

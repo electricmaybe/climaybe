@@ -366,6 +366,95 @@ console.log("main");
     }
   });
 
+  it('removes orphan assets/*.js that have no _scripts source on a full build', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("main");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'productpage.js'), 'console.log("product");\n', 'utf-8');
+
+      // Pre-existing stale outputs with no matching _scripts source.
+      writeFileSync(join(dir, 'assets', 'legacy.js'), 'console.log("legacy");\n', 'utf-8');
+      writeFileSync(join(dir, 'assets', 'index.min.js'), 'console.log("old-min");\n', 'utf-8');
+
+      const { removed } = buildScripts({ cwd: dir });
+
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'productpage.js')));
+      assert.ok(!existsSync(join(dir, 'assets', 'legacy.js')), 'orphan legacy.js should be removed');
+      assert.ok(!existsSync(join(dir, 'assets', 'index.min.js')), 'stale index.min.js should be removed');
+      assert.deepStrictEqual([...removed].sort(), ['index.min.js', 'legacy.js']);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('does not remove non-js assets or *.js.liquid files', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("main");\n', 'utf-8');
+
+      writeFileSync(join(dir, 'assets', 'theme.js.liquid'), 'console.log("{{ x }}");\n', 'utf-8');
+      writeFileSync(join(dir, 'assets', 'style.css'), 'body{}\n', 'utf-8');
+      writeFileSync(join(dir, 'assets', 'logo.svg'), '<svg></svg>\n', 'utf-8');
+
+      const { removed } = buildScripts({ cwd: dir });
+
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'theme.js.liquid')), 'Liquid-processed JS must be preserved');
+      assert.ok(existsSync(join(dir, 'assets', 'style.css')));
+      assert.ok(existsSync(join(dir, 'assets', 'logo.svg')));
+      assert.deepStrictEqual(removed, []);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('does not remove other bundle outputs during a targeted single-entry build', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, '_scripts', 'main.js'), 'console.log("main");\n', 'utf-8');
+      writeFileSync(join(dir, '_scripts', 'productpage.js'), 'console.log("product");\n', 'utf-8');
+
+      // A previously built sibling output should survive a single-entry rebuild.
+      writeFileSync(join(dir, 'assets', 'index.js'), 'console.log("old-index");\n', 'utf-8');
+
+      const { removed } = buildScripts({ cwd: dir, entry: 'productpage' });
+
+      assert.ok(existsSync(join(dir, 'assets', 'productpage.js')));
+      assert.ok(existsSync(join(dir, 'assets', 'index.js')), 'single-entry build must not prune sibling outputs');
+      assert.deepStrictEqual(removed, []);
+    } finally {
+      teardown();
+    }
+  });
+
+  it('does not touch assets when _scripts has no entrypoints', () => {
+    const dir = setup();
+    try {
+      mkdirSync(join(dir, '_scripts'), { recursive: true });
+      mkdirSync(join(dir, 'assets'), { recursive: true });
+
+      writeFileSync(join(dir, 'assets', 'vendor.js'), 'console.log("vendor");\n', 'utf-8');
+
+      const { bundles, removed } = buildScripts({ cwd: dir });
+
+      assert.deepStrictEqual(bundles, []);
+      assert.deepStrictEqual(removed, []);
+      assert.ok(existsSync(join(dir, 'assets', 'vendor.js')), 'no entrypoints means no pruning');
+    } finally {
+      teardown();
+    }
+  });
+
   it('minifies output only when minify option is enabled', () => {
     const dir = setup();
     try {

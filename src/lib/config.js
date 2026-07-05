@@ -181,6 +181,23 @@ export function getStoreAliases(cwd = process.cwd()) {
 }
 
 /**
+ * Resolve the store alias for `default_store` (the domain last set by `climaybe switch` or serve).
+ * @param {string} [cwd]
+ * @returns {string | null}
+ */
+export function getAliasForDefaultStore(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  const domain = config?.default_store;
+  const stores = config?.stores;
+  if (!domain || !stores || typeof stores !== 'object') return null;
+  const normalized = String(domain).trim();
+  for (const [alias, storeDomain] of Object.entries(stores)) {
+    if (String(storeDomain).trim() === normalized) return alias;
+  }
+  return null;
+}
+
+/**
  * Determine the current mode: 'single' or 'multi'.
  */
 export function getMode(cwd = process.cwd()) {
@@ -244,11 +261,29 @@ export function isCommitlintEnabled(cwd = process.cwd()) {
 }
 
 /**
- * Whether bundled Cursor rules, skills, and subagents were installed (init or add-cursor).
+ * Whether optional Liquid performance profile workflows are enabled.
+ */
+export function isProfileWorkflowsEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.profile_workflows === true;
+}
+
+/**
+ * Whether the bundled AI ruleset (rules, skills, subagents) was installed (init or add-cursor).
  */
 export function isCursorSkillsEnabled(cwd = process.cwd()) {
   const config = readConfig(cwd);
   return config?.cursor_skills === true;
+}
+
+/**
+ * Editors bridged to the .config/ai ruleset. Falls back to ['cursor'] for configs
+ * written before the multi-editor option existed.
+ */
+export function getAiEditors(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  const editors = config?.ai_editors;
+  return Array.isArray(editors) && editors.length > 0 ? editors : ['cursor'];
 }
 
 /**
