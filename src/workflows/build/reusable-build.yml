@@ -45,7 +45,7 @@ jobs:
             HAS_SCRIPTS=true
           fi
           HAS_STYLES=false
-          if [ -f "_styles/main.css" ]; then
+          if [ -f "_styles/main.css" ] || [ -f "_styles/critical.css" ]; then
             HAS_STYLES=true
           fi
           echo "has_scripts=$HAS_SCRIPTS" >> $GITHUB_OUTPUT
@@ -108,6 +108,9 @@ jobs:
           fi
           if [ -f "assets/style.css" ]; then
             git add -f assets/style.css
+          fi
+          if [ -f "assets/critical.css" ]; then
+            git add -f assets/critical.css
           fi
           if git diff --staged --quiet; then
             echo "No changes to commit"

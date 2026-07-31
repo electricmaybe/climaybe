@@ -68,12 +68,44 @@ function spawnLogged(
   return child;
 }
 
+export const CSS_ENTRYPOINTS = [
+  { input: '_styles/main.css', output: 'assets/style.css' },
+  { input: '_styles/critical.css', output: 'assets/critical.css' },
+];
+
+export function getPresentCssEntrypoints(cwd = process.cwd()) {
+  return CSS_ENTRYPOINTS.filter(({ input }) => existsSync(join(cwd, input)));
+}
+
 function runTailwind(args, { cwd = process.cwd(), env = process.env, name = 'tailwind' } = {}) {
   return spawnLogged(
     'npx',
     ['-y', '--package', '@tailwindcss/cli@latest', '--package', 'tailwindcss@latest', 'tailwindcss', ...args],
     { name, cwd, env, stdio: 'pipe', tag: 'tailwind', color: pc.blue }
   );
+}
+
+function runTailwindForEntrypoints({ cwd = process.cwd(), env = process.env, watch = false, minify = false } = {}) {
+  const entrypoints = getPresentCssEntrypoints(cwd);
+  const processes = [];
+
+  for (const { input, output } of entrypoints) {
+    const args = ['-i', input, '-o', output];
+    if (watch) args.push('--watch');
+    if (minify) args.push('--minify');
+    processes.push(runTailwind(args, { cwd, env, name: 'tailwind' }));
+    writeTaggedLine(
+      'tailwind',
+      pc.blue,
+      watch ? `watching ${input} -> ${output}` : `building ${input} -> ${output}`
+    );
+  }
+
+  if (entrypoints.length === 0) {
+    writeTaggedLine('tailwind', pc.blue, 'skipped (no _styles/main.css or _styles/critical.css)');
+  }
+
+  return processes;
 }
 
 function safeClose(w) {
@@ -231,15 +263,7 @@ export async function serveShopify({ cwd = process.cwd(), skipMultiStorePrep = f
 export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } = {}) {
   printServeStartupHeader();
   const env = { ...process.env, NODE_ENV: 'production' };
-  const styleEntrypoint = join(cwd, '_styles', 'main.css');
-  const tailwind = existsSync(styleEntrypoint)
-    ? runTailwind(['-i', '_styles/main.css', '-o', 'assets/style.css', '--watch'], { cwd, env, name: 'tailwind' })
-    : null;
-  if (!tailwind) {
-    writeTaggedLine('tailwind', pc.blue, 'skipped (missing _styles/main.css)');
-  } else {
-    writeTaggedLine('tailwind', pc.blue, 'watching _styles/main.css -> assets/style.css');
-  }
+  const tailwind = runTailwindForEntrypoints({ cwd, env, watch: true });
 
   // Optional dev MCP (non-blocking if missing). @shopify/dev-mcp pulls hydrogen (peers react-router 7.12)
   // alongside react-router 7.13 — npm warns with ERESOLVE unless legacy peer resolution is enabled.
@@ -373,7 +397,7 @@ export function serveAssets({ cwd = process.cwd(), includeThemeCheck = false } =
     safeClose(scriptsWatch);
     safeClose(schemasWatch);
     safeClose(themeCheckWatch);
-    safeKill(tailwind);
+    for (const proc of tailwind) safeKill(proc);
     safeKill(devMcp);
   };
 
@@ -463,11 +487,7 @@ export function buildAll({ cwd = process.cwd() } = {}) {
     console.log(pc.red(`\n  build-scripts failed: ${err.message}\n`));
     scriptsOk = false;
   }
-  const tailwind = runTailwind(['-i', '_styles/main.css', '-o', 'assets/style.css', '--minify'], {
-    cwd,
-    env,
-    name: 'tailwind',
-  });
+  const tailwind = runTailwindForEntrypoints({ cwd, env, minify: true });
   return { schemasOk, scriptsOk, tailwind };
 }
 

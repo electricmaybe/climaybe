@@ -282,11 +282,11 @@ Requires `SHOPIFY_STORE_URL` and `SHOPIFY_THEME_ACCESS_TOKEN` secrets. When secr
 Optional package. `climaybe init` asks two separate questions: **build workflows** (bundle `_scripts` JS + compile Tailwind in CI; default: yes) and, if build is on, **Lighthouse CI** (performance + a11y budget on the `staging` branch; default: yes, stored as `lighthouse_workflows`). Lighthouse runs inside the build pipeline, so it requires build workflows.
 
 When enabled, builds are **resilient**:
-- If `_scripts/*.js` or `_styles/main.css` are missing, the build workflow **skips** those steps and continues.
+- If `_scripts/*.js` or CSS entrypoints (`_styles/main.css`, `_styles/critical.css`) are missing, the build workflow **skips** those steps and continues.
 - `init` may offer to create entrypoints; **default answer is No**.
 - Script bundling preserves comments/spacing and emits bundles only for root entry files (files imported by other top-level `_scripts/*.js` are inlined, not emitted separately).
 - Script bundles are written to `assets/*.js` (readable by default; use `climaybe build-scripts --minify` if you want minified output).
-- `assets/*.js`, `assets/style.css`, and the injected `{% schema %}` blocks are **generated outputs** — edit the source in `_scripts/`, `_styles/`, and `_schemas/` instead, since the watcher/build regenerate (and overwrite) the outputs on save and in CI.
+- `assets/*.js`, `assets/style.css`, `assets/critical.css` (when used), and the injected `{% schema %}` blocks are **generated outputs** — edit the source in `_scripts/`, `_styles/`, and `_schemas/` instead, since the watcher/build regenerate (and overwrite) the outputs on save and in CI.
 - **Orphan cleanup:** when `_scripts/` is in use, a full build (`climaybe build`, `climaybe build-scripts`, and the `serve` watcher) deletes any `assets/*.js` that no longer has a matching `_scripts/` source. Add new JS via a top-level `_scripts/<name>.js` entry, not by hand-editing `assets/`. Liquid-processed `*.js.liquid` assets and non-JS files are left untouched; targeted single-entry builds (`build-scripts <entry>`) skip pruning.
 - Live minified `assets/*` changes are intentionally excluded from hotfix backports to `main` (no branch-specific `.gitignore` split required).
 
@@ -309,7 +309,7 @@ Optional local-development bundle, enabled during `climaybe init` (default: yes)
 | `.prettierrc` | Prettier with the Shopify Liquid plugin |
 | `.lighthouserc.js` | Lighthouse CI config: local URL, start command, and score thresholds |
 | `.vscode/tasks.json` *(optional)* | One background task that runs `climaybe serve` (added only if you opt in) |
-| `.gitignore` | A managed block is merged in (editor dirs, `node_modules`, generated `assets/index.js` + `assets/style.css`, `.shopify`, `.vercel`) |
+| `.gitignore` | A managed block is merged in (editor dirs, `node_modules`, generated `assets/index.js` + `assets/style.css` + `assets/critical.css`, `.shopify`, `.vercel`) |
 | `package.json` | Ensures the `climaybe` dependency and `tailwindcss` devDependency exist; fills default name/description/author if missing |
 | `climaybe.config.json` | The local source-of-truth config (`port`, `default_store`, `dev_kit`, `vscode_tasks`, `project_type`) |
 

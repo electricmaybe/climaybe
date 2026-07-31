@@ -78,7 +78,7 @@ When adding above-the-fold UI to header or index hero, extend critical `@source`
 - **Pattern:** `media="print" onload="this.media='all'"` + `<noscript>` fallback
 - **Also:** `rel="preload" as="style" fetchpriority="high"` for early discovery
 
-Build: `npm run tailwind:build` (critical + main + `scripts:build`).
+Build: `climaybe build` or `climaybe serve` (compiles `_styles/critical.css` and `_styles/main.css` when present).
 
 ### Lazysizes
 
@@ -310,7 +310,7 @@ Inject `cart.js` when cart drawer opens — not on every page upfront (if theme 
 2. **Network** — Slow 4G; confirm preloads fire before LCP image; woff2 not woff
 3. **Console** — no 404 on `assets/*.js` referenced from Liquid
 4. **Block test** — block `googletagmanager.com`; if TBT unchanged, theme work is sufficient; if TBT drops, marketing stack is next bottleneck
-5. **Build** — `npm run tailwind:build` before ship
+5. **Build** — `climaybe build` before ship
 
 ### Template LCP candidates (verify per store)
 

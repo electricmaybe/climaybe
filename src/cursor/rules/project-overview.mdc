@@ -75,11 +75,12 @@ config/          # Theme settings
 | `_scripts/main.js` | `assets/index.js` |
 | `_scripts/<name>.js` (top-level entry) | `assets/<name>.js` |
 | `_styles/main.css` | `assets/style.css` |
+| `_styles/critical.css` (optional) | `assets/critical.css` |
 | `_schemas/<name>.js` / `.json` | injected `{% schema %}` block in `sections/*.liquid` & `blocks/*.liquid` |
 
 Notes:
 - JS bundling follows `import` statements: files imported by a top-level `_scripts/*.js` entry are **inlined** into that bundle, not emitted separately.
-- Any manual edit to `assets/index.js`, `assets/*.js`, or `assets/style.css` is **overwritten** on the next save (watcher) or build. Make JS changes in `_scripts/`, CSS in `_styles/`, and schema changes in `_schemas/`.
+- Any manual edit to `assets/index.js`, `assets/*.js`, `assets/style.css`, or `assets/critical.css` is **overwritten** on the next save (watcher) or build. Make JS changes in `_scripts/`, CSS in `_styles/`, and schema changes in `_schemas/`.
 - **Orphan cleanup:** on a full build (`climaybe build` / `climaybe build-scripts`, and the `serve` watcher), any `assets/*.js` that the current `_scripts/` build does not produce is **deleted** as a stale artifact. To add a new JS asset, create a top-level `_scripts/<name>.js` entry — do not drop a hand-written `.js` into `assets/` (it will be removed). Liquid-processed assets (`*.js.liquid`) and non-JS files are never touched.
 
 ## Code Review Requirements

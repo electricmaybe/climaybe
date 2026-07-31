@@ -98,6 +98,7 @@ node_modules/
 .DS_Store
 **/.DS_Store
 assets/style.css
+assets/critical.css
 assets/index.js
 .shopify
 .vercel
