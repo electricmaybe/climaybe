@@ -200,6 +200,43 @@ describe('workflows', () => {
       }
     });
 
+    it('includes linear-status-sync when includeLinear is true', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeLinear: true }, dir);
+        const workflowPath = join(dir, '.github', 'workflows', 'linear-status-sync.yml');
+        assert.ok(existsSync(workflowPath), 'expected linear-status-sync.yml');
+        const workflow = readFileSync(workflowPath, 'utf-8');
+        assert.match(workflow, /climaybe — Linear Issue Status Sync/);
+        assert.match(workflow, /LINEAR_API_KEY/);
+        assert.match(workflow, /Staged @staging-<alias>/);
+        assert.match(workflow, /issueUpdate/);
+        assert.match(workflow, /\[skip-store-sync\]/);
+        assert.match(workflow, /\[stores-to-root\]/);
+        assert.match(workflow, /\[root-to-stores\]/);
+        assert.match(workflow, /\[hotfix-backport\]/);
+        assert.match(workflow, /chore\(release\)/);
+        assert.match(workflow, /staging-\*/);
+        assert.match(workflow, /live-\*/);
+        assert.match(workflow, /github\.event\.before/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('does not include linear workflows by default and removes them on rescaffold', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeLinear: true }, dir);
+        assert.ok(existsSync(join(dir, '.github', 'workflows', 'linear-status-sync.yml')));
+        scaffoldWorkflows('single', {}, dir);
+        const files = readdirSync(join(dir, '.github', 'workflows')).filter((f) => f.endsWith('.yml'));
+        assert.ok(!files.includes('linear-status-sync.yml'), 'expected linear workflow removed when disabled');
+      } finally {
+        teardown();
+      }
+    });
+
     it('profile workflow measures 4 templates with TTFB averaging', () => {
       const dir = setup();
       try {

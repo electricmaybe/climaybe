@@ -8,6 +8,8 @@ import {
   promptAiEditors,
   promptOwnerRepo,
   promptNoRemoteAction,
+  promptLinearWorkflows,
+  promptLinearTeam,
 } from '../../src/lib/prompts.js';
 
 describe('prompts (pure helpers)', () => {
@@ -110,6 +112,27 @@ describe('prompts (interactive helpers)', () => {
     it('can choose to skip', async () => {
       prompts.inject(['skip']);
       assert.strictEqual(await promptNoRemoteAction('GitHub'), 'skip');
+    });
+  });
+
+  describe('promptLinearWorkflows', () => {
+    it('returns the confirm choice', async () => {
+      prompts.inject([true]);
+      assert.strictEqual(await promptLinearWorkflows(), true);
+      prompts.inject([false]);
+      assert.strictEqual(await promptLinearWorkflows(), false);
+    });
+  });
+
+  describe('promptLinearTeam', () => {
+    it('uppercases a team key', async () => {
+      prompts.inject(['vol']);
+      assert.strictEqual(await promptLinearTeam(), 'VOL');
+    });
+
+    it('allows an empty team key', async () => {
+      prompts.inject(['']);
+      assert.strictEqual(await promptLinearTeam(), '');
     });
   });
 });

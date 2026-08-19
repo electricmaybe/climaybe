@@ -41,6 +41,19 @@ describe('CLI', () => {
     assert.ok(rootUpdate?.aliases().includes('update-workflows'));
   });
 
+  it('registers update:linear-key on theme and root with hyphen alias', () => {
+    const program = createProgram();
+    const theme = program.commands.find((c) => c.name() === 'theme');
+    const themeCmd = theme.commands.find((c) => c.name() === 'update:linear-key');
+    const rootCmd = program.commands.find((c) => c.name() === 'update:linear-key');
+    assert.ok(themeCmd);
+    assert.ok(rootCmd);
+    assert.ok(themeCmd.aliases().includes('update-linear-key'));
+    assert.ok(rootCmd.aliases().includes('update-linear-key'));
+    const flags = themeCmd.options.map((o) => o.long);
+    assert.ok(flags.includes('--team'));
+  });
+
   it('registers migrate-legacy-config on theme and root', () => {
     const program = createProgram();
     const theme = program.commands.find((c) => c.name() === 'theme');

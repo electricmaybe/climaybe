@@ -17,7 +17,7 @@ function resolveGhInvocation(cwd = process.cwd()) {
 
 /**
  * Secret/variable definitions for CI (GitHub Actions or GitLab CI).
- * condition: 'always' = required for core workflows; 'preview' | 'build' = only when that feature is enabled.
+ * condition: 'always' = prompted for core workflows; 'preview' | 'build' | 'linear' = only when that feature is enabled.
  */
 export const SECRET_DEFINITIONS = [
   {
@@ -27,6 +27,14 @@ export const SECRET_DEFINITIONS = [
     description: 'Google Gemini API key for AI-generated changelogs on release',
     whereToGet:
       'Google AI Studio: https://aistudio.google.com/apikey — create an API key, then paste it here.',
+  },
+  {
+    name: 'LINEAR_API_KEY',
+    required: false,
+    condition: 'linear',
+    description: 'Linear personal API key for issue status sync from staging / store / live branch pushes',
+    whereToGet:
+      'Linear → Settings → Account → Security & access → Personal API keys: https://linear.app/settings/account/security',
   },
   {
     name: 'SHOPIFY_STORE_URL',
@@ -291,7 +299,13 @@ export function getStoreUrlSecretsFromConfig({ enablePreviewWorkflows, enableBui
  * Get secrets we need to prompt for (excludes store URLs; those are set from config).
  * Theme token(s) are required when preview is enabled. In multi-store, all Shopify tokens are per-store.
  */
-export function getSecretsToPrompt({ enablePreviewWorkflows, enableBuildWorkflows, mode = 'single', stores = [] }) {
+export function getSecretsToPrompt({
+  enablePreviewWorkflows,
+  enableBuildWorkflows,
+  enableLinearWorkflows = false,
+  mode = 'single',
+  stores = [],
+}) {
   const isMulti = mode === 'multi' && stores.length > 1;
 
   const base = SECRET_DEFINITIONS.filter((s) => {
@@ -300,6 +314,7 @@ export function getSecretsToPrompt({ enablePreviewWorkflows, enableBuildWorkflow
     if (s.condition === 'preview_or_build') return enablePreviewWorkflows || enableBuildWorkflows;
     if (s.condition === 'preview' && enablePreviewWorkflows) return true;
     if (s.condition === 'build' && enableBuildWorkflows) return true;
+    if (s.condition === 'linear' && enableLinearWorkflows) return true;
     return false;
   });
 

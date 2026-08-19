@@ -269,6 +269,14 @@ export function isProfileWorkflowsEnabled(cwd = process.cwd()) {
 }
 
 /**
+ * Whether optional Linear issue-status sync workflows are enabled.
+ */
+export function isLinearWorkflowsEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.linear_workflows === true;
+}
+
+/**
  * Whether the bundled AI ruleset (rules, skills, subagents) was installed (init or add-cursor).
  */
 export function isCursorSkillsEnabled(cwd = process.cwd()) {

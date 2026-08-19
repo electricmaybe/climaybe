@@ -164,6 +164,60 @@ export async function promptProfileWorkflows() {
 }
 
 /**
+ * Ask whether Linear issue-status sync should be scaffolded (theme default: yes).
+ */
+export async function promptLinearWorkflows() {
+  const { enableLinearWorkflows } = await prompts({
+    type: 'confirm',
+    name: 'enableLinearWorkflows',
+    message: 'Enable Linear issue status sync? (update Linear from staging / store / live pushes)',
+    initial: true,
+  });
+
+  return !!enableLinearWorkflows;
+}
+
+/**
+ * Ask for the Linear team key (e.g. VOL from VOL-77). Empty is allowed.
+ * @param {{ initial?: string }} [opts]
+ * @returns {Promise<string>}
+ */
+export async function promptLinearTeam({ initial = '' } = {}) {
+  const { team } = await prompts({
+    type: 'text',
+    name: 'team',
+    message: 'Linear team key (e.g. VOL)',
+    initial: initial || '',
+    validate: (v) => {
+      const value = String(v || '').trim();
+      if (!value) return true;
+      if (!/^[A-Za-z]{2,10}$/.test(value)) return 'Use 2–10 letters (e.g. VOL)';
+      return true;
+    },
+  });
+
+  if (team === undefined) return '';
+  return String(team || '').trim().toUpperCase();
+}
+
+/**
+ * Hidden prompt for a Linear personal API key. Blank skips (optional).
+ * Never logs the value.
+ * @returns {Promise<string | null>}
+ */
+export async function promptLinearApiKey() {
+  const { value } = await prompts({
+    type: 'password',
+    name: 'value',
+    message: 'LINEAR_API_KEY (optional — leave blank to skip)',
+  });
+
+  if (value === undefined) return null;
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed || null;
+}
+
+/**
  * Ask whether Lighthouse CI should run as part of the build pipeline.
  * Only meaningful when build workflows are enabled (Lighthouse runs after the build).
  */
