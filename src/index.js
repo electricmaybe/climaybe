@@ -4,6 +4,7 @@ import { addStoreCommand } from './commands/add-store.js';
 import { switchCommand } from './commands/switch.js';
 import { syncCommand } from './commands/sync.js';
 import { updateCommand } from './commands/update-workflows.js';
+import { updateLinearKeyCommand } from './commands/update-linear-key.js';
 import { ensureBranchesCommand } from './commands/ensure-branches.js';
 import { setupCommitlintCommand } from './commands/setup-commitlint.js';
 import { addCursorSkillCommand } from './commands/add-cursor-skill.js';
@@ -101,6 +102,13 @@ function registerThemeCommands(cmd) {
     .alias('update-workflows')
     .description('Refresh workflows and all climaybe-managed project files')
     .action(updateCommand);
+
+  cmd
+    .command('update:linear-key')
+    .alias('update-linear-key')
+    .description('Set or rotate LINEAR_API_KEY and enable Linear issue status sync')
+    .option('--team <key>', 'Linear team key (e.g. VOL)')
+    .action(updateLinearKeyCommand);
 
   cmd
     .command('ensure-branches')

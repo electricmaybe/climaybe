@@ -64,12 +64,14 @@ shown in the prompt; press Enter to accept.
 4. Asks whether to enable **[preview + cleanup workflows](#preview-and-cleanup-workflows)** (default: yes)
 5. Asks whether to enable **[build workflows](#build-and-lighthouse-workflows)** (default: yes)
 6. If build is on, asks separately whether to run **[Lighthouse CI](#build-and-lighthouse-workflows)** on staging (default: yes)
-7. Asks whether to install the **[theme dev kit](#theme-dev-kit)** (default: yes), and if so whether to add VS Code tasks
-8. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
-9. Asks whether to set up **[branch protection](#branch-protection)** (default: yes)
-10. Asks whether to install the **[AI ruleset](#ai-ruleset)**, and if so which editors to bridge
-11. Writes `climaybe.config.json`, scaffolds workflows, and creates branches/store directories
-12. Optionally configures CI secrets (and can add a GitHub/GitLab remote if the folder has none)
+7. Asks whether to enable **[Liquid performance profiling](#optional-liquid-performance-profiling-package)** (default: yes)
+8. Asks whether to enable **[Linear issue status sync](#linear-issue-status-sync)** (default: yes), and if so the Linear team key (e.g. `VOL`)
+9. Asks whether to install the **[theme dev kit](#theme-dev-kit)** (default: yes), and if so whether to add VS Code tasks
+10. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
+11. Asks whether to set up **[branch protection](#branch-protection)** (default: yes)
+12. Asks whether to install the **[AI ruleset](#ai-ruleset)**, and if so which editors to bridge
+13. Writes `climaybe.config.json`, scaffolds workflows, and creates branches/store directories
+14. Optionally configures CI secrets (and can add a GitHub/GitLab remote if the folder has none). When Linear sync is enabled, `LINEAR_API_KEY` is in the skippable secret list.
 
 ### `climaybe app init`
 
@@ -141,6 +143,22 @@ npx climaybe update
 
 `update-workflows` still works as a backward-compatible alias.
 
+### `climaybe update:linear-key` / `climaybe theme update:linear-key`
+
+Set or rotate the GitHub secret `LINEAR_API_KEY` (or GitLab CI/CD variable) and enable Linear issue status sync. Hyphen form `update-linear-key` works as an alias. This is a one-shot command: it does not re-run the rest of init.
+
+```bash
+npx climaybe update:linear-key
+npx climaybe update:linear-key --team VOL
+```
+
+- Prompts (hidden) for a Linear personal API key; leave blank to skip uploading the secret
+- Optionally updates `linear_team` in `climaybe.config.json` (or pass `--team`)
+- Sets `linear_workflows: true` and scaffolds `.github/workflows/linear-status-sync.yml`
+- Never prints or writes the key to git/config
+
+Get a key at [Linear → Settings → Account → Security & access → Personal API keys](https://linear.app/settings/account/security).
+
 ### `climaybe setup-commitlint`
 
 Set up **only** commitlint + Husky (conventional commits enforced on `git commit`). Use this if you skipped it at init or want to add it later.
@@ -170,6 +188,13 @@ The CLI writes config into `climaybe.config.json`:
   "preview_workflows": true,
   "build_workflows": true,
   "profile_workflows": true,
+  "linear_workflows": true,
+  "linear_team": "VOL",
+  "linear_statuses": {
+    "staging": "Staged @staging",
+    "store": "Staged @staging-<alias>",
+    "live": "Done"
+  },
   "lighthouse_workflows": true,
   "commitlint": true,
   "cursor_skills": true,
@@ -180,6 +205,8 @@ The CLI writes config into `climaybe.config.json`:
   }
 }
 ```
+
+`linear_team` is the Linear team key (from IDs like `VOL-77`). `linear_statuses.store` is a **literal** Linear workflow state name (angle brackets included), not interpolated with a store alias. Do **not** put `LINEAR_API_KEY` in this file.
 
 `lighthouse_workflows` gates Lighthouse CI inside the build pipeline (it still only runs on `staging` with the right secrets). `ai_editors` records which editors are bridged to `.config/ai/`. Older configs without these keys keep working: Lighthouse defaults to on when build workflows exist.
 
@@ -276,6 +303,29 @@ Requires `SHOPIFY_STORE_URL` and `SHOPIFY_THEME_ACCESS_TOKEN` secrets. When secr
 |----------|---------|-------------|
 | `liquid-performance.yml` | Push to `main` | Gate check for secrets, then calls reusable profiler |
 | `reusable-liquid-profile.yml` | workflow_call | Shares theme, measures TTFB per template × 4 iterations, reports avg of last 3, cleans up theme |
+
+### Linear issue status sync
+
+Optional. Enabled via `climaybe init` (`Enable Linear issue status sync?`; default: **yes**) or later with `climaybe update:linear-key`.
+
+Linear’s native git automations do not fire on climaybe’s second hop: `main-to-staging-stores` pushes directly to `staging-<alias>`, and live deploys are generic “Deploy to {alias}” PRs that do not re-mention Linear IDs. This Action scans commits on `staging`, `main`, `staging-*`, and `live-*` for IDs like `VOL-77` and moves those issues:
+
+| Branch | Linear status (defaults) |
+|--------|--------------------------|
+| `staging` (exact) | `Staged @staging` |
+| `staging-<alias>` **or** `main` in multi-store | `Staged @staging-<alias>` (literal name) |
+| `live-<alias>` | `Done` |
+| `main` in single-store | `Done` (main is production) |
+
+Status names are overridable via `linear_statuses` in `climaybe.config.json`. Issues are never moved backward (for example `Done` will not return to a Staged state). Loop commits (`[skip-store-sync]`, `[stores-to-root]`, `[root-to-stores]`, `[hotfix-backport]`, `chore(release)`) are skipped. If `LINEAR_API_KEY` is missing, the job succeeds as a no-op. Linear API errors fail per issue only; the GitHub job still succeeds.
+
+Configure Linear team workflow **regexes** in the Linear UI as usual; this Action only covers the store-alias hops Linear cannot see.
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `linear-status-sync.yml` | Push to `staging`, `main`, `staging-*`, `live-*` | Gate on `LINEAR_API_KEY`, scan `git log` (+ associated PR titles) for Linear IDs, `issueUpdate` to the mapped workflow state |
+
+Requires secret `LINEAR_API_KEY` (Linear personal API key). Do not store the key in `climaybe.config.json`.
 
 ### Build and Lighthouse workflows
 
@@ -437,6 +487,7 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 | Secret | Required | Description |
 |--------|----------|-------------|
 | `GEMINI_API_KEY` | Optional | Google Gemini API key for AI-generated release notes fallback |
+| `LINEAR_API_KEY` | Optional* | Linear personal API key for issue status sync (needed when `linear_workflows` is enabled). Create one at Linear → Settings → Account → Security & access → Personal API keys. Rotate with `climaybe update:linear-key`. |
 | `SHOPIFY_STORE_URL` | Set from config | Store URL is set automatically from the store domain(s) you add during init (no prompt). |
 | `SHOPIFY_THEME_ACCESS_TOKEN` | Optional* | Theme access token for preview workflows (needed only when you want preview theme publish/cleanup to run). |
 | `SHOP_ACCESS_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |

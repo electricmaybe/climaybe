@@ -4,7 +4,9 @@
 
 ---
 
-This document summarizes past CI workflow hardening changes applied in `climaybe`.
+## Linear issue status sync
+
+Optional `linear-status-sync.yml` (scaffolded when `linear_workflows` is true) updates Linear issues from pushes to `staging`, `main`, `staging-*`, and `live-*`. Mapping (overridable via `linear_statuses`): exact `staging` → `Staged @staging`; `staging-*` or multi-store `main` → literal `Staged @staging-<alias>`; `live-*` or single-store `main` → `Done`. Covers store-alias hops Linear’s native git automations cannot see. Secret: `LINEAR_API_KEY` (never stored in config). Command: `climaybe update:linear-key`.
 
 ## Orphan script asset cleanup
 

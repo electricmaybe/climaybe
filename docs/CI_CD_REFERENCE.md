@@ -6,7 +6,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 
 - **Theme CI/CD** (workflows, stores, branches): `climaybe theme <command>` or the same command at the top level (e.g. `climaybe init` = `climaybe theme init`).
 - **App repos**: `climaybe app init` sets `config.project_type: "app"` and optional commitlint/Cursor only; theme workflows and store commands are disabled when `project_type` is `app`.
-- **Shared**: `climaybe setup-commitlint`, `climaybe add-cursor` (top level only).
+- **Shared**: `climaybe setup-commitlint`, `climaybe add-cursor` (top level only). Theme also has `climaybe update:linear-key` (alias `update-linear-key`) to set `LINEAR_API_KEY` and enable Linear status sync.
 
 ## Versioning
 
@@ -43,6 +43,18 @@ When enabled (`profile_workflows: true`), the `liquid-performance.yml` workflow 
 5. **Cleans up** the shared preview theme after profiling (even if profiling fails).
 
 Required secrets: `SHOPIFY_STORE_URL` and `SHOPIFY_THEME_ACCESS_TOKEN`. When either is missing, the workflow skips gracefully (no failure).
+
+## Linear issue status sync (optional)
+
+When enabled (`linear_workflows: true`), `linear-status-sync.yml` runs on pushes to `staging`, `main`, `staging-*`, and `live-*` (excluding climaybe loop commits). It:
+
+1. **Skips** when `LINEAR_API_KEY` is missing (success, no failure).
+2. **Reads** `climaybe.config.json` for store count (single vs multi), optional `linear_team`, and optional `linear_statuses` (defaults: `Staged @staging`, literal `Staged @staging-<alias>`, `Done`).
+3. **Scans** `git log ${{ github.event.before }}..${{ github.sha }}` (new branches fall back to recent commits on the SHA) plus associated PR titles for Linear IDs (`\b[A-Z]{2,10}-\d+\b`).
+4. **Maps** the branch to a Linear workflow state: exact `staging` → staging status; `staging-*` or multi-store `main` → store status; `live-*` or single-store `main` → live status (`Done`).
+5. **Updates** each issue via Linear GraphQL (`issue` lookup + `issueUpdate`). Never moves backward (`Done` stays `Done`). Soft-fails per issue.
+
+Linear team workflow regexes remain configured in the Linear UI. This Action covers store-alias hops Linear’s native git automations cannot see (`main-to-staging-stores` and generic live deploy PRs). Do not store the API key in git or `climaybe.config.json`. Set or rotate it with `climaybe update:linear-key`.
 
 ## Build workflows (optional)
 
@@ -139,3 +151,4 @@ When the implementation changes, update the external “CI/CD – Developer Comm
 | **Yapılacaklar – komut** | Use `climaybe add-store` (not “setup add-store”). |
 | **Yapılacaklar – prompt** | Optional: “Store URL” and “Alias” as prompt labels; alias default from subdomain. |
 | **Yapılacaklar – workflow/store list** | main-to-staging-<store> uses `climaybe.config.json` `stores` for matrix; other workflows derive alias from branch name. New store = config update + `climaybe add-store` (branch + dir creation). |
+| **Linear status sync** | Optional `linear-status-sync.yml` moves Linear issues on staging / store / live pushes. Status names default to `Staged @staging`, literal `Staged @staging-<alias>`, and `Done`. Secret `LINEAR_API_KEY` is not stored in config. Linear UI regexes still apply for the first hop; this Action covers store-alias hops. |

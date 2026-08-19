@@ -6,6 +6,8 @@ import {
   promptPreviewWorkflows,
   promptBuildWorkflows,
   promptProfileWorkflows,
+  promptLinearWorkflows,
+  promptLinearTeam,
   promptLighthouseWorkflows,
   promptDevKit,
   promptVSCodeDevTasks,
@@ -21,6 +23,7 @@ import {
   promptSecretValue,
 } from '../lib/prompts.js';
 import { readConfig, writeConfig, getProjectType, readPkg } from '../lib/config.js';
+import { DEFAULT_LINEAR_STATUSES } from '../lib/linear-status.js';
 import { ensureGitRepo, ensureInitialCommit, ensureStagingBranch, createStoreBranches, getSuggestedTagForRelease, addOriginRemote } from '../lib/git.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
@@ -103,6 +106,17 @@ async function runInitFlow() {
   hint('CI that measures Liquid TTFB for core templates on every push to main.');
   const enableProfileWorkflows = await promptProfileWorkflows();
 
+  hint(
+    'CI that moves Linear issues when commits land on staging, main, staging-<alias>, or live-<alias>. Covers hops Linear git automations cannot see.',
+    'linear-issue-status-sync'
+  );
+  const enableLinearWorkflows = await promptLinearWorkflows();
+  let linearTeam = '';
+  if (enableLinearWorkflows) {
+    hint('Team key from issue IDs (VOL-77 → VOL). Used to match IDs in commit messages; leave the example if unsure.');
+    linearTeam = await promptLinearTeam();
+  }
+
   hint('Local config + ignore defaults for theme work (Theme Check, Prettier, Lighthouse, gitignore).', 'theme-dev-kit');
   const enableDevKit = await promptDevKit();
   let enableVSCodeTasks = false;
@@ -162,6 +176,9 @@ async function runInitFlow() {
     preview_workflows: enablePreviewWorkflows,
     build_workflows: enableBuildWorkflows,
     profile_workflows: enableProfileWorkflows,
+    linear_workflows: enableLinearWorkflows,
+    linear_team: enableLinearWorkflows && linearTeam ? linearTeam : undefined,
+    linear_statuses: enableLinearWorkflows ? { ...DEFAULT_LINEAR_STATUSES } : undefined,
     lighthouse_workflows: enableBuildWorkflows ? enableLighthouseWorkflows : undefined,
     build_entrypoints_ready: enableBuildWorkflows ? missingBuildFiles?.length === 0 : undefined,
     dev_kit: enableDevKit,
@@ -219,6 +236,7 @@ async function runInitFlow() {
     includePreview: enablePreviewWorkflows,
     includeBuild: enableBuildWorkflows,
     includeProfile: enableProfileWorkflows,
+    includeLinear: enableLinearWorkflows,
   });
 
   // 7. Optional commitlint + Husky and the AI ruleset (rules, skills, agents + editor bridges)
@@ -266,6 +284,7 @@ async function runInitFlow() {
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Profile workflows: ${enableProfileWorkflows ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Linear issue status sync: ${enableLinearWorkflows ? 'enabled' : 'disabled'}`));
   if (enableBuildWorkflows) {
     console.log(pc.dim(`  Lighthouse CI: ${enableLighthouseWorkflows ? 'enabled' : 'disabled'}`));
   }
@@ -293,6 +312,7 @@ async function runInitFlow() {
   const secretsToPrompt = getSecretsToPrompt({
     enablePreviewWorkflows,
     enableBuildWorkflows,
+    enableLinearWorkflows,
     mode,
     stores,
   });

@@ -7,6 +7,8 @@ import {
   getMode,
   isPreviewWorkflowsEnabled,
   isBuildWorkflowsEnabled,
+  isProfileWorkflowsEnabled,
+  isLinearWorkflowsEnabled,
 } from '../lib/config.js';
 import { requireThemeProject } from '../lib/theme-guard.js';
 import { createStoreBranches } from '../lib/git.js';
@@ -43,6 +45,9 @@ export async function addStoreCommand() {
   const previousMode = getMode();
   const includePreview = isPreviewWorkflowsEnabled();
   const includeBuild = isBuildWorkflowsEnabled();
+  const includeProfile = isProfileWorkflowsEnabled();
+  const includeLinear = isLinearWorkflowsEnabled();
+  const workflowOptions = { includePreview, includeBuild, includeProfile, includeLinear };
 
   // Prompt for new store
   const store = await promptNewStore(existingAliases);
@@ -68,11 +73,11 @@ export async function addStoreCommand() {
     createStoreDirectories(originalAlias);
 
     // Re-scaffold workflows for multi mode
-    scaffoldWorkflows('multi', { includePreview, includeBuild });
+    scaffoldWorkflows('multi', workflowOptions);
     console.log(pc.green('  Migration complete — workflows updated to multi-store mode.'));
   } else if (newMode === 'multi') {
     // Already multi, just make sure workflows are current
-    scaffoldWorkflows('multi', { includePreview, includeBuild });
+    scaffoldWorkflows('multi', workflowOptions);
   }
 
   const protection = syncBranchProtection({

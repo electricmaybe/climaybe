@@ -1,0 +1,281 @@
+# climaybe — Linear Issue Status Sync
+# Scans pushed commits (and associated PR titles) for Linear IDs (e.g. VOL-77)
+# and moves those issues to the workflow state for this branch.
+# Covers the store-alias hops Linear's native git automations cannot see:
+# main-to-staging-<alias> pushes and generic "Deploy to {alias}" live PRs.
+#
+# Branch → status (names overridable via climaybe.config.json → linear_statuses):
+#   staging (exact)              → Staged @staging
+#   staging-* or main (multi)    → Staged @staging-<alias>   (literal Linear name)
+#   live-*                       → Done
+#   main (single-store)          → Done   (main is production)
+#
+# Keep mapping in sync with src/lib/linear-status.js.
+# LINEAR_API_KEY is never logged. Missing secret → skip (success).
+# Linear API blips fail per issue only; the job still succeeds.
+
+name: Linear Status Sync
+
+on:
+  push:
+    branches:
+      - staging
+      - main
+      - 'staging-*'
+      - 'live-*'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.head_commit.message, '[skip-store-sync]')
+      && !contains(github.event.head_commit.message, '[stores-to-root]')
+      && !contains(github.event.head_commit.message, '[root-to-stores]')
+      && !contains(github.event.head_commit.message, '[hotfix-backport]')
+      && !contains(github.event.head_commit.message, 'chore(release)')
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    env:
+      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+    steps:
+      - name: Check if Linear sync should run
+        id: check
+        run: |
+          if [ -z "$LINEAR_API_KEY" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Linear status sync skipped: LINEAR_API_KEY is not set."
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  sync:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    env:
+      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+      BRANCH: ${{ github.ref_name }}
+      BEFORE_SHA: ${{ github.event.before }}
+      HEAD_SHA: ${{ github.sha }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect commit messages and sync Linear issues
+        run: |
+          set -euo pipefail
+          BEFORE_SHA="${BEFORE_SHA:-}"
+          HEAD_SHA="${HEAD_SHA:-}"
+          if [ -z "$HEAD_SHA" ]; then
+            echo "No HEAD sha; nothing to sync."
+            exit 0
+          fi
+          if [ -n "$BEFORE_SHA" ] && [[ ! "$BEFORE_SHA" =~ ^0+$ ]] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            git log --pretty=format:'%s%n%b%n' "${BEFORE_SHA}..${HEAD_SHA}" > /tmp/linear-commits.txt || true
+          else
+            echo "New branch or missing before sha; using recent commits on this SHA."
+            git log --pretty=format:'%s%n%b%n' -n 50 "$HEAD_SHA" > /tmp/linear-commits.txt || true
+          fi
+
+          node <<'NODE'
+          const { readFileSync, existsSync } = require('node:fs');
+
+          const DEFAULT_STATUSES = {
+            staging: 'Staged @staging',
+            store: 'Staged @staging-<alias>',
+            live: 'Done',
+          };
+          const RANK = { staging: 0, store: 1, live: 2 };
+          const ISSUE_RE = /\b[A-Z]{2,10}-\d+\b/g;
+
+          function loadConfig() {
+            if (!existsSync('climaybe.config.json')) return {};
+            try {
+              return JSON.parse(readFileSync('climaybe.config.json', 'utf8'));
+            } catch {
+              return {};
+            }
+          }
+
+          function resolveStatuses(config) {
+            const raw = config && typeof config.linear_statuses === 'object' ? config.linear_statuses : {};
+            const pick = (key) =>
+              typeof raw[key] === 'string' && raw[key].trim() ? raw[key].trim() : DEFAULT_STATUSES[key];
+            return { staging: pick('staging'), store: pick('store'), live: pick('live') };
+          }
+
+          function isMulti(config) {
+            const stores = config && config.stores;
+            return !!(stores && typeof stores === 'object' && !Array.isArray(stores) && Object.keys(stores).length > 1);
+          }
+
+          function bucketForBranch(branch, multi) {
+            if (branch === 'staging') return 'staging';
+            if (branch.startsWith('live-')) return 'live';
+            if (branch.startsWith('staging-')) return 'store';
+            if (branch === 'main') return multi ? 'store' : 'live';
+            return null;
+          }
+
+          function rankForName(name, statuses) {
+            if (name && name === statuses.live) return RANK.live;
+            if (name && name === statuses.store) return RANK.store;
+            if (name && name === statuses.staging) return RANK.staging;
+            return -1;
+          }
+
+          function shouldUpdate(currentName, targetName, statuses) {
+            if (!targetName || currentName === targetName) return false;
+            const targetRank = rankForName(targetName, statuses);
+            if (targetRank < 0) return false;
+            const currentRank = rankForName(currentName, statuses);
+            if (currentRank < 0) return true;
+            return targetRank > currentRank;
+          }
+
+          function extractIds(text, teamKey) {
+            const matches = String(text || '').match(ISSUE_RE) || [];
+            const unique = [];
+            const seen = new Set();
+            for (const id of matches) {
+              if (seen.has(id)) continue;
+              seen.add(id);
+              unique.push(id);
+            }
+            const team = String(teamKey || '').trim().toUpperCase();
+            if (!team) return unique;
+            const prefix = `${team}-`;
+            return unique.filter((id) => id.startsWith(prefix));
+          }
+
+          async function linearGraphql(query, variables) {
+            const res = await fetch('https://api.linear.app/graphql', {
+              method: 'POST',
+              headers: {
+                Authorization: process.env.LINEAR_API_KEY,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ query, variables }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              const err = new Error(`Linear HTTP ${res.status}`);
+              err.status = res.status;
+              throw err;
+            }
+            if (body.errors && body.errors.length) {
+              throw new Error(body.errors.map((e) => e.message).join('; '));
+            }
+            return body.data;
+          }
+
+          async function associatedPrTitles(sha) {
+            const repo = process.env.GITHUB_REPOSITORY;
+            const token = process.env.GH_TOKEN;
+            if (!repo || !token || !sha) return [];
+            try {
+              const res = await fetch(`https://api.github.com/repos/${repo}/commits/${sha}/pulls`, {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  Accept: 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                },
+              });
+              if (!res.ok) return [];
+              const data = await res.json();
+              return Array.isArray(data) ? data.map((pr) => pr.title).filter(Boolean) : [];
+            } catch {
+              return [];
+            }
+          }
+
+          (async () => {
+            const branch = String(process.env.BRANCH || '').trim();
+            const config = loadConfig();
+            const statuses = resolveStatuses(config);
+            const targetName = (() => {
+              const bucket = bucketForBranch(branch, isMulti(config));
+              return bucket ? statuses[bucket] : null;
+            })();
+
+            if (!targetName) {
+              console.log(`Branch "${branch}" is not mapped to a Linear status; skipping.`);
+              return;
+            }
+
+            let commitText = '';
+            try {
+              commitText = readFileSync('/tmp/linear-commits.txt', 'utf8');
+            } catch {
+              commitText = '';
+            }
+
+            const prTitles = await associatedPrTitles(process.env.HEAD_SHA);
+            const combined = [commitText, prTitles.join('\n')].join('\n');
+            const issueIds = extractIds(combined, config.linear_team);
+
+            if (issueIds.length === 0) {
+              console.log('No Linear issue IDs found in this push.');
+              return;
+            }
+
+            console.log(`Updating ${issueIds.length} Linear issue(s) → "${targetName}" on ${branch}`);
+
+            const issueQuery = `
+              query ($id: String!) {
+                issue(id: $id) {
+                  id
+                  identifier
+                  state { id name }
+                  team {
+                    id
+                    key
+                    states { nodes { id name } }
+                  }
+                }
+              }
+            `;
+            const updateMutation = `
+              mutation ($id: String!, $stateId: String!) {
+                issueUpdate(id: $id, input: { stateId: $stateId }) {
+                  success
+                }
+              }
+            `;
+
+            for (const identifier of issueIds) {
+              try {
+                const data = await linearGraphql(issueQuery, { id: identifier });
+                const issue = data && data.issue;
+                if (!issue) {
+                  console.log(`  ${identifier}: not found, skipping.`);
+                  continue;
+                }
+                const currentName = issue.state && issue.state.name;
+                if (!shouldUpdate(currentName, targetName, statuses)) {
+                  console.log(`  ${identifier}: already "${currentName}" (no backward move), skipping.`);
+                  continue;
+                }
+                const nodes = (issue.team && issue.team.states && issue.team.states.nodes) || [];
+                const state = nodes.find((s) => s && s.name === targetName);
+                if (!state) {
+                  console.log(`  ${identifier}: team has no state named "${targetName}", skipping.`);
+                  continue;
+                }
+                await linearGraphql(updateMutation, { id: issue.id, stateId: state.id });
+                console.log(`  ${identifier}: ${currentName} → ${targetName}`);
+              } catch (err) {
+                console.log(`  ${identifier}: Linear API error (${err && err.message ? err.message : 'unknown'}), skipping.`);
+              }
+            }
+          })().catch((err) => {
+            console.log(`Linear status sync finished with a non-fatal error: ${err && err.message ? err.message : 'unknown'}`);
+          });
+          NODE
