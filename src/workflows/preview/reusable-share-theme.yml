@@ -44,6 +44,36 @@ jobs:
             exit 1
           fi
 
+      - name: Sync stores/<alias>/ JSON to root for preview
+        env:
+          STORE_ALIAS: ${{ inputs.store_alias }}
+        run: |
+          ALIAS="${STORE_ALIAS}"
+          if [ -z "$ALIAS" ]; then
+            echo "No store alias provided; using root JSON as-is."
+            exit 0
+          fi
+          STORE_DIR="stores/${ALIAS}"
+          if [ ! -d "$STORE_DIR" ]; then
+            echo "Store directory $STORE_DIR does not exist; using root JSON as-is."
+            exit 0
+          fi
+          echo "Overlaying stores/${ALIAS}/ config, templates, and sections onto root..."
+          for DIR in config templates sections; do
+            SRC="${STORE_DIR}/${DIR}"
+            if [ -d "$SRC" ]; then
+              find "$SRC" -name "*.json" | while read -r FILE; do
+                REL_PATH="${FILE#$STORE_DIR/}"
+                if [ "$REL_PATH" = "config/settings_schema.json" ]; then
+                  continue
+                fi
+                mkdir -p "$(dirname "$REL_PATH")"
+                cp "$FILE" "$REL_PATH"
+                echo "  Copied: $REL_PATH"
+              done
+            fi
+          done
+
       - name: Install Shopify CLI
         run: npm install -g @shopify/cli @shopify/theme
 
