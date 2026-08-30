@@ -163,6 +163,8 @@ describe('workflows', () => {
         assert.match(orphanCleanup, /actions:\s*write/);
         assert.match(orphanCleanup, /pull_request:\s*\n\s*types:\s*\[closed\]/m);
         assert.match(publishPreview, /path:\s*fragment-\*\.json/);
+        assert.match(publishPreview, /Sync stores\/<alias>\/ JSON to root for preview/);
+        assert.match(publishPreview, /Overlaying stores\/\$\{ALIAS\}\//);
         assert.match(commentWorkflow, /climaybe-preview-comment/);
         assert.match(commentWorkflow, /issues\.updateComment/);
         assert.match(commentWorkflow, /issues\.deleteComment/);
