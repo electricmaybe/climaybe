@@ -17,14 +17,14 @@ Before creating any section or snippet, read and apply (in order):
 4. `.config/ai/rules/schemas.mdc` — minimal settings, no redundancy, translation keys, max 5 settings
 5. `.config/ai/rules/liquid.mdc` — Liquid syntax
 6. `.config/ai/rules/liquid-doc-rules.mdc` — required `{% doc %}` block format for snippets
-7. `.config/ai/rules/theme-color-modes.mdc` — Figma six-tone (`primary`…`elevated`) + optional `education`|`industrial` on the root; semantic roles only (discover names from `_styles/`)
+7. `.config/ai/rules/theme-color-modes.mdc` — `brand-educational`/`brand-industrial` on `<html>`; Figma six-tone on the section; semantic roles + atoms (discover names from `_styles/`)
 
 ## Workflow
 
 1. **Clarify scope** — Section only, or section + snippet(s)? Which template(s) will use it?
 2. **Naming** — Use project convention: `section-name--variant.liquid` or `snippets/prefix--name.liquid`. Check existing `sections/` and `snippets/` for patterns.
 3. **Schema** — Minimal settings only. Prefer translation keys over schema text inputs. Max 5 settings per section (excluding headers). No redundant toggles.
-4. **Section file** — Semantic HTML, section-scoped CSS classes, `{% schema %}` with valid JSON. Include translation keys for all user-facing text. Apply Figma section tone (`primary` | `secondary` | `muted` | `accent` | `contrast` | `elevated`) on the root; children use only semantic roles from `_styles/` (`theme-color-modes.mdc`). Older themes may still ship `accent-1|2|3` — use what grep finds. No arbitrary hex.
+4. **Section file** — Semantic HTML, section-scoped CSS classes, `{% schema %}` with valid JSON. Include translation keys for all user-facing text. Do not set brand on the section — brand lives on `<html>`. Apply Figma section tone (`primary` | `secondary` | `muted` | `accent` | `contrast` | `elevated`) on the section root; children use only semantic roles from `_styles/` (`theme-color-modes.mdc`). Buttons/inputs: existing atoms, not invented utilities. Older themes may still ship `accent-1|2|3` — use what grep finds. No arbitrary hex. Do not assume stock Tailwind `max-w-*` if `_styles/02_base/*sizes*` overrides them.
 5. **Snippet(s)** — If needed: LiquidDoc at top (`{%- doc -%}`), parameter defaults and validation, one clear responsibility per snippet.
 6. **Templates** — If the user specified a template (e.g. product, collection), add the section to the appropriate JSON template in `templates/` if requested.
 

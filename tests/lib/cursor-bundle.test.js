@@ -107,6 +107,12 @@ describe('cursor-bundle (AI config)', () => {
       assert.ok(modeRule.includes('border') && modeRule.includes('tertiary'));
       assert.match(modeRule, /[Oo]lder[\s\S]*accent-1/);
       assert.doesNotMatch(modeRule, /<section class="color-schema-accent-[123]"/);
+      assert.ok(modeRule.includes('<html'));
+      assert.ok(modeRule.includes('brand-educational') || modeRule.includes('brand-education'));
+      assert.ok(modeRule.includes('brand-industrial'));
+      assert.ok(modeRule.includes('max-w-'));
+      assert.ok(modeRule.includes('a--button'));
+      assert.ok(modeRule.includes('half-step') || modeRule.includes('0,5'));
 
       const index = readFileSync(join(shippedDir, '00-rule-index.mdc'), 'utf-8');
       assert.ok(index.includes('theme-color-modes.mdc'));
@@ -115,6 +121,7 @@ describe('cursor-bundle (AI config)', () => {
       assert.match(index, /must read.*theme-color-modes\.mdc[\s\S]*tailwindcss-rules\.mdc/);
       assert.match(index, /must read.*theme-color-modes\.mdc[\s\S]*figma-design-system\.mdc/);
       assert.ok(index.includes('7-collection'));
+      assert.ok(index.includes('<html>') || index.includes('`<html>`'));
 
       const figma = readFileSync(join(shippedDir, 'figma-design-system.mdc'), 'utf-8');
       assert.ok(!figma.includes('Voldt Theme'));
@@ -133,6 +140,11 @@ describe('cursor-bundle (AI config)', () => {
       }
       assert.match(figma, /primary.*secondary.*muted.*accent.*contrast.*elevated/s);
       assert.ok(figma.includes('legacy') || figma.includes('Legacy'));
+      assert.ok(figma.includes('<html'));
+      assert.ok(figma.includes('brand-educational') || figma.includes('brand-education'));
+      assert.ok(figma.includes('a--button'));
+      assert.ok(figma.includes('max-w-'));
+      assert.ok(figma.includes('stock Tailwind') || figma.includes('stock Tailwind values'));
 
       const tailwind = readFileSync(join(shippedDir, 'tailwindcss-rules.mdc'), 'utf-8');
       assert.ok(tailwind.includes('theme-color-modes.mdc'));
@@ -140,6 +152,9 @@ describe('cursor-bundle (AI config)', () => {
       assert.ok(!tailwind.includes('--color-abbey-'));
       assert.match(tailwind, /[Oo]lder[\s\S]*accent-1/);
       assert.ok(tailwind.includes('elevated'));
+      assert.ok(tailwind.includes('max-w-'));
+      assert.ok(tailwind.includes('<html') || tailwind.includes('brand-educational'));
+      assert.ok(tailwind.includes('a--button'));
     } finally {
       teardown();
     }
