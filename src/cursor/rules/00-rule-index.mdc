@@ -13,7 +13,7 @@ When you perform any of the following, **read and apply** the corresponding rule
 - **Accessibility, a11y, focus, WCAG, UI behavior** → `accessibility-rules.mdc`
 - **JavaScript, web components, _scripts/, *.js** → `javascript-standards.mdc`
 - **Tailwind CSS, theme tokens, color modes, Liquid/CSS classes, _styles/** → **must read** `theme-color-modes.mdc`, then `tailwindcss-rules.mdc`
-- **Figma → code, design tokens, mapping Figma colors to the theme** → **must read** `theme-color-modes.mdc`, then `figma-design-system.mdc`
+- **Figma → code, design tokens, mapping Figma colors to the theme** → **must read** `theme-color-modes.mdc`, then `figma-design-system.mdc` (7-collection SSOT: section tone + brand vertical)
 - **Store performance, LCP/INP/CLS, head scripts, third-party tags, CSS/JS tiering, images, _head*/_body* snippets** → `performance-guide.mdc`
 - **Liquid syntax and usage** → `liquid.mdc`
 - **Section files (sections/*.liquid)** → `sections.mdc`

@@ -9,7 +9,7 @@ alwaysApply: false
 
 Apply when editing Liquid templates or theme CSS that use Tailwind classes or theme tokens.
 
-**Color work starts with mode + discovery.** Read `theme-color-modes.mdc` first. Grep this repo’s `_styles/` for `@utility` / `color-schema-*` (or the theme’s equivalent) and semantic color utilities. Do not assume another theme’s token catalog. Names like `bg-surface` / `text-primary` in this file are typical Electric Maybe patterns — replace them with what `_styles/` actually defines.
+**Color work starts with mode + discovery.** Read `theme-color-modes.mdc` first. Figma SSOT is six section tones (`primary` | `secondary` | `muted` | `accent` | `contrast` | `elevated`) plus optional brand vertical (`education` | `industrial`). Grep this repo’s `_styles/` for `@utility` / `color-schema-*` and semantic roles — older themes may still ship `accent-1|2|3` and omit `elevated`. Names like `bg-surface` / `text-primary` in this file are Figma-shaped examples — replace them with what `_styles/` actually defines.
 
 > **Source vs build output:** Edit CSS in `_styles/` (entrypoint `_styles/main.css`). The CLI compiles it into `assets/style.css` on every save and in CI, so `assets/style.css` is a **generated artifact** — never edit it directly, your changes will be overwritten. See `project-overview.mdc` (Build Outputs vs Source).
 
@@ -76,12 +76,12 @@ For truly dynamic values, use custom CSS classes:
 Group related classes together in a logical order:
 
 ```liquid
-<!-- ✅ Good: Logical grouping -->
+<!-- ✅ Good: Logical grouping (semantic color names — confirm in _styles/) -->
 <div class="
   flex items-center justify-between
   p-4 m-2
-  bg-white border border-gray-200 rounded-lg
-  hover:bg-gray-50 focus:ring-2 focus:ring-blue-500
+  bg-surface border border-secondary rounded-lg
+  hover:bg-subtle focus:ring-2 focus:ring-accent
   transition-colors duration-200
 ">
 ```
@@ -102,12 +102,12 @@ Use responsive prefixes consistently:
 Group state-based classes together:
 
 ```liquid
-<!-- ✅ Good: State classes grouped -->
+<!-- ✅ Good: State classes grouped (semantic color names — confirm in _styles/) -->
 <button class="
   px-4 py-2 rounded
-  bg-blue-600 text-white
-  hover:bg-blue-700 focus:bg-blue-700
-  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+  bg-accent text-on-accent
+  hover:bg-accent/90 focus:bg-accent/90
+  focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2
   disabled:opacity-50 disabled:cursor-not-allowed
   transition-colors duration-200
 ">
@@ -149,30 +149,39 @@ For dynamic values, use CSS custom properties defined in `_styles/main.css` and 
 
 ## Color System (Theme Tokens)
 
-**Required:** read `theme-color-modes.mdc`. Discover exact names from this repo’s `_styles/` — do not treat any one theme’s brand-scale catalog as the source of truth.
+**Required:** read `theme-color-modes.mdc` and the 7-collection map in `figma-design-system.mdc`. Discover exact names from this repo’s `_styles/`.
 
 ### 1. Two layers
-- **Primitives / brand scales**: typically `_styles/01_theme/` (e.g. `--color-<brand>-50`). CSS-only. Never as Liquid Tailwind classes.
-- **Semantic roles**: typically `_styles/02_base/` color files — background, text, and border tokens that become utilities. Grep `_styles/` for `--background-color-*`, `--text-color-*`, `--border-color-*`, and the utilities `@theme` generates.
+- **Primitives / brand scales** (`01.01` / `01.02`): `color/neutral/*`, `color/accent/*`, `color/brand/*` (50–950). CSS-only. Never as Liquid Tailwind classes.
+- **Semantic roles** (`02.02 Base/Colors`): background, text, and border tokens that become utilities. Figma roles (when present in `_styles/`):
+  - **bg:** `surface`, `subtle`, `emphasis`, `accent`, `accent-sec`
+  - **text:** `primary`, `secondary`, `accent`, `on-accent`, `on-accent-sec`
+  - **border:** `primary`, `secondary`, `tertiary`, `accent`, `on-accent`, `on-accent-sec`
+
+`02.03 Base/Alphacolors` (`0-*`) is legacy — not the primary API.
 
 ### 2. Mode on the section root
-Sections switch palette via `@utility` classes this theme defines (often `color-schema-*`: primary, secondary, muted, accent, contrast, elevated — **confirm in `_styles/`**). Apply the mode to the section root so children inherit remapped semantic tokens. Optional brand-vertical axis (e.g. education | industrial) works the same way when present.
+Figma section tones: `primary` | `secondary` | `muted` | `accent` | `contrast` | `elevated` (often `color-schema-*`). Apply to the section root so children inherit remapped semantic tokens. Optional brand vertical: `education` | `industrial`.
+
+**Older `_styles/`:** may still ship `color-schema-accent-1|2|3` and omit `elevated`. Use grep results. Do not treat accent-1/2/3 as the Figma SSOT.
 
 ### 3. Using theme colors in Liquid
-Prefer semantic utilities under the active mode. **Forbidden for brand UI:** arbitrary hex (`text-[#d1d1d1]`, `bg-[#fff]`), invented tokens, Liquid-built class names (`text-{{ color }}`).
+Prefer semantic utilities under the active mode. **Forbidden for brand UI:** arbitrary hex (`text-[#d1d1d1]`, `bg-[#fff]`), invented tokens, Liquid-built class names (`text-{{ color }}`), Brand ramps as classes.
 
 ```liquid
 <!-- Illustrative names — replace from _styles/ -->
 <section class="color-schema-muted">
   <div class="bg-surface text-primary border border-secondary">
   <div class="bg-subtle text-secondary">
+  <a class="text-accent">…</a>
 </section>
 ```
 
-Arbitrary `bg-[hsl(var(--…))]` is a last resort when no utility exists; still reference a **semantic** token, never a hex.
+Arbitrary `bg-[hsl(var(--…))]` is a last resort when no utility exists; still reference a **semantic** token, never a hex. If Figma has `text-accent` / `bg-accent-sec` / `border-tertiary` and `_styles/` does not, add the token in a theme `_styles` PR — do not invent or hex.
 
 ### 4. Size / breakpoint modes
-Map Figma `lg` | `md` | `default` (or this theme’s density modes) to responsive prefixes (`md:`, `lg:`) and size tokens — not hard `px`.
+- Layout: Figma `02.01` `lg` | `md` | `default` → `md:` / `lg:` and size tokens — not hard `px`.
+- Components: Figma `03.01` `lg` | `base` | `sm` when this theme defines them.
 
 ## Design-Focused Accessibility
 

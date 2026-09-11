@@ -1,5 +1,5 @@
 ---
-description: Theme color modes — put a section color schema on the root, then use only semantic token utilities. Discover exact names from this repo's _styles/. Never use arbitrary hex, primitive brand scales, or Liquid-built class names.
+description: Theme color modes — Figma SSOT is six section tones plus optional education|industrial brand vertical. Apply tone on the section root; children use only semantic roles from _styles/. Never use arbitrary hex, primitive brand scales, or Liquid-built class names.
 globs:
   - "**/*.liquid"
   - "_styles/**/*.css"
@@ -7,42 +7,59 @@ alwaysApply: true
 ---
 # Theme Color Modes
 
-Token **names** differ per theme. This rule is the shared **mode → semantic children** contract. Discover exact class and variable names from **this repo’s `_styles/`** before writing markup. Names in this file are **illustrative** — replace them with what `_styles/` actually defines.
+Figma (EISCO Main variables) is the **structure** SSOT: two axes + semantic roles. Implementation names in this repo’s `_styles/` can lag Figma — **grep `_styles/` before coding** and use what exists. Names below are **illustrative**.
+
+## Two axes (Figma)
+
+1. **Section tone** (`02.02 Base/Colors` modes): `primary` | `secondary` | `muted` | `accent` | `contrast` | `elevated`.
+   Put the matching mode class on the **section root**. New Figma-driven themes use this **six-tone** set — a single `accent` tone, **not** `accent-1` / `accent-2` / `accent-3`.
+2. **Brand vertical** (`01.02 Theme/Brand` modes): `education` | `industrial` when the theme has it.
+   Optional second root / `html` class. Children still use semantic roles only.
+
+**Older `_styles/`:** some themes still ship `color-schema-accent-1|2|3` and omit `elevated`. Use the utilities grep finds. Do not invent `color-schema-elevated` or collapse accent-1/2/3 unless this theme defines the new set. Do not treat accent-1/2/3 as the Figma SSOT.
 
 ## Two layers
 
-1. **Primitives / brand scales** — raw ramps in theme CSS (often `--color-<brand>-*`). Define the palette only. Never emit them as Liquid Tailwind classes.
-2. **Semantic roles** — background, text, and border utilities the theme maps onto those primitives (often `bg-surface`, `text-primary`, `border-secondary` **or this theme’s equivalents**). These are the only color utilities allowed in Liquid.
+1. **Primitives / brand scales** (`01.01 Theme/Primitives`, `01.02 Theme/Brand`) — raw ramps (`color/neutral/*`, `color/accent/*`, `color/brand/*` 50–950), fonts, radii. CSS-only. Never as Liquid Tailwind classes.
+2. **Semantic roles** (`02.02 Base/Colors` aliases into Brand). When present in `_styles/`, Liquid uses:
+   - **bg:** `surface` | `subtle` | `emphasis` | `accent` | `accent-sec`
+   - **text:** `primary` | `secondary` | `accent` | `on-accent` | `on-accent-sec`
+   - **border:** `primary` | `secondary` | `tertiary` | `accent` | `on-accent` | `on-accent-sec`
+
+`02.03 Base/Alphacolors` (`0-*` overlays) is **legacy** — do not use as the primary color API.
+
+If `_styles/` is missing a Figma role (e.g. `text-accent`, `bg-accent-sec`, `border-tertiary`), do **not** invent the class or fall back to hex. Use the closest shipped semantic utility, or add the token in a theme `_styles` PR.
 
 ## Mode first
 
-1. Read the Figma / schema tone (`primary` | `secondary` | `muted` | `accent` | `contrast` | `elevated`, or whatever this theme names).
-2. Grep `_styles/` for `@utility`, `color-schema-*`, or the theme’s equivalent mode classes.
-3. Put the matching mode class on the **section root** (or the wrapper this theme documents).
+1. Read Figma / schema for **tone** (six-tone set above) and, if used, **brand vertical**.
+2. Grep `_styles/` for `@utility`, `color-schema-*`, brand-vertical classes, and semantic `@theme` roles.
+3. Put tone (and brand, when present) on the **section root** (or the wrapper this theme documents).
 4. Children use **only semantic utilities**. The mode remaps those tokens — do not restyle children with primitives or hex to “match Figma.”
-
-If this theme has a separate **brand vertical** axis (e.g. `education` | `industrial`), treat it the same way: one root class discovered from `_styles/`, children stay semantic.
 
 ## Size modes
 
-Breakpoint / density modes (`lg` | `md` | `default`, or this theme’s names) map to **responsive utilities** (`md:`, `lg:`) and theme size tokens — never hard `px` or `text-[14px]`.
+- **Layout density** (`02.01 Base/Sizes`): `lg` | `md` | `default` → responsive utilities (`md:`, `lg:`) and size tokens — never hard `px` or `text-[14px]`.
+- **Component density** (`03.01 Components/Sizes`): `lg` | `base` | `sm` — use this theme’s component size utilities when present.
+- **Component color** (`03.02 Components/Colors`): `primary` | `secondary` — component-level, still semantic; not a substitute for section tone.
 
 ## Forbidden
 
 - Arbitrary hex / rgb in Tailwind: `text-[#d1d1d1]`, `bg-[#fff]`, `border-[rgb(...)]`
 - Inventing token or utility names that do not exist in `_styles/`
 - Building class names with Liquid: `text-{{ color }}`, `bg-{{ settings.color }}`
-- Primitive / brand-scale classes in Liquid
+- Primitive / brand-scale classes in Liquid (`text-neutral-400`, `bg-accent-700`, old named ramps)
+- Teaching `accent-1|2|3` as the Figma tone list
 
 ## Discovery (do this before coding)
 
 ```bash
-rg -n "@utility|color-schema|--background-color|--text-color|--border-color|@theme" _styles/
+rg -n "@utility|color-schema|--background-color|--text-color|--border-color|@theme|education|industrial|elevated" _styles/
 ```
 
-Typical homes (paths vary by theme): `_styles/02_base/*colors*.css`, `_styles/01_theme/*primitives*.css`, `_styles/main.css`.
+Typical homes (paths vary): `_styles/02_base/*colors*.css`, `_styles/01_theme/*`, `_styles/main.css`.
 
-Then read `tailwindcss-rules.mdc` (static classes, `@source`) and `figma-design-system.mdc` (Figma → Liquid).
+Then read `figma-design-system.mdc` (7 collections) and `tailwindcss-rules.mdc` (static classes, `@source`).
 
 ## Illustrative only
 
@@ -51,8 +68,9 @@ Then read `tailwindcss-rules.mdc` (static classes, `@source`) and `figma-design-
   <div class="bg-surface text-primary border-secondary">
     <h2 class="text-primary">…</h2>
     <p class="text-secondary">…</p>
+    <a class="text-accent">…</a>
   </div>
 </section>
 ```
 
-`color-schema-muted`, `bg-surface`, and `text-primary` are examples. Replace them with utilities this theme defines in `_styles/`.
+`color-schema-muted`, `bg-surface`, `text-primary`, and `text-accent` are Figma-shaped examples. Replace them with utilities this theme actually defines in `_styles/`.

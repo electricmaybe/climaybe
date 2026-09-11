@@ -100,6 +100,13 @@ describe('cursor-bundle (AI config)', () => {
       assert.match(modeRule, /alwaysApply:\s*true/);
       assert.ok(modeRule.includes('illustrative'));
       assert.ok(!/Voldt/i.test(modeRule));
+      assert.match(modeRule, /primary.*secondary.*muted.*accent.*contrast.*elevated/s);
+      assert.ok(modeRule.includes('education'));
+      assert.ok(modeRule.includes('industrial'));
+      assert.ok(modeRule.includes('accent-sec'));
+      assert.ok(modeRule.includes('border') && modeRule.includes('tertiary'));
+      assert.match(modeRule, /[Oo]lder[\s\S]*accent-1/);
+      assert.doesNotMatch(modeRule, /<section class="color-schema-accent-[123]"/);
 
       const index = readFileSync(join(shippedDir, '00-rule-index.mdc'), 'utf-8');
       assert.ok(index.includes('theme-color-modes.mdc'));
@@ -107,14 +114,32 @@ describe('cursor-bundle (AI config)', () => {
       assert.ok(index.includes('figma-design-system.mdc'));
       assert.match(index, /must read.*theme-color-modes\.mdc[\s\S]*tailwindcss-rules\.mdc/);
       assert.match(index, /must read.*theme-color-modes\.mdc[\s\S]*figma-design-system\.mdc/);
+      assert.ok(index.includes('7-collection'));
 
       const figma = readFileSync(join(shippedDir, 'figma-design-system.mdc'), 'utf-8');
       assert.ok(!figma.includes('Voldt Theme'));
+      assert.ok(!figma.includes('--color-dune-'));
       assert.ok(figma.includes('theme-color-modes.mdc'));
+      for (const collection of [
+        '01.01 Theme/Primitives',
+        '01.02 Theme/Brand',
+        '02.01 Base/Sizes',
+        '02.02 Base/Colors',
+        '02.03 Base/Alphacolors',
+        '03.01 Components/Sizes',
+        '03.02 Components/Colors',
+      ]) {
+        assert.ok(figma.includes(collection), `missing Figma collection ${collection}`);
+      }
+      assert.match(figma, /primary.*secondary.*muted.*accent.*contrast.*elevated/s);
+      assert.ok(figma.includes('legacy') || figma.includes('Legacy'));
 
       const tailwind = readFileSync(join(shippedDir, 'tailwindcss-rules.mdc'), 'utf-8');
       assert.ok(tailwind.includes('theme-color-modes.mdc'));
       assert.ok(!tailwind.includes('--color-dune-'));
+      assert.ok(!tailwind.includes('--color-abbey-'));
+      assert.match(tailwind, /[Oo]lder[\s\S]*accent-1/);
+      assert.ok(tailwind.includes('elevated'));
     } finally {
       teardown();
     }
