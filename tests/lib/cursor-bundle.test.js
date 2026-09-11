@@ -150,7 +150,8 @@ describe('cursor-bundle (AI config)', () => {
       assert.ok(modeRule.includes('<html'));
       assert.ok(modeRule.includes('intersection'));
       assert.ok(
-        modeRule.includes('accent-1') && modeRule.includes('accent-2') && modeRule.includes('accent-3')
+        modeRule.includes('color-schema-accent-1') || modeRule.includes('accent-1|2|3'),
+        'must teach color-schema-accent-1|2|3 as a valid discovered pattern'
       );
       assert.doesNotMatch(modeRule, /[Oo]lder[\s\S]{0,80}accent-1/);
       assert.ok(modeRule.includes('max-w-'));
