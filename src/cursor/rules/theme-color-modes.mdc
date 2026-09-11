@@ -1,0 +1,88 @@
+---
+description: Theme color modes — discover color-schema, brand classes, size overrides, and atoms from this theme’s _styles/. Axes are optional. Never hex, Brand ramps, Liquid-built class names, or a baked collection catalog.
+globs:
+  - "**/*.liquid"
+  - "_styles/**/*.css"
+alwaysApply: true
+---
+# Theme Color Modes
+
+Climaybe helps AIs **use existing `_styles` when matching Figma**. It does **not** scaffold `_styles` from Figma. Token names, tones, and axes differ per theme. Discover them in **this repo** before writing markup. Names in this file are **illustrative**.
+
+Do **not** treat any theme’s Figma collection catalog as shared SSOT. Theme-local notes (for example `theme-tokens.mdc`) are optional later — not this always-on rule.
+
+## 1. Discover first
+
+Before any color, size, or component class, grep **this theme**:
+
+1. `_styles/` for `@utility` / `color-schema-*`, brand classes, `@theme` size overrides, semantic roles, atoms.
+2. `layout/theme.liquid` and `_layout/theme.liquid` for brand classes on `<html>` and documented mode wrappers.
+
+```bash
+rg -n "@utility|color-schema|brand-|max-w-|--background-color|--text-color|--border-color|@theme|a--button" _styles/ layout/ _layout/ snippets/
+```
+
+Use only names that exist here. Do not copy another theme’s catalog.
+
+## 2. Axes are optional
+
+### Brand-on-`<html>`
+
+Apply a brand class on `<html>` **only if** this theme ships Brand modes **and** a brand class (grep `_styles/` / `theme.liquid`). One class rebinds Brand CSS variables for the tree. Do not put brand on the section. Do not invent `brand-*` when none exist.
+
+### Section tone
+
+Tone list = **intersection** of Figma color modes and `@utility color-schema-*` (or this theme’s equivalent) **present in `_styles/`**. Never a fixed six-name list.
+
+Some themes ship `color-schema-accent-1|2|3` — that is **one valid discovered pattern**, not “older only.” Other themes ship different tone names. Use what grep finds. Do not invent a missing `color-schema-*`.
+
+Put the matching mode class on the **section root**. Children use semantic roles only.
+
+## 3. Semantic roles
+
+Roles = what `_styles` defines under the active schema (background / text / border utilities). Never hex. Never invent a missing role. Never emit Brand ramps (`color/neutral/*`, `color/accent/*`, `color/brand/*`) or primitive scales as Liquid classes.
+
+If Figma names a role this theme does not ship, use the closest **existing** semantic utility. Do not add tokens from Figma.
+
+## 4. Sizes
+
+`_styles/02_base/*sizes*` (or this theme’s equivalent) is authoritative. Figma `02.01` layers may **override stock Tailwind** (`max-w-*`, `px` / `py` / `gap` / `height` / `icon` / `text-size`) via `@theme` / `@utility`. **Do not assume stock Tailwind values.** Grep first.
+
+Map Figma `lg` | `md` | `default` → `lg:` | `md:` | base **only when this theme’s CSS remaps exist**. Never hard `px`.
+
+## 5. Components → atoms
+
+When this theme has component tokens (`03.01` / `03.02` or equivalent), they map to **atoms** (`a--button`, inputs), not invented `button/height` utilities. Build UI with existing atom classes / `{% render 'a--button', ... %}`. If no matching atom exists, compose from shipped semantic utilities — do not invent component utilities or hex.
+
+## Mode first
+
+1. Discover (grep above).
+2. Set **brand** on `<html>` only when that axis exists.
+3. Set **tone** on the section root from the intersection of Figma modes and this theme’s `color-schema-*`.
+4. Children: semantic roles only. Buttons/inputs: atoms when present.
+
+Then read `figma-design-system.mdc` and `tailwindcss-rules.mdc`.
+
+## Forbidden
+
+- Arbitrary hex / rgb: `text-[#d1d1d1]`, `bg-[#fff]`
+- Inventing tokens or utilities that do not exist in `_styles/`
+- Liquid-built class names: `text-{{ color }}`
+- Brand ramps or primitive scales as Liquid classes
+- Assuming stock Tailwind `max-w-*` / spacing when `02_base/*sizes*` overrides them
+- Baking any theme’s Figma collection catalog (tone lists, brand verticals, role laundry lists) as shared SSOT
+- Scaffolding `_styles` from Figma
+
+## Illustrative only
+
+```liquid
+<section class="color-schema-muted">
+  <div class="bg-surface text-primary border-secondary">
+    <h2 class="text-primary">…</h2>
+    <p class="text-secondary">…</p>
+    {% render 'a--button', variant: 'primary', size: 'base' %}
+  </div>
+</section>
+```
+
+Replace every class / param with what this theme’s `_styles/` and atoms actually define. If grep found a brand class, set it on `<html>` — not on the section.

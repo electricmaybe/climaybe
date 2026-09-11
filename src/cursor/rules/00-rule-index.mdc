@@ -12,7 +12,8 @@ When you perform any of the following, **read and apply** the corresponding rule
 - **Git commits, commit messages** → `commit-rules.mdc`
 - **Accessibility, a11y, focus, WCAG, UI behavior** → `accessibility-rules.mdc`
 - **JavaScript, web components, _scripts/, *.js** → `javascript-standards.mdc`
-- **Tailwind CSS, theme tokens, Liquid/CSS classes, _styles/** → `tailwindcss-rules.mdc`
+- **Tailwind CSS, theme tokens, color modes, Liquid/CSS classes, _styles/** → **must read** `theme-color-modes.mdc`, then `tailwindcss-rules.mdc` (discover from `_styles/`; do not assume stock Tailwind for size overrides)
+- **Figma → code, design tokens, mapping Figma colors to the theme** → **must read** `theme-color-modes.mdc`, then `figma-design-system.mdc` (discover from `_styles/`; optional brand on `<html>`; tone = intersection of Figma modes and this theme’s `color-schema-*`; components → atoms)
 - **Store performance, LCP/INP/CLS, head scripts, third-party tags, CSS/JS tiering, images, _head*/_body* snippets** → `performance-guide.mdc`
 - **Liquid syntax and usage** → `liquid.mdc`
 - **Section files (sections/*.liquid)** → `sections.mdc`
@@ -23,4 +24,4 @@ When you perform any of the following, **read and apply** the corresponding rule
 - **Adding or editing Cursor rules** → `cursor-rule-template.mdc`
 - **Overview of global rules and sync** → `global-rules-reference.mdc` (optional)
 
-Use the Read tool to load the relevant rule file when the task matches one of the above. Project overview and this index are always in context; other rules are applied when their scope applies.
+Use the Read tool to load the relevant rule file when the task matches one of the above. This index, `project-overview.mdc`, and `theme-color-modes.mdc` are always in context; other rules are applied when their scope applies.
