@@ -1,5 +1,5 @@
 ---
-description: Tailwind CSS and theme token standards for Liquid and theme styles. Static classes only, semantic tokens from _styles/02_base/02.02_colors.css, content sources in _styles/main.css.
+description: Tailwind CSS standards for Liquid and theme styles. Static classes only, no dynamic Liquid class names. Discover semantic tokens and color modes from this repo's _styles/; see theme-color-modes.mdc.
 globs:
   - "**/*.liquid"
   - "_styles/**/*.css"
@@ -7,7 +7,9 @@ alwaysApply: false
 ---
 # Tailwind CSS Development Rules
 
-Apply when editing Liquid templates or theme CSS that use Tailwind classes or theme tokens. Use semantic tokens (surface, subtle, emphasis, accent, text-primary, border-secondary) from this project's `@theme`; see `_styles/02_base/02.02_colors.css`.
+Apply when editing Liquid templates or theme CSS that use Tailwind classes or theme tokens.
+
+**Color work starts with mode + discovery.** Read `theme-color-modes.mdc` first. Grep this repo’s `_styles/` for `@utility` / `color-schema-*` (or the theme’s equivalent) and semantic color utilities. Do not assume another theme’s token catalog. Names like `bg-surface` / `text-primary` in this file are typical Electric Maybe patterns — replace them with what `_styles/` actually defines.
 
 > **Source vs build output:** Edit CSS in `_styles/` (entrypoint `_styles/main.css`). The CLI compiles it into `assets/style.css` on every save and in CI, so `assets/style.css` is a **generated artifact** — never edit it directly, your changes will be overwritten. See `project-overview.mdc` (Build Outputs vs Source).
 
@@ -33,11 +35,11 @@ Apply when editing Liquid templates or theme CSS that use Tailwind classes or th
 
 **✅ Good Examples:**
 ```liquid
-<!-- Use static Tailwind classes -->
+<!-- Use static Tailwind classes (semantic color names are illustrative — confirm in _styles/) -->
 <div class="duration-300">
 <div class="w-full">
-<div class="text-blue-600">
-<div class="bg-gray-100">
+<div class="text-primary">
+<div class="bg-surface">
 
 <!-- Or use conditional classes -->
 <div class="{% if show_animation %}duration-300{% else %}duration-0{% endif %}">
@@ -48,8 +50,8 @@ Apply when editing Liquid templates or theme CSS that use Tailwind classes or th
 Use conditional statements to apply different static classes:
 
 ```liquid
-<!-- ✅ Good: Conditional static classes -->
-<div class="{% if expanded %}bg-blue-100{% else %}bg-gray-50{% endif %}">
+<!-- ✅ Good: Conditional static classes (full class names, not Liquid-built) -->
+<div class="{% if expanded %}bg-subtle{% else %}bg-surface{% endif %}">
 <div class="{% if size == 'sm' %}text-sm{% else %}text-base{% endif %}">
 <div class="{% if show_animation %}transition-all duration-300{% else %}transition-none{% endif %}">
 ```
@@ -132,14 +134,14 @@ Tailwind v4 content sources are in `_styles/main.css`. All template and asset pa
 Token imports: `01_theme/01_primitives.css`, `02_base/02.01_sizes.css`, `02_base/02.02_colors.css`, `02_base/02.03_typography.css`. Any file that uses Tailwind classes must be covered by these `@source` paths so classes are not purged.
 
 ### 2. Avoid Arbitrary Values
-Prefer predefined Tailwind classes over arbitrary values:
+Prefer predefined Tailwind classes and theme tokens over arbitrary values. **Never** use arbitrary hex/rgb for brand UI (`text-[#d1d1d1]`, `bg-[#fff]`) — see `theme-color-modes.mdc`.
 
 ```liquid
 <!-- ❌ Bad: Arbitrary values -->
-<div class="w-[123px] h-[456px]">
+<div class="w-[123px] h-[456px] text-[#d1d1d1]">
 
-<!-- ✅ Good: Predefined classes -->
-<div class="w-32 h-40">
+<!-- ✅ Good: Predefined / semantic classes (confirm names in _styles/) -->
+<div class="w-32 h-40 text-primary">
 ```
 
 ### 3. Use CSS Custom Properties
@@ -147,33 +149,30 @@ For dynamic values, use CSS custom properties defined in `_styles/main.css` and 
 
 ## Color System (Theme Tokens)
 
-### 1. Primitives and semantic tokens
-- **Primitives**: `_styles/01_theme/01_primitives.css` — raw colors (e.g. `--color-dune-50`, `--color-abbey-950`).
-- **Semantic tokens**: `_styles/02_base/02.02_colors.css` — background, text, border tokens used by Tailwind utilities.
+**Required:** read `theme-color-modes.mdc`. Discover exact names from this repo’s `_styles/` — do not treat any one theme’s brand-scale catalog as the source of truth.
 
-### 2. Semantic token names (this project)
-Background: `--background-color-surface`, `--background-color-subtle`, `--background-color-emphasis`, `--background-color-accent`.  
-Text: `--text-color-primary`, `--text-color-secondary`, `--text-color-on-accent`, `--text-color-on-accent-sec`.  
-Border: `--border-color-primary`, `--border-color-secondary`, `--border-color-on-accent`, `--border-color-on-accent-sec`.
+### 1. Two layers
+- **Primitives / brand scales**: typically `_styles/01_theme/` (e.g. `--color-<brand>-50`). CSS-only. Never as Liquid Tailwind classes.
+- **Semantic roles**: typically `_styles/02_base/` color files — background, text, and border tokens that become utilities. Grep `_styles/` for `--background-color-*`, `--text-color-*`, `--border-color-*`, and the utilities `@theme` generates.
 
-Tailwind generates classes from these (e.g. `bg-surface`, `bg-subtle`, `text-primary`, `text-on-accent`, `border-primary`, `border-secondary`). Gradients: `--background-image-gradient-surface`, `-subtle`, `-emphasis`, `-contrast`.
+### 2. Mode on the section root
+Sections switch palette via `@utility` classes this theme defines (often `color-schema-*`: primary, secondary, muted, accent, contrast, elevated — **confirm in `_styles/`**). Apply the mode to the section root so children inherit remapped semantic tokens. Optional brand-vertical axis (e.g. education | industrial) works the same way when present.
 
 ### 3. Using theme colors in Liquid
-Prefer semantic utility classes; use arbitrary values only when no token exists:
+Prefer semantic utilities under the active mode. **Forbidden for brand UI:** arbitrary hex (`text-[#d1d1d1]`, `bg-[#fff]`), invented tokens, Liquid-built class names (`text-{{ color }}`).
 
 ```liquid
-<!-- Prefer: semantic classes from @theme -->
-<div class="bg-surface text-primary border border-secondary">
-<div class="bg-subtle text-secondary">
-<div class="bg-accent text-on-accent">
-<div class="border-primary">
-
-<!-- Optional: arbitrary value from a token -->
-<div class="bg-[hsl(var(--background-color-emphasis))]">
+<!-- Illustrative names — replace from _styles/ -->
+<section class="color-schema-muted">
+  <div class="bg-surface text-primary border border-secondary">
+  <div class="bg-subtle text-secondary">
+</section>
 ```
 
-### 4. Color schemas (@utility)
-Sections can switch palette via `@utility` classes: `color-schema-primary`, `color-schema-secondary`, `color-schema-muted`, `color-schema-accent-1`, `color-schema-accent-2`, `color-schema-accent-3`, `color-schema-contrast`. Apply to a wrapper (e.g. section root) so children inherit semantic tokens. See `_styles/02_base/02.02_colors.css`.
+Arbitrary `bg-[hsl(var(--…))]` is a last resort when no utility exists; still reference a **semantic** token, never a hex.
+
+### 4. Size / breakpoint modes
+Map Figma `lg` | `md` | `default` (or this theme’s density modes) to responsive prefixes (`md:`, `lg:`) and size tokens — not hard `px`.
 
 ## Design-Focused Accessibility
 
@@ -365,7 +364,7 @@ For conditional classes, add debugging:
 ## Theme Integration
 
 ### 1. Tokens and custom properties
-Use semantic classes (e.g. `bg-surface`, `text-primary`) so styles stay within the token system. For one-off values, use theme variables from `_styles/01_theme/01_primitives.css` and `_styles/02_base/02.02_colors.css`. Typography and sizes: `_styles/02_base/02.01_sizes.css`, `02.03_typography.css`.
+Use semantic classes discovered from `_styles/` so styles stay within the token system (see `theme-color-modes.mdc`). Do not reach for primitive brand scales or hex in Liquid. Typography and sizes live alongside colors under `_styles/` (often `02_base/`).
 
 ### 2. Responsive breakpoints
 Use Tailwind breakpoints (e.g. `md:`, `lg:`) consistently; theme may define `--breakpoint-*` in `@theme`.
@@ -405,7 +404,9 @@ Before committing any Tailwind CSS changes, ensure:
 - [ ] Custom CSS used for truly dynamic values
 - [ ] Content sources in `_styles/main.css` include all template files
 - [ ] No arbitrary values unless absolutely necessary
+- [ ] No arbitrary hex/rgb for brand UI (`text-[#…]`, `bg-[#…]`)
+- [ ] Section color mode applied on the root; children use semantic utilities only (`theme-color-modes.mdc`)
+- [ ] Token / utility names grepped from this repo’s `_styles/`, not invented or copied from another theme
 - [ ] Theme custom properties used when appropriate
 - [ ] Custom utilities added to `_styles/main.css` when needed
-- [ ] Semantic tokens used (surface, subtle, emphasis, accent, text-primary, border-secondary) from `_styles/02_base/02.02_colors.css`
 - [ ] Focus states match component context and design

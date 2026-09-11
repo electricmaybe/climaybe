@@ -17,13 +17,14 @@ Before creating any section or snippet, read and apply (in order):
 4. `.config/ai/rules/schemas.mdc` — minimal settings, no redundancy, translation keys, max 5 settings
 5. `.config/ai/rules/liquid.mdc` — Liquid syntax
 6. `.config/ai/rules/liquid-doc-rules.mdc` — required `{% doc %}` block format for snippets
+7. `.config/ai/rules/theme-color-modes.mdc` — section color mode first; semantic tokens only (discover names from `_styles/`)
 
 ## Workflow
 
 1. **Clarify scope** — Section only, or section + snippet(s)? Which template(s) will use it?
 2. **Naming** — Use project convention: `section-name--variant.liquid` or `snippets/prefix--name.liquid`. Check existing `sections/` and `snippets/` for patterns.
 3. **Schema** — Minimal settings only. Prefer translation keys over schema text inputs. Max 5 settings per section (excluding headers). No redundant toggles.
-4. **Section file** — Semantic HTML, section-scoped CSS classes, `{% schema %}` with valid JSON. Include translation keys for all user-facing text.
+4. **Section file** — Semantic HTML, section-scoped CSS classes, `{% schema %}` with valid JSON. Include translation keys for all user-facing text. Apply the theme color mode on the section root; children use only semantic token utilities from `_styles/` (`theme-color-modes.mdc`). No arbitrary hex.
 5. **Snippet(s)** — If needed: LiquidDoc at top (`{%- doc -%}`), parameter defaults and validation, one clear responsibility per snippet.
 6. **Templates** — If the user specified a template (e.g. product, collection), add the section to the appropriate JSON template in `templates/` if requested.
 

@@ -1,9 +1,12 @@
-import { mkdtempSync, rmSync, existsSync, readFileSync, lstatSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, rmSync, existsSync, readFileSync, lstatSync, readdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { scaffoldAiConfig, scaffoldCursorBundle } from '../../src/lib/cursor-bundle.js';
+
+const RULES_SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'cursor', 'rules');
 
 describe('cursor-bundle (AI config)', () => {
   let cwd;
@@ -76,6 +79,42 @@ describe('cursor-bundle (AI config)', () => {
       assert.ok(existsSync(join(dir, '.windsurf', 'rules', '00-rule-index.mdc')));
       assert.ok(!existsSync(join(dir, '.cursor')));
       assert.ok(!existsSync(join(dir, 'CLAUDE.md')));
+    } finally {
+      teardown();
+    }
+  });
+
+  it('ships every bundled .mdc rule, including always-on theme-color-modes', () => {
+    const dir = setup();
+    try {
+      assert.strictEqual(scaffoldAiConfig(dir, { editors: ['cursor'] }).ok, true);
+
+      const shippedDir = join(dir, '.config', 'ai', 'rules');
+      const srcRules = readdirSync(RULES_SRC).filter((name) => name.endsWith('.mdc'));
+      assert.ok(srcRules.includes('theme-color-modes.mdc'));
+      for (const name of srcRules) {
+        assert.ok(existsSync(join(shippedDir, name)), `missing shipped rule ${name}`);
+      }
+
+      const modeRule = readFileSync(join(shippedDir, 'theme-color-modes.mdc'), 'utf-8');
+      assert.match(modeRule, /alwaysApply:\s*true/);
+      assert.ok(modeRule.includes('illustrative'));
+      assert.ok(!/Voldt/i.test(modeRule));
+
+      const index = readFileSync(join(shippedDir, '00-rule-index.mdc'), 'utf-8');
+      assert.ok(index.includes('theme-color-modes.mdc'));
+      assert.ok(index.includes('tailwindcss-rules.mdc'));
+      assert.ok(index.includes('figma-design-system.mdc'));
+      assert.match(index, /must read.*theme-color-modes\.mdc[\s\S]*tailwindcss-rules\.mdc/);
+      assert.match(index, /must read.*theme-color-modes\.mdc[\s\S]*figma-design-system\.mdc/);
+
+      const figma = readFileSync(join(shippedDir, 'figma-design-system.mdc'), 'utf-8');
+      assert.ok(!figma.includes('Voldt Theme'));
+      assert.ok(figma.includes('theme-color-modes.mdc'));
+
+      const tailwind = readFileSync(join(shippedDir, 'tailwindcss-rules.mdc'), 'utf-8');
+      assert.ok(tailwind.includes('theme-color-modes.mdc'));
+      assert.ok(!tailwind.includes('--color-dune-'));
     } finally {
       teardown();
     }

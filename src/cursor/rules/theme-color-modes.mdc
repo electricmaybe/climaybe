@@ -1,0 +1,58 @@
+---
+description: Theme color modes — put a section color schema on the root, then use only semantic token utilities. Discover exact names from this repo's _styles/. Never use arbitrary hex, primitive brand scales, or Liquid-built class names.
+globs:
+  - "**/*.liquid"
+  - "_styles/**/*.css"
+alwaysApply: true
+---
+# Theme Color Modes
+
+Token **names** differ per theme. This rule is the shared **mode → semantic children** contract. Discover exact class and variable names from **this repo’s `_styles/`** before writing markup. Names in this file are **illustrative** — replace them with what `_styles/` actually defines.
+
+## Two layers
+
+1. **Primitives / brand scales** — raw ramps in theme CSS (often `--color-<brand>-*`). Define the palette only. Never emit them as Liquid Tailwind classes.
+2. **Semantic roles** — background, text, and border utilities the theme maps onto those primitives (often `bg-surface`, `text-primary`, `border-secondary` **or this theme’s equivalents**). These are the only color utilities allowed in Liquid.
+
+## Mode first
+
+1. Read the Figma / schema tone (`primary` | `secondary` | `muted` | `accent` | `contrast` | `elevated`, or whatever this theme names).
+2. Grep `_styles/` for `@utility`, `color-schema-*`, or the theme’s equivalent mode classes.
+3. Put the matching mode class on the **section root** (or the wrapper this theme documents).
+4. Children use **only semantic utilities**. The mode remaps those tokens — do not restyle children with primitives or hex to “match Figma.”
+
+If this theme has a separate **brand vertical** axis (e.g. `education` | `industrial`), treat it the same way: one root class discovered from `_styles/`, children stay semantic.
+
+## Size modes
+
+Breakpoint / density modes (`lg` | `md` | `default`, or this theme’s names) map to **responsive utilities** (`md:`, `lg:`) and theme size tokens — never hard `px` or `text-[14px]`.
+
+## Forbidden
+
+- Arbitrary hex / rgb in Tailwind: `text-[#d1d1d1]`, `bg-[#fff]`, `border-[rgb(...)]`
+- Inventing token or utility names that do not exist in `_styles/`
+- Building class names with Liquid: `text-{{ color }}`, `bg-{{ settings.color }}`
+- Primitive / brand-scale classes in Liquid
+
+## Discovery (do this before coding)
+
+```bash
+rg -n "@utility|color-schema|--background-color|--text-color|--border-color|@theme" _styles/
+```
+
+Typical homes (paths vary by theme): `_styles/02_base/*colors*.css`, `_styles/01_theme/*primitives*.css`, `_styles/main.css`.
+
+Then read `tailwindcss-rules.mdc` (static classes, `@source`) and `figma-design-system.mdc` (Figma → Liquid).
+
+## Illustrative only
+
+```liquid
+<section class="color-schema-muted">
+  <div class="bg-surface text-primary border-secondary">
+    <h2 class="text-primary">…</h2>
+    <p class="text-secondary">…</p>
+  </div>
+</section>
+```
+
+`color-schema-muted`, `bg-surface`, and `text-primary` are examples. Replace them with utilities this theme defines in `_styles/`.

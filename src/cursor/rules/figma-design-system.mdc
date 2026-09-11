@@ -1,5 +1,5 @@
 ---
-description: Rules for implementing Figma designs using the Figma MCP server. Covers component organization, styling conventions, design tokens, asset handling, and the required Figma-to-code workflow for this Shopify theme (Liquid + Tailwind + native JS).
+description: Rules for implementing Figma designs using the Figma MCP server. Covers component organization, styling conventions, design tokens (discover from _styles/; see theme-color-modes.mdc), asset handling, and the Figma-to-code workflow for Electric Maybe Shopify themes (Liquid + Tailwind + native JS).
 globs:
   - "sections/**/*.liquid"
   - "snippets/**/*.liquid"
@@ -9,9 +9,11 @@ globs:
 alwaysApply: false
 ---
 
-# Figma Design System Rules — Voldt Theme
+# Figma Design System Rules
 
-This document defines how to translate Figma designs into code for this project. The theme is a **Shopify theme** (Liquid templates, Tailwind CSS v4, native JavaScript web components). Figma MCP output is typically React + Tailwind; treat that as design reference only and implement using this project’s stack and conventions.
+This document defines how to translate Figma designs into code for **Electric Maybe Shopify themes** (Liquid templates, Tailwind CSS v4, native JavaScript web components). Token *names* differ per theme; discover them from this repo’s `_styles/`. Figma MCP output is typically React + Tailwind; treat that as design reference only and implement using this theme’s stack and conventions.
+
+**Color work:** read `theme-color-modes.mdc` first. Match the Figma/schema color mode on the section root, then use only semantic utilities on children. Never emit arbitrary hex (`text-[#d1d1d1]`) or primitive brand scales as Liquid Tailwind classes.
 
 ---
 
@@ -19,27 +21,22 @@ This document defines how to translate Figma designs into code for this project.
 
 ### 1.1 Token Definitions
 
-**Location and format**
+**Discover from this repo — do not assume another theme’s catalog**
 
-- **Primitives (colors, z-index):** `_styles/01_theme/01_primitives.css`  
-  - Raw color scales: `--color-dune-*`, `--color-abbey-*`, `--color-dust-*`, `--color-blue-*`, system colors, `--layer-*`.
-- **Sizes (spacing, breakpoints, borders, grid):** `_styles/02_base/02.01_sizes.css`  
-  - Spacing: `--px-s-*`, `--py-s-*`, `--gaps-x-*`, `--gaps-y-*`, `--mx-s-outer`, `--height-b-*`, `--height-icon-*`.  
-  - Breakpoints: `--breakpoint-lg: 60rem`.  
-  - Border/stroke: `--border-*`, `--stroke-*`.  
-  - Grid: `--grid-columns-base`, `--grid-gutter-base`, `--grid-margin-base`, etc.
-- **Semantic colors:** `_styles/02_base/02.02_colors.css`  
-  - Use these, not raw primitives: `--background-color-surface`, `--background-color-subtle`, `--background-color-emphasis`, `--background-color-accent`, `--text-color-primary`, `--text-color-secondary`, `--text-color-on-accent`, `--border-color-primary`, `--border-color-secondary`.  
-  - Color schemes: utilities `color-schema-primary`, `color-schema-secondary`, `color-schema-muted`, `color-schema-accent-1`, `color-schema-accent-2`, `color-schema-accent-3`, `color-schema-contrast`.
-- **Typography:** `_styles/02_base/02.03_typography.css`  
-  - Font: `--font-body`, `--font-heading`, `--font-weight-*`.  
-  - Utilities: `text-body`, `text-body-lg`, `text-ui-base`, `text-caption`, `display-1`–`display-3`, heading classes `.h1`–`.h6`.
+Grep `_styles/` before coding. Typical layout (paths and names vary):
+
+- **Primitives / brand scales:** `_styles/01_theme/` — raw ramps (`--color-<brand>-*`), system colors, z-index. CSS-only; never as Liquid Tailwind classes.
+- **Sizes (spacing, breakpoints, borders, grid):** `_styles/02_base/` size files — spacing, `--breakpoint-*`, stroke, grid tokens. Use the scale this theme defines, not hard `px`.
+- **Semantic colors + modes:** `_styles/02_base/` color files — background / text / border roles and `@utility` mode classes (often `color-schema-*`). See `theme-color-modes.mdc`.
+- **Typography:** `_styles/02_base/` type files — `--font-body`, `--font-heading`, and this theme’s type utilities.
+
+Do **not** enumerate or copy Figma variable dumps. Map Figma color styles to this theme’s **mode + semantic** utilities.
 
 **Rules**
 
-- IMPORTANT: Never hardcode hex/hsl colors in Liquid or CSS. Use semantic tokens (e.g. `bg-surface`, `text-primary`, `border-secondary`) or Tailwind theme values that reference these tokens.
-- Spacing and layout must use the project scale (e.g. `px-s-inner`, `py-s-base`, `gap-x-b-base`, `mx-s-outer`) or Tailwind utilities that map to them.
-- Typography must use the project’s font and size utilities (e.g. `text-body`, `font-heading`, `.h2`).
+- IMPORTANT: Never hardcode hex/hsl in Liquid or CSS (`text-[#d1d1d1]`, raw `#fff`). Use semantic utilities under the active color mode (`theme-color-modes.mdc`).
+- Spacing and layout must use this theme’s scale (grep `_styles/` for spacing / gap / margin tokens) or Tailwind utilities that map to them — not arbitrary `px`.
+- Typography must use this theme’s font and size utilities (confirm names in `_styles/`).
 
 ### 1.2 Component Library
 
@@ -84,8 +81,8 @@ This document defines how to translate Figma designs into code for this project.
 
 - **Methodology:** Utility-first with Tailwind. Custom utilities and theme in `_styles/main.css` and `_styles/02_base/*.css`, `_styles/01_theme/*.css`.
 - **CRITICAL — Static classes only:** Tailwind scans at build time; Liquid runs on the server. Do not build class names with Liquid variables (e.g. no `duration-{{ x }}`, `text-{{ color }}`). Use fixed classes or conditionals that output full class names, e.g. `{% if size == 'sm' %}text-sm{% else %}text-base{% endif %}`.
-- **Responsive:** Mobile-first. Use `md:` and `lg:` prefixes; breakpoints align with `theme(--breakpoint-md)` and `theme(--breakpoint-lg)`.
-- **Semantic tokens in Tailwind:** Use `bg-surface`, `text-primary`, `border-secondary`, etc., which map to the CSS variables in `02.02_colors.css`. Do not introduce new ad-hoc color names; extend tokens in `_styles/` if needed.
+- **Responsive:** Mobile-first. Use `md:` and `lg:` prefixes; breakpoints align with `theme(--breakpoint-*)` in this repo’s `_styles/`. Figma size modes (lg | md | default) become responsive utilities, not hard `px`.
+- **Semantic tokens in Tailwind:** After the section color mode is on the root, children use only semantic utilities discovered from `_styles/` (often `bg-surface`, `text-primary`, `border-secondary` — **confirm names**). Do not invent tokens or paste Figma hex. See `theme-color-modes.mdc`.
 - **Custom component CSS:** Add in `_styles/` (e.g. `_styles/atoms/`, `_styles/molecules/`) and import from `_styles/main.css`.
 
 ### 1.7 Project Structure
@@ -125,8 +122,8 @@ config/                  # Theme settings
 
 - Treat Figma MCP output (e.g. React + Tailwind) as **design and behavior reference**, not as final code. Translate to Liquid + Tailwind + this theme’s tokens and components.
 - **Reuse existing snippets/sections** from `snippets/` and `sections/` instead of duplicating (e.g. buttons → `a--button`, icons → `a--icon`, cards → `m--*` cards, modals → `m--modal` / electric-modal).
-- Use the project’s **color system** (semantic tokens from `02.02_colors.css`), **typography** (`02.03_typography.css`, utilities), and **spacing/sizes** (`02.01_sizes.css`, Tailwind utilities that use them).
-- **Tailwind:** Only static class names; map Figma colors to semantic tokens (e.g. `bg-surface`, `text-primary`); use project breakpoints and spacing scale.
+- Use this theme’s **color system** (`theme-color-modes.mdc`: mode on the root, semantic children from `_styles/`), **typography**, and **spacing/sizes** (discover utilities in `_styles/`).
+- **Tailwind:** Only static class names; map Figma colors to this theme’s mode + semantic tokens — never arbitrary hex. Use this theme’s breakpoints and spacing scale.
 - Respect **accessibility** (WCAG 2.1 AA): semantic HTML, ARIA where needed, keyboard and screen reader support; see `.config/ai/rules/accessibility-rules.mdc`.
 - Respect **JS standards**: no new dependencies; if adding behavior, use native JS/web components per `.config/ai/rules/javascript-standards.mdc`.
 - Aim for **1:1 visual parity** with the Figma design and validate with the screenshot.
@@ -161,7 +158,7 @@ config/                  # Theme settings
 
 ### 3.5 Code Quality
 
-- JS: JSDoc for public APIs, private `#` fields, try/catch around critical work. Liquid: LiquidDoc and parameter defaults/validation. Tailwind: static classes and semantic tokens only.
+- JS: JSDoc for public APIs, private `#` fields, try/catch around critical work. Liquid: LiquidDoc and parameter defaults/validation. Tailwind: static classes, color mode on the section root, semantic tokens only (`theme-color-modes.mdc`).
 
 ---
 
@@ -170,13 +167,13 @@ config/                  # Theme settings
 | Figma / MCP output     | This theme |
 |------------------------|------------|
 | React component        | Liquid section or snippet(s) |
-| Tailwind arbitrary colors | Semantic tokens: `bg-surface`, `text-primary`, `border-secondary`, etc. |
-| Tailwind spacing       | Project scale: `px-s-inner`, `gap-x-b-base`, `py-s-base`, etc. |
+| Tailwind arbitrary colors / hex | Section color mode + semantic utilities from `_styles/` (`theme-color-modes.mdc`). Never `text-[#…]`. |
+| Tailwind spacing       | This theme’s scale from `_styles/` (not hard `px`) |
 | Icon component         | `{% render 'a--icon', icon: 'name', size: 'base' %}` |
 | Button                 | `{% render 'a--button', ... %}` or `a--button-tw` as per project |
 | Modal / overlay        | `m--modal` snippet + `_scripts/electric-modal.js` pattern |
 | Images                 | `{{ image \| image_url: width: N }}`; responsive with `srcset` |
 | New SVG icon           | Add in `snippets/a--icon.liquid` as new `when 'icon-name'` |
-| New color/size token   | Add in `_styles/02_base/` or `01_theme/` and use via Tailwind/utilities |
+| New color/size token   | Add in `_styles/` (primitives vs semantic layers) and use via Tailwind/utilities |
 
-Use this document together with the Figma MCP flow (get_design_context → get_screenshot → implement → validate) so that every Figma-driven change stays consistent with this design system and stack.
+Use this document together with `theme-color-modes.mdc` and the Figma MCP flow (get_design_context → get_screenshot → implement → validate) so that every Figma-driven change stays consistent with this theme’s tokens and stack.
