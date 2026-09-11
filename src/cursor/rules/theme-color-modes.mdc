@@ -1,5 +1,5 @@
 ---
-description: Theme color modes — Figma six-tone on the section root; brand-educational|brand-industrial on html; children use semantic roles from _styles/. Do not assume stock Tailwind for Base/Sizes. Component tokens map to atoms. Never hex, primitive ramps, or Liquid-built class names.
+description: Theme color modes — discover color-schema, brand classes, size overrides, and atoms from this theme’s _styles/. Axes are optional. Never hex, Brand ramps, Liquid-built class names, or a baked collection catalog.
 globs:
   - "**/*.liquid"
   - "_styles/**/*.css"
@@ -7,97 +7,82 @@ alwaysApply: true
 ---
 # Theme Color Modes
 
-Figma (EISCO Main variables) is the **structure** SSOT. **01.01 Theme/Primitives** ≈ stock Tailwind (spacing / text / rounded) — use `--spacing()` / default theme; do not re-declare every `--spacing-8`. Figma half-steps (`0,5`, `9xl-1`, `12rem`) are **cleanup**, not Liquid classes — do not invent them.
+Climaybe helps AIs **use existing `_styles` when matching Figma**. It does **not** scaffold `_styles` from Figma. Token names, tones, and axes differ per theme. Discover them in **this repo** before writing markup. Names in this file are **illustrative**.
 
-**Everything from `01.02 Theme/Brand` onward is customized.** Discover exact names from this repo’s `_styles/` (and Figma when scaffolding tokens). Names below are **illustrative**.
+Do **not** treat any theme’s Figma collection catalog as shared SSOT. Theme-local notes (for example `theme-tokens.mdc`) are optional later — not this always-on rule.
 
-## Two axes (keep them separate)
+## 1. Discover first
 
-### 1. Brand vertical → `<html>` (`01.02 Theme/Brand`)
+Before any color, size, or component class, grep **this theme**:
 
-Figma modes: `education` | `industrial`.
+1. `_styles/` for `@utility` / `color-schema-*`, brand classes, `@theme` size overrides, semantic roles, atoms.
+2. `layout/theme.liquid` and `_layout/theme.liquid` for brand classes on `<html>` and documented mode wrappers.
 
-Runtime intent: a **single class on `<html>`** that rebinds Brand-dependent CSS variables (accent / neutral ramps, fonts, radii) so the whole tree flips:
-
-```liquid
-<html class="brand-educational">
-<!-- or -->
-<html class="brand-industrial">
+```bash
+rg -n "@utility|color-schema|brand-|max-w-|--background-color|--text-color|--border-color|@theme|a--button" _styles/ layout/ _layout/ snippets/
 ```
 
-Accept either `brand-educational` / `brand-education` (and the industrial pair) — **discover the exact class** from `_styles/` / `layout/theme.liquid` / `_layout/theme.liquid`. Do not put the brand class on the section. Do not restyle children with Brand ramps.
+Use only names that exist here. Do not copy another theme’s catalog.
 
-### 2. Section tone → section root (`02.02 Base/Colors`)
+## 2. Axes are optional
 
-Six tones: `primary` | `secondary` | `muted` | `accent` | `contrast` | `elevated`.
+### Brand-on-`<html>`
 
-Put the matching mode class on the **section root** (often `color-schema-*`). New Figma-driven themes use this set — a single `accent` tone, **not** `accent-1` / `accent-2` / `accent-3`.
+Apply a brand class on `<html>` **only if** this theme ships Brand modes **and** a brand class (grep `_styles/` / `theme.liquid`). One class rebinds Brand CSS variables for the tree. Do not put brand on the section. Do not invent `brand-*` when none exist.
 
-Children use **only semantic roles**. The tone remaps those tokens.
+### Section tone
 
-**Older `_styles/`:** some themes still ship `color-schema-accent-1|2|3` and omit `elevated`. Use grep. Do not invent `color-schema-elevated` or treat accent-1/2/3 as the Figma SSOT.
+Tone list = **intersection** of Figma color modes and `@utility color-schema-*` (or this theme’s equivalent) **present in `_styles/`**. Never a fixed six-name list.
 
-## Semantic roles (`02.02 Base/Colors`)
+Some themes ship `color-schema-accent-1|2|3` — that is **one valid discovered pattern**, not “older only.” Other themes ship different tone names. Use what grep finds. Do not invent a missing `color-schema-*`.
 
-When present in `_styles/`, Liquid uses:
+Put the matching mode class on the **section root**. Children use semantic roles only.
 
-- **bg:** `surface` | `subtle` | `emphasis` | `accent` | `accent-sec`
-- **text:** `primary` | `secondary` | `accent` | `on-accent` | `on-accent-sec`
-- **border:** `primary` | `secondary` | `tertiary` | `accent` | `on-accent` | `on-accent-sec`
+## 3. Semantic roles
 
-`02.03 Base/Alphacolors` (`0-*` overlays) is **legacy** — not the primary API.
+Roles = what `_styles` defines under the active schema (background / text / border utilities). Never hex. Never invent a missing role. Never emit Brand ramps (`color/neutral/*`, `color/accent/*`, `color/brand/*`) or primitive scales as Liquid classes.
 
-If `_styles/` is missing a Figma role (`text-accent`, `bg-accent-sec`, `border-tertiary`, `border-accent`, `elevated`), do **not** invent it or fall back to hex. Closest shipped semantic utility, or a theme `_styles` PR.
+If Figma names a role this theme does not ship, use the closest **existing** semantic utility. Do not add tokens from Figma.
 
-Brand ramps (`color/neutral/*`, `color/accent/*`, `color/brand/*`) are CSS-only — never Liquid classes.
+## 4. Sizes
 
-## Overridden Tailwind utilities (`02.01 Base/Sizes`)
+`_styles/02_base/*sizes*` (or this theme’s equivalent) is authoritative. Figma `02.01` layers may **override stock Tailwind** (`max-w-*`, `px` / `py` / `gap` / `height` / `icon` / `text-size`) via `@theme` / `@utility`. **Do not assume stock Tailwind values.** Grep first.
 
-Figma `max-width/sm|base|lg|xl|2xl` (modes `lg` | `md` | `default`) aliases into `spacing/*` and may **redefine stock Tailwind** (`max-w-sm`, etc.) via `@theme` / `@utility max-w-*` plus breakpoint remaps.
+Map Figma `lg` | `md` | `default` → `lg:` | `md:` | base **only when this theme’s CSS remaps exist**. Never hard `px`.
 
-**Do not assume stock Tailwind values** for any utility listed in `_styles/02_base/*sizes*`. Grep theme tokens first. Same pattern may apply to `px` / `py` / `gap` / `height` / `icon` / `text-size`. Layout density modes map to `md:` / `lg:` — never hard `px`.
+## 5. Components → atoms
 
-## Components → atoms (`03.01` / `03.02`)
-
-`03.01 Components/Sizes` (button / input × `lg` | `base` | `sm`) and `03.02 Components/Colors` (`primary` | `secondary`, including state opacities) are **not** flat section tokens. They map to **atom CSS** (`a--button`, inputs) composed from Base semantic tokens.
-
-Build UI with existing atom classes / data attributes (`{% render 'a--button', ... %}`). Do **not** invent `button/height` utilities. If atoms do not implement the Figma matrix yet, that is a theme `_styles` gap — do not fake with hex.
+When this theme has component tokens (`03.01` / `03.02` or equivalent), they map to **atoms** (`a--button`, inputs), not invented `button/height` utilities. Build UI with existing atom classes / `{% render 'a--button', ... %}`. If no matching atom exists, compose from shipped semantic utilities — do not invent component utilities or hex.
 
 ## Mode first
 
-1. Grep `_styles/` (and `theme.liquid`) for brand class, `@utility` / `color-schema-*`, `@theme` size overrides, semantic roles, atoms.
-2. Set **brand** on `<html>` when the theme has that axis.
-3. Set **tone** on the section root.
-4. Children: semantic roles only. Buttons/inputs: atoms, not one-off utilities.
-
-```bash
-rg -n "@utility|color-schema|brand-educat|brand-industrial|max-w-|--background-color|--text-color|--border-color|@theme|elevated" _styles/ layout/ _layout/
-```
+1. Discover (grep above).
+2. Set **brand** on `<html>` only when that axis exists.
+3. Set **tone** on the section root from the intersection of Figma modes and this theme’s `color-schema-*`.
+4. Children: semantic roles only. Buttons/inputs: atoms when present.
 
 Then read `figma-design-system.mdc` and `tailwindcss-rules.mdc`.
 
 ## Forbidden
 
 - Arbitrary hex / rgb: `text-[#d1d1d1]`, `bg-[#fff]`
-- Inventing tokens, Figma half-steps, or `button/height`-style utilities
+- Inventing tokens or utilities that do not exist in `_styles/`
 - Liquid-built class names: `text-{{ color }}`
 - Brand ramps or primitive scales as Liquid classes
-- Assuming stock Tailwind `max-w-*` / spacing when `_styles/02_base/*sizes*` overrides them
-- Teaching `accent-1|2|3` as the Figma tone list
-- Putting brand vertical on the section instead of `<html>`
+- Assuming stock Tailwind `max-w-*` / spacing when `02_base/*sizes*` overrides them
+- Baking any theme’s Figma collection catalog (tone lists, brand verticals, role laundry lists) as shared SSOT
+- Scaffolding `_styles` from Figma
 
 ## Illustrative only
 
 ```liquid
-<html class="brand-educational">
-  …
-  <section class="color-schema-muted">
-    <div class="bg-surface text-primary border-secondary">
-      <h2 class="text-primary">…</h2>
-      <p class="text-secondary">…</p>
-      {% render 'a--button', variant: 'primary', size: 'base' %}
-    </div>
-  </section>
+<section class="color-schema-muted">
+  <div class="bg-surface text-primary border-secondary">
+    <h2 class="text-primary">…</h2>
+    <p class="text-secondary">…</p>
+    {% render 'a--button', variant: 'primary', size: 'base' %}
+  </div>
+</section>
 ```
 
-Replace every class / param with what this theme’s `_styles/` and atoms actually define.
+Replace every class / param with what this theme’s `_styles/` and atoms actually define. If grep found a brand class, set it on `<html>` — not on the section.

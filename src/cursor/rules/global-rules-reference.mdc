@@ -40,9 +40,9 @@ These rules are synced from ~/.claude/rules/:
 - `javascript-standards.mdc` - JS best practices with layout/reflow optimization
 - `accessibility-rules.mdc` - WCAG 2.1 AA compliance
 - `commit-rules.mdc` - Git commit conventions
-- `theme-color-modes.mdc` - Color modes (brand on `<html>`, six-tone on the section, components → atoms; discover from `_styles/`)
-- `tailwindcss-rules.mdc` - Tailwind CSS standards (static classes; do not assume stock `max-w-*` when Base/Sizes override)
-- `figma-design-system.mdc` - Figma → Liquid + Tailwind (7-collection SSOT; theme-generic)
+- `theme-color-modes.mdc` - Color modes (discover from `_styles/`; optional brand on `<html>`; section tone; components → atoms)
+- `tailwindcss-rules.mdc` - Tailwind CSS standards (static classes; do not assume stock `max-w-*` when sizes override)
+- `figma-design-system.mdc` - Figma → Liquid + Tailwind (discover from `_styles/`; no baked collection catalog)
 
 **Shopify Theme Development:**
 - `liquid.mdc` - Liquid syntax rules
