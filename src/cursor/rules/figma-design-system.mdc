@@ -29,6 +29,7 @@ Grep `_styles/` and `theme.liquid` before coding. Typical layout (paths and name
 - **Sizes:** `_styles/02_base/*sizes*` — spacing, `max-w-*`, breakpoints. Figma `02.01` may **override stock Tailwind**; do not assume stock `max-w-*` / spacing. Grep `@theme` first.
 - **Semantic colors + modes:** `_styles/02_base/` color files — background / text / border roles and `@utility` mode classes (often `color-schema-*`). Tone list = intersection of Figma modes and utilities **this theme ships**. Some themes ship `color-schema-accent-1|2|3` — that is one valid discovered pattern, not “older only.”
 - **Typography:** `_styles/02_base/` type files — font and type utilities this theme defines.
+  - **Letter-spacing / tracking:** Figma text `letterSpacing` is usually **Percent** of font-size (API often shows `2` meaning **2%**, `-2` meaning **-2%**). CSS: `letter-spacing: 2%`. Never map the raw number to `em` or `px` unless Figma unit is Pixels. Prefer keeping `%` in `_styles` tokens so Figma and CSS stay 1:1.
 - **Component tokens:** when `03.01` / `03.02` (or equivalent) exist, they map to **atoms** (`a--button`, inputs), not invented `button/height` utilities.
 
 Do **not** enumerate or copy a Figma variable dump. Do **not** scaffold `_styles` from Figma. Map Figma color styles to this theme’s **existing** mode + semantic utilities.
@@ -48,7 +49,7 @@ Do **not** enumerate or copy a Figma variable dump. Do **not** scaffold `_styles
 
 - IMPORTANT: Never hardcode hex/hsl in Liquid or CSS (`text-[#d1d1d1]`, raw `#fff`). Use semantic utilities under the active color mode (`theme-color-modes.mdc`).
 - Spacing: grep `_styles/` — `02.01` / `*sizes*` may override stock Tailwind. Never arbitrary `px`.
-- Typography must use this theme’s font utilities confirmed in `_styles/`.
+- Typography must use this theme’s font utilities confirmed in `_styles/`. Figma `letterSpacing` is usually percent of font-size — never map the raw API number to `em` or `px` unless the Figma unit is Pixels.
 
 ### 1.2 Component Library
 
