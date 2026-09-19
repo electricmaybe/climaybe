@@ -176,6 +176,10 @@ describe('cursor-bundle (AI config)', () => {
       assert.ok(figma.includes('accent-1'));
       assert.doesNotMatch(figma, /[Oo]lder[\s\S]{0,80}accent-1/);
       assert.ok(figma.includes('does not scaffold') || figma.includes('Do **not** scaffold'));
+      assert.match(figma, /letterSpacing/);
+      assert.match(figma, /2%/);
+      assert.match(figma, /letter-spacing:\s*2%/);
+      assert.match(figma, /[Nn]ever map the raw (?:API )?number to `em` or `px`/);
 
       assert.ok(tailwind.includes('theme-color-modes.mdc'));
       assert.ok(!tailwind.includes('--color-dune-'));
