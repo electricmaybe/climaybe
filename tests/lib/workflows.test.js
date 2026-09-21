@@ -156,6 +156,11 @@ describe('workflows', () => {
           prUpdate,
           /cleanup-themes:\s*\n\s*needs:\s*\[validate-environment,\s*extract-pr-number,\s*validate-secrets-per-store\]/m
         );
+        assert.match(prUpdate, /types:\s*\[opened,\s*synchronize,\s*reopened,\s*labeled,\s*unlabeled\]/);
+        assert.match(prUpdate, /contains\(github\.event\.pull_request\.labels\.\*\.name,\s*'skip-preview'\)/);
+        assert.match(prUpdate, /\\\[skip-preview\\\]/);
+        assert.match(prUpdate, /Detect skip-preview opt-out/);
+        assert.match(prUpdate, /github\.event\.label\.name\s*==\s*'skip-preview'/);
         assert.match(prUpdate, /HEAD_REF:\s*\$\{\{\s*github\.event\.pull_request\.head\.ref\s*\}\}/);
         assert.match(prUpdate, /const branchRef = headRef \|\| baseRef;/);
         assert.match(prClose, /HEAD_REF:\s*\$\{\{\s*github\.event\.pull_request\.head\.ref\s*\}\}/);

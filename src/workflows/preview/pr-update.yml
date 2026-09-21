@@ -1,23 +1,77 @@
 # climaybe — PR Update (Optional Preview Package)
 # Creates a Shopify preview theme on PR update, renames it with PR number,
 # and posts preview/customize links back to the PR.
+#
+# Opt out of theme share/push for a PR or commit:
+#   - PR label: skip-preview
+#   - PR title or body contains: [skip-preview]
+#   - Head commit message contains: [skip-preview]
 
 name: PR Update
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     branches: [main, staging, develop, 'staging-*', 'live-*']
 
 jobs:
   filter:
+    # Ignore unrelated label churn; only re-evaluate when skip-preview is added/removed.
+    if: >
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      github.event.label.name == 'skip-preview'
     runs-on: ubuntu-latest
     outputs:
-      theme: ${{ steps.paths.outputs.theme }}
+      theme: ${{ steps.decide.outputs.theme }}
+      skip_preview: ${{ steps.decide.outputs.skip_preview }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Detect skip-preview opt-out
+        id: skip
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'skip-preview') }}
+        run: |
+          SKIP=false
+          REASON=""
+
+          if [ "$HAS_SKIP_LABEL" = "true" ]; then
+            SKIP=true
+            REASON="PR has label skip-preview"
+          elif printf '%s' "$PR_TITLE" | grep -qiE '\[skip-preview\]'; then
+            SKIP=true
+            REASON="PR title contains [skip-preview]"
+          elif printf '%s' "$PR_BODY" | grep -qiE '\[skip-preview\]'; then
+            SKIP=true
+            REASON="PR body contains [skip-preview]"
+          else
+            HEAD_MSG=$(git log -1 --format=%B)
+            if printf '%s' "$HEAD_MSG" | grep -qiE '\[skip-preview\]'; then
+              SKIP=true
+              REASON="head commit message contains [skip-preview]"
+            fi
+          fi
+
+          echo "skip_preview=$SKIP" >> "$GITHUB_OUTPUT"
+          if [ "$SKIP" = "true" ]; then
+            echo "Skipping Shopify theme preview: $REASON"
+            {
+              echo "### Preview skipped"
+              echo ""
+              echo "$REASON"
+              echo ""
+              echo "Remove the \`skip-preview\` label / \`[skip-preview]\` marker to publish again."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: dorny/paths-filter@v3
         id: paths
+        if: steps.skip.outputs.skip_preview != 'true'
         with:
           filters: |
             theme:
@@ -33,6 +87,22 @@ jobs:
               - '_styles/**'
               - 'shopify.theme.toml'
               - 'stores/**'
+
+      - name: Decide whether to publish preview
+        id: decide
+        run: |
+          SKIP="${{ steps.skip.outputs.skip_preview }}"
+          THEME="${{ steps.paths.outputs.theme }}"
+          if [ "$SKIP" = "true" ]; then
+            echo "skip_preview=true" >> "$GITHUB_OUTPUT"
+            echo "theme=false" >> "$GITHUB_OUTPUT"
+          elif [ "$THEME" = "true" ]; then
+            echo "skip_preview=false" >> "$GITHUB_OUTPUT"
+            echo "theme=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip_preview=false" >> "$GITHUB_OUTPUT"
+            echo "theme=false" >> "$GITHUB_OUTPUT"
+          fi
 
   extract-pr-number:
     needs: [filter]
