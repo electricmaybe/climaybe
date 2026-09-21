@@ -281,7 +281,7 @@ Optional package, enabled via the `climaybe init` prompt (`Enable preview + clea
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `pr-update.yml` | PR opened/synchronize/reopened (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs. **Multi-store + source branch (`pull_request.head.ref`) not** `staging-<alias>` **or** `live-<alias>`**:** publishes to **every** configured store (matrix) and posts **all** links in one PR comment. For `staging-<alias>` / `live-<alias>` source branches, only that store is used. **Path filter:** theme paths only (`assets/`, `blocks/`, `config/`, `layout/`, `locales/`, `sections/`, `snippets/`, `templates/`, `_scripts/`, `_styles/`, `shopify.theme.toml`, `stores/**`). |
+| `pr-update.yml` | PR opened/synchronize/reopened/labeled/unlabeled (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs. **Skip theme push:** PR label `skip-preview`, or `[skip-preview]` in PR title/body or head commit message. **Multi-store + source branch (`pull_request.head.ref`) not** `staging-<alias>` **or** `live-<alias>`**:** publishes to **every** configured store (matrix) and posts **all** links in one PR comment. For `staging-<alias>` / `live-<alias>` source branches, only that store is used. **Path filter:** theme paths only (`assets/`, `blocks/`, `config/`, `layout/`, `locales/`, `sections/`, `snippets/`, `templates/`, `_scripts/`, `_styles/`, `shopify.theme.toml`, `stores/**`). |
 | `pr-close.yml` | PR closed (same branch set) | Deletes this PR’s preview themes using the **same store matrix rule** as `pr-update`; PR comment shows **total** deleted count across stores. |
 | `cleanup-orphan-preview-themes.yml` | PR closed (same branch set) + weekly (Mon 06:00 UTC) + `workflow_dispatch` | Per store: deletes themes ending with `-PR<n>` when PR `#n` is **not** open (merged/closed without cleanup). Uses `gh pr list` (limit 1000 open PRs). |
 | `reusable-publish-pr-preview-store.yml` | workflow_call | Share + rename + upload comment fragment for **one** store (matrix leg in `pr-update`). |
@@ -479,6 +479,18 @@ You can install/update this later with:
 - Store sync commits contain `[stores-to-root]` or `[root-to-stores]`
 - Version bump commits contain `chore(release): bump version`
 - All workflows check for these flags and skip accordingly
+
+## Skip PR preview theme push
+
+When you do not need a Shopify preview for a change (docs/CI-only PRs that still touch theme paths, WIP, etc.), opt out without disabling preview workflows globally:
+
+| Signal | Scope |
+|--------|--------|
+| PR label **`skip-preview`** | Whole PR (add/remove re-runs the gate) |
+| **`[skip-preview]`** in PR title or body | Whole PR while the marker remains |
+| **`[skip-preview]`** in the head commit message | That synchronize only |
+
+Example commit: `chore: tweak CI config [skip-preview]`. Close still runs preview cleanup if a theme was published earlier.
 
 ## GitHub Secrets
 

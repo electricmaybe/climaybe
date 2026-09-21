@@ -4,6 +4,15 @@
 
 ---
 
+## Skip PR preview theme push (`skip-preview`)
+
+`pr-update.yml` can skip Shopify theme share/push per PR or commit without turning off preview workflows in config:
+
+- PR label **`skip-preview`** (listens to `labeled` / `unlabeled` only for that label)
+- **`[skip-preview]`** in PR title, PR body, or head commit message
+
+When skipped, path-filter publish/comment jobs do not run; job summary records the reason. `pr-close` cleanup is unchanged.
+
 ## Linear issue status sync
 
 Optional `linear-status-sync.yml` (scaffolded when `linear_workflows` is true) updates Linear issues from pushes to `staging`, `main`, `staging-*`, and `live-*`. Mapping (overridable via `linear_statuses`): exact `staging` → `Staged @staging`; `staging-*` or multi-store `main` → literal `Staged @staging-<alias>`; `live-*` or single-store `main` → `Done`. Covers store-alias hops Linear’s native git automations cannot see. Secret: `LINEAR_API_KEY` (never stored in config). Command: `climaybe update:linear-key`.

@@ -15,3 +15,4 @@
 
 - [ ] Tests pass locally (`node scripts/run-tests.js`)
 - [ ] Changes are focused (no unrelated edits)
+- [ ] (Theme repos) Skip Shopify PR preview if not needed: label `skip-preview`, or `[skip-preview]` in title/body/commit
