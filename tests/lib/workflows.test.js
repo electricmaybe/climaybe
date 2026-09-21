@@ -304,6 +304,39 @@ describe('workflows', () => {
       }
     });
 
+    it('reads head commit message safely in multi-store sync gate steps', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('multi', {}, dir);
+        const workflowsDir = join(dir, '.github', 'workflows');
+        const files = [
+          'main-to-staging-stores.yml',
+          'root-to-stores.yml',
+          'stores-to-root.yml',
+        ];
+        for (const file of files) {
+          const workflow = readFileSync(join(workflowsDir, file), 'utf-8');
+          assert.match(
+            workflow,
+            /COMMIT_MESSAGE:\s*\$\{\{\s*github\.event\.head_commit\.message\s*\}\}/,
+            `${file} should set COMMIT_MESSAGE under env`
+          );
+          assert.match(
+            workflow,
+            /COMMIT_MSG=\$\(printf '%s\\n' "\$COMMIT_MESSAGE"\)/,
+            `${file} should read COMMIT_MSG via printf from env`
+          );
+          assert.doesNotMatch(
+            workflow,
+            /COMMIT_MSG="\$\{\{\s*github\.event\.head_commit\.message\s*\}\}"/,
+            `${file} must not interpolate head_commit.message into the shell script`
+          );
+        }
+      } finally {
+        teardown();
+      }
+    });
+
     it('wires create-release to tagging workflow completion', () => {
       const dir = setup();
       try {
