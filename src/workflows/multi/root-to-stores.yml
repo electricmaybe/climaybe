@@ -28,8 +28,10 @@ jobs:
 
       - name: Skip if our own sync commit; detect if push from main
         id: gate
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          COMMIT_MSG=$(printf '%s\n' "$COMMIT_MESSAGE")
           if echo "$COMMIT_MSG" | grep -qE "\[root-to-stores\]|\[stores-to-root\]|\[hotfix-backport\]|chore\(release\)"; then
             echo "skip=true" >> $GITHUB_OUTPUT
             echo "from_main=false" >> $GITHUB_OUTPUT

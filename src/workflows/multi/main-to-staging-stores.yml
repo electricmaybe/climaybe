@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Check commit message and hotfix source
         id: check
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             echo "Triggered by workflow_run (version-bump finished); syncing main to staging."
@@ -47,7 +49,7 @@ jobs:
             exit 0
           fi
 
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          COMMIT_MSG=$(printf '%s\n' "$COMMIT_MESSAGE")
 
           if echo "$COMMIT_MSG" | grep -qE "\[skip-store-sync\]|\[stores-to-root\]|\[root-to-stores\]"; then
             echo "Skipping — store sync commit (avoid loop)"

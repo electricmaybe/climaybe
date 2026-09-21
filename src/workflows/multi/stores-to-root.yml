@@ -29,13 +29,15 @@ jobs:
 
       - name: Skip if this is our own sync commit
         id: gate
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "skip=false" >> $GITHUB_OUTPUT
             echo "from_main=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          COMMIT_MSG=$(printf '%s\n' "$COMMIT_MESSAGE")
           if echo "$COMMIT_MSG" | grep -qE "\[stores-to-root\]|\[root-to-stores\]"; then
             echo "skip=true" >> $GITHUB_OUTPUT
             echo "from_main=false" >> $GITHUB_OUTPUT
