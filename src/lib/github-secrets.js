@@ -48,17 +48,33 @@ export const SECRET_DEFINITIONS = [
     name: 'SHOPIFY_THEME_ACCESS_TOKEN',
     required: false,
     condition: 'preview',
-    description: 'Theme access token so CI can push preview themes (password from Shopify Theme Access app)',
+    description: 'Legacy Theme Access password for preview (prefer SHOP_CLIENT_ID + SHOP_CLIENT_SECRET)',
     whereToGet:
-      'Install the Theme Access app from Shopify: it gives you a password — that password is your theme access token.',
+      'Prefer Dev Dashboard / agency app client credentials. Legacy: Theme Access app password for this store.',
+  },
+  {
+    name: 'SHOP_CLIENT_ID',
+    required: false,
+    condition: 'preview_or_build',
+    description: 'Dev Dashboard / agency app client ID (Trafo etc.) for preview + Lighthouse',
+    whereToGet:
+      'Shopify Dev Dashboard (dev.shopify.com) → your app (e.g. Trafo) → Settings → Client credentials → Client ID. App needs write_themes (and read_products for Lighthouse). Install on the CI store(s).',
+  },
+  {
+    name: 'SHOP_CLIENT_SECRET',
+    required: false,
+    condition: 'preview_or_build',
+    description: 'Dev Dashboard / agency app client secret (pair with SHOP_CLIENT_ID)',
+    whereToGet:
+      'Same Dev Dashboard app → Client secret. CI exchanges these for a short-lived Admin API token (client credentials grant).',
   },
   {
     name: 'SHOP_ACCESS_TOKEN',
     required: false,
     condition: 'build',
-    description: 'Store API access token for Lighthouse runs',
+    description: 'Legacy Admin API access token for Lighthouse (only if you still have a pre-2026 Admin custom app)',
     whereToGet:
-      'Shopify Admin → Settings → Apps and sales channels → Develop apps → your app → API credentials (Admin API or custom app with storefront/build access).',
+      'Prefer SHOP_CLIENT_ID + SHOP_CLIENT_SECRET. Legacy only: Admin-created custom apps (before Jan 2026) → API credentials → Admin API access token. New apps cannot be created in Admin.',
   },
   {
     name: 'LHCI_GITHUB_APP_TOKEN',
@@ -318,46 +334,25 @@ export function getSecretsToPrompt({
     return false;
   });
 
-  // Multi-store: drop generic Shopify tokens; we prompt per-store below
-  const dropForMulti =
-    isMulti
-      ? (s) =>
-          s.name !== 'SHOPIFY_THEME_ACCESS_TOKEN' &&
-          s.name !== 'SHOP_ACCESS_TOKEN' &&
-          s.name !== 'SHOP_PASSWORD'
-      : () => true;
+  // Multi-store: theme tokens are optional legacy per-store; client credentials are repo-level
+  // (same agency app installed on each store in the org).
+  const dropForMulti = isMulti
+    ? (s) => s.name !== 'SHOPIFY_THEME_ACCESS_TOKEN'
+    : () => true;
 
   let list = base.filter(dropForMulti);
 
-  // Multi-store: prompt per store (theme token, then access token + password if build) so user configures one store at a time
-  if (isMulti) {
+  // Multi-store: optional legacy Theme Access password per store
+  if (isMulti && enablePreviewWorkflows) {
     for (const store of stores) {
       const suffix = aliasToSecretSuffix(store.alias);
-      if (enablePreviewWorkflows) {
-        list.push({
-          name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
-          required: false,
-          description: `Store ${store.alias}: Theme access token (password from Theme Access app)`,
-          whereToGet: 'Theme Access app in Shopify — the password it gives is the token for this store.',
-        });
-      }
-      if (enableBuildWorkflows) {
-        list.push(
-          {
-            name: `SHOP_ACCESS_TOKEN_${suffix}`,
-            required: false,
-            description: `Store ${store.alias}: API access token for Lighthouse`,
-            whereToGet:
-              'Shopify Admin → Develop apps → your app → API credentials (Admin/storefront access).',
-          },
-          {
-            name: `SHOP_PASSWORD_${suffix}`,
-            required: false,
-            description: `Store ${store.alias}: Storefront password if protected (optional)`,
-            whereToGet: 'Storefront password in Shopify Admin for this store.',
-          }
-        );
-      }
+      list.push({
+        name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
+        required: false,
+        description: `Store ${store.alias}: Legacy Theme Access password (optional if SHOP_CLIENT_ID/SECRET set)`,
+        whereToGet:
+          'Prefer repo SHOP_CLIENT_ID + SHOP_CLIENT_SECRET. Legacy: Theme Access app password for this store.',
+      });
     }
   }
 
@@ -380,20 +375,9 @@ export function getSecretsToPromptForNewStore(store) {
     {
       name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
       required: false,
-      description: `Store ${store.alias}: Theme access token (password from Theme Access app)`,
-      whereToGet: 'Theme Access app in Shopify — the password it gives is the token for this store.',
-    },
-    {
-      name: `SHOP_ACCESS_TOKEN_${suffix}`,
-      required: false,
-      description: `Store ${store.alias}: API access token for Lighthouse (if using build workflows)`,
-      whereToGet: 'Shopify Admin → Develop apps → your app → API credentials.',
-    },
-    {
-      name: `SHOP_PASSWORD_${suffix}`,
-      required: false,
-      description: `Store ${store.alias}: Storefront password if protected (optional)`,
-      whereToGet: 'Storefront password in Shopify Admin for this store.',
+      description: `Store ${store.alias}: Legacy Theme Access password (optional if SHOP_CLIENT_ID/SECRET set)`,
+      whereToGet:
+        'Prefer repo SHOP_CLIENT_ID + SHOP_CLIENT_SECRET when Trafo/your app is installed on this store. Legacy: Theme Access password.',
     },
   ];
 }

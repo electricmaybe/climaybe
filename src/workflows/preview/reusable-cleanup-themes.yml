@@ -7,16 +7,21 @@ on:
         required: false
         type: string
         default: 'by_pr'
-        description: "by_pr: delete themes whose name ends with -PR{pr_number} (padded). orphan_pr: delete themes ending with -PR<n> when PR n is not open in this repo."
+        description: "by_pr: delete climaybe-pr-<n> development themes and legacy -PR{padded} names. orphan_pr: delete those whose PR is not open."
       pr_number:
         required: false
         type: string
         default: ''
-        description: "Padded PR number (e.g. 09) when cleanup_mode is by_pr; ignored for orphan_pr."
+        description: "PR number (padded or unpadded) when cleanup_mode is by_pr; ignored for orphan_pr."
       store_alias_secret:
         required: false
         type: string
-        description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_*_<this>; else uses SHOPIFY_STORE_URL / SHOPIFY_THEME_ACCESS_TOKEN."
+        description: "Upper snake-case alias for scoped secret (e.g. VOLDT_STAGING). If set, uses SHOPIFY_STORE_URL_<this> and optional theme token."
+      store_alias:
+        required: false
+        type: string
+        default: ''
+        description: "Store alias used in development-context climaybe-pr-N-<alias> (optional)."
       result_artifact_prefix:
         required: false
         type: string
@@ -64,10 +69,14 @@ jobs:
         id: cleanup
         env:
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
+          SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
           SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
           CLEANUP_MODE: ${{ inputs.cleanup_mode }}
           STORE_ALIAS_SECRET: ${{ inputs.store_alias_secret }}
+          STORE_ALIAS: ${{ inputs.store_alias }}
           RESULT_ARTIFACT_PREFIX: ${{ inputs.result_artifact_prefix }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -91,7 +100,33 @@ jobs:
           echo "Store alias secret=${STORE_ALIAS_SECRET:-<default>}"
           echo "Store host=${STORE_HOST:-<missing>}"
 
-          if [ -z "${SHOPIFY_STORE_URL:-}" ] || [ -z "${SHOPIFY_THEME_ACCESS_TOKEN:-}" ]; then
+          resolve_shopify_cli_token() {
+            if [ -n "${SHOP_CLIENT_ID:-}" ] && [ -n "${SHOP_CLIENT_SECRET:-}" ]; then
+              local resp token
+              resp="$(curl -sS -f -X POST "https://${STORE_HOST}/admin/oauth/access_token" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                --data-urlencode "grant_type=client_credentials" \
+                --data-urlencode "client_id=${SHOP_CLIENT_ID}" \
+                --data-urlencode "client_secret=${SHOP_CLIENT_SECRET}")" || return 1
+              token="$(printf '%s' "$resp" | jq -r '.access_token // empty')"
+              if [ -z "$token" ] || [ "$token" = "null" ]; then
+                return 1
+              fi
+              printf '%s' "$token"
+              return 0
+            fi
+            if [ -n "${SHOPIFY_THEME_ACCESS_TOKEN:-}" ]; then
+              printf '%s' "$SHOPIFY_THEME_ACCESS_TOKEN"
+              return 0
+            fi
+            if [ -n "${SHOP_ACCESS_TOKEN:-}" ]; then
+              printf '%s' "$SHOP_ACCESS_TOKEN"
+              return 0
+            fi
+            return 1
+          }
+
+          if [ -z "${SHOPIFY_STORE_URL:-}" ] || ! CLI_TOKEN="$(resolve_shopify_cli_token)"; then
             echo "Missing Shopify secrets; skipping theme cleanup (no themes deleted)."
 
             {
@@ -126,7 +161,7 @@ jobs:
 
           if ! shopify theme list \
             --store "$SHOPIFY_STORE_URL" \
-            --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
+            --password "$CLI_TOKEN" \
             --json > "$THEME_LIST_JSON" 2> "$THEME_LIST_ERR"; then
             echo "shopify theme list failed."
             echo "Error output (first 120 lines):"
@@ -181,23 +216,52 @@ jobs:
             echo "Open PR count (lines): $(wc -l < "$OPEN_PRS_FILE" | tr -d ' ')"
           fi
 
+          UNPADDED=""
+          PADDED=""
+          if [ -n "${PR_NUMBER:-}" ]; then
+            UNPADDED=$((10#$PR_NUMBER))
+            PADDED="$(printf '%02d' "$UNPADDED")"
+          fi
+          ALIAS_SAFE="$(printf '%s' "${STORE_ALIAS:-}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+
+          extract_climaybe_pr() {
+            local name="$1"
+            local n=""
+            n="$(printf '%s' "$name" | sed -n 's/.*climaybe-pr-\([0-9][0-9]*\).*/\1/p')"
+            if [ -n "$n" ]; then
+              printf '%s' "$n"
+              return 0
+            fi
+            n="$(printf '%s' "$name" | sed -n 's/.*-PR\([0-9][0-9]*\)$/\1/p')"
+            if [ -n "$n" ]; then
+              printf '%s' "$n"
+              return 0
+            fi
+            return 1
+          }
+
           should_delete_theme() {
             local id="$1"
             local name="$2"
+            local role="$3"
             local suffix=""
-            suffix="$(printf '%s' "$name" | sed -n 's/.*-PR\([0-9][0-9]*\)$/\1/p')"
-            if [ -z "$suffix" ]; then
-              return 1
-            fi
+
             if [ "$CLEANUP_MODE" = "by_pr" ]; then
               case "$name" in
-                *"-PR${PR_NUMBER}") return 0 ;;
-                *) return 1 ;;
+                *"-PR${PADDED}"|*"-PR${UNPADDED}") return 0 ;;
               esac
+              case "$name" in
+                *"climaybe-pr-${UNPADDED}"*) return 0 ;;
+              esac
+              return 1
             fi
+
             if [ "$CLEANUP_MODE" = "orphan_pr" ]; then
-              local num=""
-              num=$((10#$suffix))
+              suffix="$(extract_climaybe_pr "$name" || true)"
+              if [ -z "$suffix" ]; then
+                return 1
+              fi
+              local num=$((10#$suffix))
               if grep -qx "$num" "$OPEN_PRS_FILE" 2>/dev/null; then
                 return 1
               fi
@@ -206,11 +270,11 @@ jobs:
             return 1
           }
 
-          while IFS=$'\t' read -r THEME_ID THEME_NAME; do
+          while IFS=$'\t' read -r THEME_ID THEME_NAME THEME_ROLE; do
             [ -z "$THEME_ID" ] && continue
             [ -z "$THEME_NAME" ] && continue
 
-            if should_delete_theme "$THEME_ID" "$THEME_NAME"; then
+            if should_delete_theme "$THEME_ID" "$THEME_NAME" "${THEME_ROLE:-}"; then
               MATCHED_COUNT=$((MATCHED_COUNT + 1))
               MATCHED_THEMES="${MATCHED_THEMES}${THEME_NAME}\n"
               echo "Matched: $THEME_NAME ($THEME_ID)"
@@ -218,7 +282,7 @@ jobs:
               DELETE_ERR="$(mktemp)"
               if shopify theme delete \
                 --store "$SHOPIFY_STORE_URL" \
-                --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
+                --password "$CLI_TOKEN" \
                 --force \
                 --theme "$THEME_ID" 1>/dev/null 2>"$DELETE_ERR"; then
                 DELETED_COUNT=$((DELETED_COUNT + 1))
@@ -230,7 +294,7 @@ jobs:
                 sed -n '1,80p' "$DELETE_ERR" || true
               fi
             fi
-          done < <(jq -r '.[] | [.id, .name] | @tsv' "$THEME_LIST_JSON")
+          done < <(jq -r '.[] | [.id, .name, (.role // "")] | @tsv' "$THEME_LIST_JSON")
 
           {
             echo ""
@@ -275,6 +339,7 @@ jobs:
       - name: Upload deleted count for matrix fan-in
         if: inputs.result_artifact_prefix != ''
         run: printf '%s' '${{ steps.cleanup.outputs.deleted_count }}' > deleted-count.txt
+
       - name: Save cleanup result artifact
         if: inputs.result_artifact_prefix != ''
         uses: actions/upload-artifact@v4

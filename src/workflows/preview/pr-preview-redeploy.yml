@@ -1,0 +1,230 @@
+# climaybe — Redeploy PR development theme preview via `/redeploy` comment.
+# Development themes expire after ~7 days of inactivity; comment `/redeploy` to push again.
+
+name: PR Preview Redeploy
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: write
+
+jobs:
+  prepare:
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/redeploy')
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.gate.outputs.allowed }}
+      pr_number: ${{ steps.gate.outputs.pr_number }}
+      head_sha: ${{ steps.gate.outputs.head_sha }}
+      head_ref: ${{ steps.gate.outputs.head_ref }}
+      base_ref: ${{ steps.gate.outputs.base_ref }}
+      preview_targets_json: ${{ steps.resolve.outputs.preview_targets_json }}
+      store_alias: ${{ steps.resolve.outputs.store_alias }}
+      store_alias_secret: ${{ steps.resolve.outputs.store_alias_secret }}
+    steps:
+      - name: Gate /redeploy command
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const assoc = context.payload.comment.author_association;
+            const allowedAssocs = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+            const body = String(context.payload.comment.body || '').trim();
+            const isCmd = /^\/redeploy(\s|$)/i.test(body);
+            if (!isCmd) {
+              core.setOutput('allowed', 'false');
+              return;
+            }
+            if (!allowedAssocs.has(assoc)) {
+              core.setOutput('allowed', 'false');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: '⚠️ `/redeploy` is limited to users with write access (owner / member / collaborator).',
+              });
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            if (pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              core.setOutput('allowed', 'false');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: '⚠️ `/redeploy` only supports pull requests from this repository (not forks).',
+              });
+              return;
+            }
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes',
+            });
+
+            core.setOutput('allowed', 'true');
+            core.setOutput('pr_number', String(pr.number));
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('base_ref', pr.base.ref);
+
+      - name: Checkout for store config
+        if: steps.gate.outputs.allowed == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.gate.outputs.head_sha }}
+
+      - name: Resolve preview store targets
+        if: steps.gate.outputs.allowed == 'true'
+        id: resolve
+        env:
+          BASE_REF: ${{ steps.gate.outputs.base_ref }}
+          HEAD_REF: ${{ steps.gate.outputs.head_ref }}
+        run: |
+          node <<'NODE' >>"$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('climaybe.config.json', 'utf8'));
+          const stores = cfg?.stores || {};
+          const keys = Object.keys(stores);
+          const baseRef = process.env.BASE_REF || '';
+          const headRef = process.env.HEAD_REF || '';
+          const branchRef = headRef || baseRef;
+          const isMulti = keys.length > 1;
+          const isStagingLive =
+            branchRef && (/^staging-/.test(branchRef) || /^live-/.test(branchRef));
+
+          const aliasToSecret = (a) => String(a).toUpperCase().replace(/-/g, '_');
+          const normalizeDomain = (v) =>
+            String(v || '')
+              .toLowerCase()
+              .replace(/^https?:\/\//, '')
+              .replace(/\/.*$/, '');
+
+          let targets = [];
+          if (isMulti && !isStagingLive) {
+            targets = keys.map((alias) => ({ alias, alias_secret: aliasToSecret(alias) }));
+          } else if (isStagingLive) {
+            let a = branchRef.replace(/^staging-/, '').replace(/^live-/, '');
+            targets = [{ alias: a, alias_secret: aliasToSecret(a) }];
+          } else {
+            const defaultStoreNorm = normalizeDomain(cfg?.default_store);
+            let alias = '';
+            if (defaultStoreNorm) {
+              for (const [k, d] of Object.entries(stores)) {
+                if (normalizeDomain(d) === defaultStoreNorm) {
+                  alias = k;
+                  break;
+                }
+              }
+            }
+            if (!alias) alias = keys[0] || '';
+            if (!alias && cfg?.default_store) {
+              const sub = normalizeDomain(cfg.default_store).split('.')[0] || 'default';
+              alias = sub.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') || 'default';
+            }
+            if (!alias) alias = 'default';
+            targets = [{ alias, alias_secret: aliasToSecret(alias) }];
+          }
+
+          if (targets.length === 0 || targets.some((t) => !t.alias)) {
+            console.error('Could not resolve store targets from climaybe.config.json');
+            process.exit(1);
+          }
+
+          console.log('preview_targets_json<<PT_JSON');
+          console.log(JSON.stringify(targets));
+          console.log('PT_JSON');
+          console.log(`store_alias=${targets[0].alias}`);
+          console.log(`store_alias_secret=${targets[0].alias_secret}`);
+          NODE
+
+  validate-secrets-per-store:
+    needs: [prepare]
+    if: needs.prepare.outputs.allowed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.preview_targets_json) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require Shopify URL + auth for this store
+        env:
+          SHOPIFY_STORE_URL_SCOPED: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', matrix.alias_secret)] }}
+          SHOPIFY_THEME_ACCESS_TOKEN_SCOPED: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', matrix.alias_secret)] }}
+          SHOPIFY_STORE_URL_DEFAULT: ${{ secrets.SHOPIFY_STORE_URL }}
+          SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
+          SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
+          SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
+        run: |
+          SHOPIFY_STORE_URL="${SHOPIFY_STORE_URL_SCOPED:-$SHOPIFY_STORE_URL_DEFAULT}"
+          SHOPIFY_THEME_ACCESS_TOKEN="${SHOPIFY_THEME_ACCESS_TOKEN_SCOPED:-$SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT}"
+          HAS_AUTH=false
+          if [ -n "$SHOP_CLIENT_ID" ] && [ -n "$SHOP_CLIENT_SECRET" ]; then
+            HAS_AUTH=true
+          elif [ -n "$SHOPIFY_THEME_ACCESS_TOKEN" ] || [ -n "$SHOP_ACCESS_TOKEN" ]; then
+            HAS_AUTH=true
+          fi
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ "$HAS_AUTH" != "true" ]; then
+            echo "Missing SHOPIFY_STORE_URL or auth for ${{ matrix.alias }}."
+            exit 1
+          fi
+
+  publish-preview-store:
+    needs: [prepare, validate-secrets-per-store]
+    if: needs.prepare.outputs.allowed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.preview_targets_json) }}
+    uses: ./.github/workflows/reusable-publish-pr-preview-store.yml
+    with:
+      pr_number: ${{ needs.prepare.outputs.pr_number }}
+      store_alias: ${{ matrix.alias }}
+      store_alias_secret: ${{ matrix.alias_secret }}
+      checkout_ref: ${{ needs.prepare.outputs.head_sha }}
+    secrets: inherit
+
+  comment-on-pr:
+    needs: [prepare, publish-preview-store]
+    if: needs.prepare.outputs.allowed == 'true'
+    uses: ./.github/workflows/reusable-comment-on-pr.yml
+    with:
+      theme_id: ${{ needs.publish-preview-store.outputs.theme_id }}
+      share_output: ${{ needs.publish-preview-store.outputs.share_output }}
+      pr_number: ${{ needs.prepare.outputs.pr_number }}
+      store_alias: ${{ needs.prepare.outputs.store_alias }}
+      store_alias_secret: ${{ needs.prepare.outputs.store_alias_secret }}
+      use_preview_fragments: 'true'
+    secrets: inherit
+
+  acknowledge:
+    needs: [prepare, comment-on-pr]
+    if: needs.prepare.outputs.allowed == 'true' && always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: React to /redeploy comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ok = '${{ needs.comment-on-pr.result }}' === 'success';
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: ok ? 'rocket' : 'confused',
+            });

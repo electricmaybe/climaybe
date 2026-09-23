@@ -1,11 +1,14 @@
 # climaybe — PR Update (Optional Preview Package)
-# Creates a Shopify preview theme on PR update, renames it with PR number,
-# and posts preview/customize links back to the PR.
+# Pushes a Shopify development theme on PR update (hidden from the main theme library),
+# keyed by climaybe-pr-<n>, and posts preview/customize links back to the PR.
 #
-# Opt out of theme share/push for a PR or commit:
+# Opt out of theme push for a PR or commit:
 #   - PR label: skip-preview
 #   - PR title or body contains: [skip-preview]
 #   - Head commit message contains: [skip-preview]
+#
+# Refresh an expired development theme: comment `/redeploy` on the PR
+# (see pr-preview-redeploy.yml).
 
 name: PR Update
 
@@ -192,43 +195,40 @@ jobs:
         include: ${{ fromJson(needs.validate-environment.outputs.preview_targets_json) }}
     runs-on: ubuntu-latest
     steps:
-      - name: Require Shopify URL + theme token for this store
+      - name: Require Shopify URL + auth for this store
         env:
           SHOPIFY_STORE_URL_SCOPED: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', matrix.alias_secret)] }}
           SHOPIFY_THEME_ACCESS_TOKEN_SCOPED: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', matrix.alias_secret)] }}
           SHOPIFY_STORE_URL_DEFAULT: ${{ secrets.SHOPIFY_STORE_URL }}
           SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
+          SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
+          SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
         run: |
           SHOPIFY_STORE_URL="${SHOPIFY_STORE_URL_SCOPED:-$SHOPIFY_STORE_URL_DEFAULT}"
           SHOPIFY_THEME_ACCESS_TOKEN="${SHOPIFY_THEME_ACCESS_TOKEN_SCOPED:-$SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT}"
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
-            echo "Missing SHOPIFY_* for ${{ matrix.alias }} (secret suffix ${{ matrix.alias_secret }})."
+          HAS_AUTH=false
+          if [ -n "$SHOP_CLIENT_ID" ] && [ -n "$SHOP_CLIENT_SECRET" ]; then
+            HAS_AUTH=true
+          elif [ -n "$SHOPIFY_THEME_ACCESS_TOKEN" ] || [ -n "$SHOP_ACCESS_TOKEN" ]; then
+            HAS_AUTH=true
+          fi
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ "$HAS_AUTH" != "true" ]; then
+            echo "Missing SHOPIFY_STORE_URL or auth for ${{ matrix.alias }} (secret suffix ${{ matrix.alias_secret }})."
+            echo "Prefer SHOP_CLIENT_ID+SHOP_CLIENT_SECRET; legacy: SHOPIFY_THEME_ACCESS_TOKEN / SHOP_ACCESS_TOKEN."
             exit 1
           fi
           echo "Shopify credentials OK for ${{ matrix.alias }}"
 
-  cleanup-themes:
-    needs: [validate-environment, extract-pr-number, validate-secrets-per-store]
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJson(needs.validate-environment.outputs.preview_targets_json) }}
-    uses: ./.github/workflows/reusable-cleanup-themes.yml
-    with:
-      cleanup_mode: by_pr
-      pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
-      store_alias_secret: ${{ matrix.alias_secret }}
-    secrets: inherit
-
   publish-preview-store:
-    needs: [validate-environment, extract-pr-number, cleanup-themes]
+    needs: [validate-environment, extract-pr-number, validate-secrets-per-store]
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.validate-environment.outputs.preview_targets_json) }}
     uses: ./.github/workflows/reusable-publish-pr-preview-store.yml
     with:
-      pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
+      pr_number: ${{ needs.extract-pr-number.outputs.pr_number_unpadded }}
       store_alias: ${{ matrix.alias }}
       store_alias_secret: ${{ matrix.alias_secret }}
     secrets: inherit

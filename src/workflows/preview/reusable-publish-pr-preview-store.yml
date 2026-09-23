@@ -1,5 +1,5 @@
-# Share theme to one Shopify store, rename with -PR{padded}, upload JSON fragment for PR comment fan-in.
-# Intended to be called from a matrix job (one invocation per store).
+# Push a development theme for one Shopify store (hidden from the main theme library),
+# keyed by --development-context climaybe-pr-<n>[-<alias>]. Uploads a JSON fragment for PR comment fan-in.
 
 name: Publish PR preview (single store)
 
@@ -9,25 +9,30 @@ on:
       pr_number:
         required: true
         type: string
-        description: "Padded PR number (e.g. 09) for theme name suffix -PR09"
+        description: "Unpadded PR number (e.g. 9) for development-context climaybe-pr-9"
       store_alias:
         required: true
         type: string
-        description: "Store alias (for artifact naming and comment JSON)"
+        description: "Store alias (for artifact naming, comment JSON, and multi-store context suffix)"
       store_alias_secret:
         required: false
         type: string
         default: ''
-        description: "Upper snake-case secret suffix; empty uses SHOPIFY_STORE_URL / SHOPIFY_THEME_ACCESS_TOKEN"
+        description: "Upper snake-case secret suffix; empty uses default SHOPIFY_STORE_URL / theme token"
+      checkout_ref:
+        required: false
+        type: string
+        default: ''
+        description: "Git ref/SHA to checkout (PR head). Empty uses the event default (pull_request head)."
     outputs:
       theme_id:
-        description: "Theme ID after share/rename"
+        description: "Development theme ID after push"
         value: ${{ jobs.publish.outputs.theme_id }}
       theme_name:
-        description: "Final theme name after rename"
+        description: "Theme name after push"
         value: ${{ jobs.publish.outputs.theme_name }}
       share_output:
-        description: "Raw share command output"
+        description: "Raw theme push JSON/output"
         value: ${{ jobs.publish.outputs.share_output }}
 
 jobs:
@@ -37,12 +42,14 @@ jobs:
       contents: read
       actions: write
     outputs:
-      theme_id: ${{ steps.rename.outputs.theme_id }}
-      theme_name: ${{ steps.rename.outputs.theme_name }}
-      share_output: ${{ steps.share.outputs.share_output }}
+      theme_id: ${{ steps.push.outputs.theme_id }}
+      theme_name: ${{ steps.push.outputs.theme_name }}
+      share_output: ${{ steps.push.outputs.share_output }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref != '' && inputs.checkout_ref || github.event.pull_request.head.sha || github.sha }}
 
       - name: Validate theme root
         run: |
@@ -84,91 +91,116 @@ jobs:
       - name: Install Shopify CLI
         run: npm install -g @shopify/cli @shopify/theme
 
-      - name: Share theme
-        id: share
+      - name: Push development theme
+        id: push
         env:
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
+          SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
           SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          STORE_ALIAS: ${{ inputs.store_alias }}
         run: |
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
-            echo "Missing Shopify secrets."
+          set -euo pipefail
+
+          if [ -z "${SHOPIFY_STORE_URL:-}" ]; then
+            echo "Missing SHOPIFY_STORE_URL."
             exit 1
           fi
 
-          OUTPUT=$(shopify theme share \
-            --store "$SHOPIFY_STORE_URL" \
-            --password "$SHOPIFY_THEME_ACCESS_TOKEN" 2>&1)
-          STATUS=$?
+          STORE_HOST="${SHOPIFY_STORE_URL#https://}"
+          STORE_HOST="${STORE_HOST#http://}"
+          STORE_HOST="${STORE_HOST%%/*}"
 
+          resolve_shopify_cli_token() {
+            if [ -n "${SHOP_CLIENT_ID:-}" ] && [ -n "${SHOP_CLIENT_SECRET:-}" ]; then
+              local resp
+              resp="$(curl -sS -f -X POST "https://${STORE_HOST}/admin/oauth/access_token" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                --data-urlencode "grant_type=client_credentials" \
+                --data-urlencode "client_id=${SHOP_CLIENT_ID}" \
+                --data-urlencode "client_secret=${SHOP_CLIENT_SECRET}")" || return 1
+              local token
+              token="$(printf '%s' "$resp" | jq -r '.access_token // empty')"
+              if [ -z "$token" ] || [ "$token" = "null" ]; then
+                echo "Client credentials response did not include access_token." >&2
+                return 1
+              fi
+              printf '%s' "$token"
+              return 0
+            fi
+            if [ -n "${SHOPIFY_THEME_ACCESS_TOKEN:-}" ]; then
+              printf '%s' "$SHOPIFY_THEME_ACCESS_TOKEN"
+              return 0
+            fi
+            if [ -n "${SHOP_ACCESS_TOKEN:-}" ]; then
+              printf '%s' "$SHOP_ACCESS_TOKEN"
+              return 0
+            fi
+            return 1
+          }
+
+          if ! CLI_TOKEN="$(resolve_shopify_cli_token)"; then
+            echo "Missing Shopify auth: set SHOP_CLIENT_ID+SHOP_CLIENT_SECRET (preferred), or legacy SHOPIFY_THEME_ACCESS_TOKEN / SHOP_ACCESS_TOKEN."
+            exit 1
+          fi
+
+          UNPADDED=$((10#${PR_NUMBER}))
+          DEV_CONTEXT="climaybe-pr-${UNPADDED}"
+          ALIAS_SAFE="$(printf '%s' "${STORE_ALIAS:-}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+          if [ -n "$ALIAS_SAFE" ] && [ "$ALIAS_SAFE" != "default" ]; then
+            DEV_CONTEXT="${DEV_CONTEXT}-${ALIAS_SAFE}"
+          fi
+
+          echo "Pushing development theme with context: ${DEV_CONTEXT}"
+
+          OUTPUT_FILE="$(mktemp)"
+          ERR_FILE="$(mktemp)"
+          set +e
+          shopify theme push \
+            --store "$SHOPIFY_STORE_URL" \
+            --password "$CLI_TOKEN" \
+            --development \
+            --development-context "$DEV_CONTEXT" \
+            --json \
+            >"$OUTPUT_FILE" 2>"$ERR_FILE"
+          STATUS=$?
+          set -e
+
+          OUTPUT="$(cat "$OUTPUT_FILE")"
           echo "$OUTPUT"
+          if [ -s "$ERR_FILE" ]; then
+            echo "--- stderr ---"
+            cat "$ERR_FILE"
+          fi
           if [ $STATUS -ne 0 ]; then
-            echo "Theme share failed."
+            echo "Theme push (development) failed."
             exit $STATUS
           fi
 
-          THEME_NAME=$(echo "$OUTPUT" | sed -n "s/.*The theme '\([^']*\)'.*/\1/p" | head -1)
-          THEME_ID=$(echo "$OUTPUT" | sed -n 's/.*#\([0-9]*\).*/\1/p' | head -1)
-
+          THEME_ID="$(printf '%s' "$OUTPUT" | jq -r '.theme.id // empty' 2>/dev/null || true)"
+          THEME_NAME="$(printf '%s' "$OUTPUT" | jq -r '.theme.name // empty' 2>/dev/null || true)"
           if [ -z "$THEME_ID" ]; then
-            echo "Could not parse theme id from share output."
+            THEME_ID="$(printf '%s' "$OUTPUT" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)"
+          fi
+          if [ -z "$THEME_ID" ]; then
+            echo "Could not parse theme id from theme push JSON."
             exit 1
           fi
 
           echo "theme_id=$THEME_ID" >> "$GITHUB_OUTPUT"
-          if [ -n "$THEME_NAME" ]; then
-            echo "theme_name=$THEME_NAME" >> "$GITHUB_OUTPUT"
-          fi
-
+          echo "theme_name=${THEME_NAME:-$DEV_CONTEXT}" >> "$GITHUB_OUTPUT"
           {
             echo "share_output<<SHARE_EOF"
             echo "$OUTPUT"
             echo "SHARE_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Rename theme with PR suffix
-        id: rename
-        env:
-          SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
-          THEME_ID: ${{ steps.share.outputs.theme_id }}
-          THEME_NAME: ${{ steps.share.outputs.theme_name }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-        run: |
-          if [ -z "$THEME_ID" ] || [ -z "$THEME_NAME" ]; then
-            echo "Missing theme_id/theme_name from share step."
-            exit 1
-          fi
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
-            echo "Missing Shopify store URL/token for rename."
-            exit 1
-          fi
-
-          NEW_THEME_NAME="${THEME_NAME}-PR${PR_NUMBER}"
-          echo "Renaming theme $THEME_ID to '$NEW_THEME_NAME'..."
-
-          if shopify theme rename \
-            --store "$SHOPIFY_STORE_URL" \
-            --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
-            --theme "$THEME_ID" \
-            --name "$NEW_THEME_NAME" 2>&1; then
-            echo "Rename succeeded with password auth."
-          elif shopify theme rename \
-            --store "$SHOPIFY_STORE_URL" \
-            --theme "$THEME_ID" \
-            --name "$NEW_THEME_NAME" 2>&1; then
-            echo "Rename succeeded with authenticated session."
-          else
-            echo "Failed to rename theme."
-            exit 1
-          fi
-
-          echo "theme_id=$THEME_ID" >> "$GITHUB_OUTPUT"
-          echo "theme_name=$NEW_THEME_NAME" >> "$GITHUB_OUTPUT"
-
       - name: Write preview fragment for PR comment
         env:
           STORE_ALIAS: ${{ inputs.store_alias }}
-          THEME_ID: ${{ steps.rename.outputs.theme_id }}
+          THEME_ID: ${{ steps.push.outputs.theme_id }}
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
         run: |
           node <<'NODE'

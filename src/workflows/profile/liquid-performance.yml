@@ -1,6 +1,6 @@
 # climaybe — Liquid Performance (Optional Profile Package)
 # Profiles Liquid rendering performance (TTFB) for core templates on main.
-# Pushes a shared theme, measures TTFB for index/collection/product/cart,
+# Pushes a development theme, measures TTFB for index/collection/product/cart,
 # runs 4 iterations per template, reports the average of the last 3 runs.
 
 name: Liquid Performance
@@ -20,7 +20,10 @@ jobs:
       run_profile: ${{ steps.check.outputs.run_profile }}
     env:
       SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
+      SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
+      SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
       SHOPIFY_THEME_ACCESS_TOKEN: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+      SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
     steps:
       - name: Check if profiling should run
         id: check
@@ -29,8 +32,14 @@ jobs:
           if [ -z "$SHOPIFY_STORE_URL" ]; then
             SKIP_REASONS+=("Missing secret: SHOPIFY_STORE_URL")
           fi
-          if [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
-            SKIP_REASONS+=("Missing secret: SHOPIFY_THEME_ACCESS_TOKEN")
+          HAS_AUTH=false
+          if [ -n "$SHOP_CLIENT_ID" ] && [ -n "$SHOP_CLIENT_SECRET" ]; then
+            HAS_AUTH=true
+          elif [ -n "$SHOPIFY_THEME_ACCESS_TOKEN" ] || [ -n "$SHOP_ACCESS_TOKEN" ]; then
+            HAS_AUTH=true
+          fi
+          if [ "$HAS_AUTH" != "true" ]; then
+            SKIP_REASONS+=("Missing auth: SHOP_CLIENT_ID+SHOP_CLIENT_SECRET (preferred) or legacy theme/Admin token")
           fi
           if [ ${#SKIP_REASONS[@]} -gt 0 ]; then
             echo "run_profile=false" >> $GITHUB_OUTPUT

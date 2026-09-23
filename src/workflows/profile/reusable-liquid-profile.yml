@@ -30,35 +30,89 @@ jobs:
       - name: Install Shopify CLI
         run: npm install -g @shopify/cli @shopify/theme
 
-      - name: Share preview theme
+      - name: Push development theme for profiling
         id: share
         env:
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
+          SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
           SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
         run: |
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOPIFY_THEME_ACCESS_TOKEN" ]; then
-            echo "Missing Shopify secrets."
+          set -euo pipefail
+          if [ -z "${SHOPIFY_STORE_URL:-}" ]; then
+            echo "Missing Shopify store URL."
             exit 1
           fi
 
-          OUTPUT=$(shopify theme share \
-            --store "$SHOPIFY_STORE_URL" \
-            --password "$SHOPIFY_THEME_ACCESS_TOKEN" 2>&1)
-          STATUS=$?
+          STORE_HOST="${SHOPIFY_STORE_URL#https://}"
+          STORE_HOST="${STORE_HOST#http://}"
+          STORE_HOST="${STORE_HOST%%/*}"
 
+          resolve_shopify_cli_token() {
+            if [ -n "${SHOP_CLIENT_ID:-}" ] && [ -n "${SHOP_CLIENT_SECRET:-}" ]; then
+              local resp token
+              resp="$(curl -sS -f -X POST "https://${STORE_HOST}/admin/oauth/access_token" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                --data-urlencode "grant_type=client_credentials" \
+                --data-urlencode "client_id=${SHOP_CLIENT_ID}" \
+                --data-urlencode "client_secret=${SHOP_CLIENT_SECRET}")" || return 1
+              token="$(printf '%s' "$resp" | jq -r '.access_token // empty')"
+              if [ -z "$token" ] || [ "$token" = "null" ]; then
+                return 1
+              fi
+              printf '%s' "$token"
+              return 0
+            fi
+            if [ -n "${SHOPIFY_THEME_ACCESS_TOKEN:-}" ]; then
+              printf '%s' "$SHOPIFY_THEME_ACCESS_TOKEN"
+              return 0
+            fi
+            if [ -n "${SHOP_ACCESS_TOKEN:-}" ]; then
+              printf '%s' "$SHOP_ACCESS_TOKEN"
+              return 0
+            fi
+            return 1
+          }
+
+          if ! CLI_TOKEN="$(resolve_shopify_cli_token)"; then
+            echo "Missing Shopify auth (SHOP_CLIENT_ID+SHOP_CLIENT_SECRET preferred)."
+            exit 1
+          fi
+
+          OUTPUT_FILE="$(mktemp)"
+          ERR_FILE="$(mktemp)"
+          set +e
+          shopify theme push \
+            --store "$SHOPIFY_STORE_URL" \
+            --password "$CLI_TOKEN" \
+            --development \
+            --development-context "climaybe-liquid-profile" \
+            --json \
+            >"$OUTPUT_FILE" 2>"$ERR_FILE"
+          STATUS=$?
+          set -e
+
+          OUTPUT="$(cat "$OUTPUT_FILE")"
           echo "$OUTPUT"
+          if [ -s "$ERR_FILE" ]; then
+            cat "$ERR_FILE"
+          fi
           if [ $STATUS -ne 0 ]; then
-            echo "Theme share failed."
+            echo "Theme push (development) failed."
             exit $STATUS
           fi
 
-          THEME_ID=$(echo "$OUTPUT" | sed -n 's/.*#\([0-9]*\).*/\1/p' | head -1)
+          THEME_ID="$(printf '%s' "$OUTPUT" | jq -r '.theme.id // empty' 2>/dev/null || true)"
           if [ -z "$THEME_ID" ]; then
-            echo "Could not parse theme id from share output."
+            THEME_ID="$(printf '%s' "$OUTPUT" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)"
+          fi
+          if [ -z "$THEME_ID" ]; then
+            echo "Could not parse theme id from theme push JSON."
             exit 1
           fi
 
-          echo "theme_id=$THEME_ID" >> $GITHUB_OUTPUT
+          echo "theme_id=$THEME_ID" >> "$GITHUB_OUTPUT"
           echo "Shared theme ID: $THEME_ID"
 
       - name: Resolve profiling URLs
@@ -76,7 +130,6 @@ jobs:
         id: profile
         env:
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_CLI_THEME_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
           THEME_ID: ${{ steps.share.outputs.theme_id }}
           ITERATIONS: ${{ inputs.iterations }}
         run: |
@@ -180,11 +233,14 @@ jobs:
         run: |
           echo "$REPORT" >> $GITHUB_STEP_SUMMARY
 
-      - name: Cleanup preview theme
+      - name: Cleanup development theme
         if: always()
         env:
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
+          SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
+          SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
           SHOPIFY_THEME_ACCESS_TOKEN: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
+          SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
           THEME_ID: ${{ steps.share.outputs.theme_id }}
         run: |
           if [ -z "$THEME_ID" ]; then
@@ -192,8 +248,43 @@ jobs:
             exit 0
           fi
 
-          echo "Deleting preview theme $THEME_ID..."
+          STORE_HOST="${SHOPIFY_STORE_URL#https://}"
+          STORE_HOST="${STORE_HOST#http://}"
+          STORE_HOST="${STORE_HOST%%/*}"
+
+          resolve_shopify_cli_token() {
+            if [ -n "${SHOP_CLIENT_ID:-}" ] && [ -n "${SHOP_CLIENT_SECRET:-}" ]; then
+              local resp token
+              resp="$(curl -sS -f -X POST "https://${STORE_HOST}/admin/oauth/access_token" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                --data-urlencode "grant_type=client_credentials" \
+                --data-urlencode "client_id=${SHOP_CLIENT_ID}" \
+                --data-urlencode "client_secret=${SHOP_CLIENT_SECRET}")" || return 1
+              token="$(printf '%s' "$resp" | jq -r '.access_token // empty')"
+              if [ -z "$token" ] || [ "$token" = "null" ]; then
+                return 1
+              fi
+              printf '%s' "$token"
+              return 0
+            fi
+            if [ -n "${SHOPIFY_THEME_ACCESS_TOKEN:-}" ]; then
+              printf '%s' "$SHOPIFY_THEME_ACCESS_TOKEN"
+              return 0
+            fi
+            if [ -n "${SHOP_ACCESS_TOKEN:-}" ]; then
+              printf '%s' "$SHOP_ACCESS_TOKEN"
+              return 0
+            fi
+            return 1
+          }
+
+          if ! CLI_TOKEN="$(resolve_shopify_cli_token)"; then
+            echo "Missing Shopify auth for cleanup; skipping."
+            exit 0
+          fi
+
+          echo "Deleting development theme $THEME_ID..."
           shopify theme delete --theme "$THEME_ID" \
             --store "$SHOPIFY_STORE_URL" \
-            --password "$SHOPIFY_THEME_ACCESS_TOKEN" \
+            --password "$CLI_TOKEN" \
             --force 2>&1 || echo "Theme cleanup failed (non-fatal)."
