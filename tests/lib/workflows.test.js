@@ -291,6 +291,9 @@ describe('workflows', () => {
         const buildPipeline = readFileSync(join(workflowsDir, 'build-pipeline.yml'), 'utf-8');
         assert.match(buildPipeline, /startsWith\(github\.ref_name, 'live-'\)/);
         assert.match(buildPipeline, /contains\(github\.actor, '\[bot\]'\)/);
+        assert.match(buildPipeline, /client_id:\s*\$\{\{\s*secrets\.SHOP_CLIENT_ID\s*\}\}/);
+        assert.match(buildPipeline, /client_secret:\s*\$\{\{\s*secrets\.SHOP_CLIENT_SECRET\s*\}\}/);
+        assert.match(buildPipeline, /SHOP_CLIENT_ID\+SHOP_CLIENT_SECRET/);
       } finally {
         teardown();
       }

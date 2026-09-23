@@ -502,9 +502,13 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 | `LINEAR_API_KEY` | Optional* | Linear personal API key for issue status sync (needed when `linear_workflows` is enabled). Create one at Linear → Settings → Account → Security & access → Personal API keys. Rotate with `climaybe update:linear-key`. |
 | `SHOPIFY_STORE_URL` | Set from config | Store URL is set automatically from the store domain(s) you add during init (no prompt). |
 | `SHOPIFY_THEME_ACCESS_TOKEN` | Optional* | Theme access token for preview workflows (needed only when you want preview theme publish/cleanup to run). |
-| `SHOP_ACCESS_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
+| `SHOP_CLIENT_ID` | Optional* | Dev Dashboard app client ID for Lighthouse (required with `SHOP_CLIENT_SECRET`; preferred after Jan 2026) |
+| `SHOP_CLIENT_SECRET` | Optional* | Dev Dashboard app client secret for Lighthouse (required with `SHOP_CLIENT_ID`) |
+| `SHOP_ACCESS_TOKEN` | Optional* | Legacy Admin custom-app access token for Lighthouse (pre-2026 apps only; prefer client ID/secret) |
 | `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
 | `SHOP_PASSWORD` | Optional | Used by Lighthouse action when your store requires password auth |
+
+**Lighthouse Shopify auth:** Create an app in the [Shopify Dev Dashboard](https://dev.shopify.com) (Partner org → Apps → Create app). On the app version, enable Admin API scopes `read_products` and `write_themes`, release, then install the app on the store you use for CI. Copy **Client ID** and **Client secret** into `SHOP_CLIENT_ID` / `SHOP_CLIENT_SECRET`. The Lighthouse action exchanges them for a short-lived token each run. Existing Admin “Develop apps” tokens still work via `SHOP_ACCESS_TOKEN` until you migrate.
 
 **Prompting behavior:** During `climaybe init` (or `add-store`), every GitHub/GitLab secret prompt is skippable. Add values later in CI settings if you prefer.
 

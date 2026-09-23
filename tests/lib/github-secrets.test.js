@@ -62,4 +62,45 @@ describe('github-secrets prompting behavior', () => {
     assert.ok(secrets.length > 0);
     assert.ok(secrets.every((secret) => secret.required === false));
   });
+
+  it('prompts Dev Dashboard client credentials for Lighthouse when build is enabled', () => {
+    const clientId = SECRET_DEFINITIONS.find((s) => s.name === 'SHOP_CLIENT_ID');
+    const clientSecret = SECRET_DEFINITIONS.find((s) => s.name === 'SHOP_CLIENT_SECRET');
+    const legacyToken = SECRET_DEFINITIONS.find((s) => s.name === 'SHOP_ACCESS_TOKEN');
+    assert.ok(clientId);
+    assert.ok(clientSecret);
+    assert.ok(legacyToken);
+    assert.match(clientId.whereToGet, /dev\.shopify\.com|Dev Dashboard/);
+    assert.match(clientId.whereToGet, /read_products/);
+    assert.match(legacyToken.whereToGet, /Legacy|Prefer SHOP_CLIENT_ID/i);
+
+    const withBuild = getSecretsToPrompt({
+      enablePreviewWorkflows: false,
+      enableBuildWorkflows: true,
+      mode: 'single',
+      stores: [{ alias: 'foo', domain: 'foo.myshopify.com' }],
+    });
+    assert.ok(withBuild.some((s) => s.name === 'SHOP_CLIENT_ID'));
+    assert.ok(withBuild.some((s) => s.name === 'SHOP_CLIENT_SECRET'));
+    assert.ok(withBuild.some((s) => s.name === 'SHOP_ACCESS_TOKEN'));
+
+    const multi = getSecretsToPrompt({
+      enablePreviewWorkflows: true,
+      enableBuildWorkflows: true,
+      mode: 'multi',
+      stores: [
+        { alias: 'foo', domain: 'foo.myshopify.com' },
+        { alias: 'bar', domain: 'bar.myshopify.com' },
+      ],
+    });
+    // Lighthouse auth is repo-level (staging / SHOPIFY_STORE_URL), not per-store.
+    assert.ok(multi.some((s) => s.name === 'SHOP_CLIENT_ID'));
+    assert.ok(multi.some((s) => s.name === 'SHOP_CLIENT_SECRET'));
+    assert.ok(!multi.some((s) => s.name.startsWith('SHOP_ACCESS_TOKEN_')));
+    assert.ok(!multi.some((s) => s.name.startsWith('SHOP_CLIENT_ID_')));
+    assert.ok(multi.some((s) => s.name === 'SHOPIFY_THEME_ACCESS_TOKEN_FOO'));
+
+    const addStore = getSecretsToPromptForNewStore({ alias: 'baz', domain: 'baz.myshopify.com' });
+    assert.ok(addStore.every((s) => s.name.startsWith('SHOPIFY_THEME_ACCESS_TOKEN_')));
+  });
 });

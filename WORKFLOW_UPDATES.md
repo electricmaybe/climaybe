@@ -236,8 +236,16 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 - Workflow skips gracefully when `SHOPIFY_STORE_URL` or `SHOPIFY_THEME_ACCESS_TOKEN` secrets are missing.
 - Preview theme is always cleaned up via `shopify theme delete` in an `if: always()` step.
 
+## 20) Lighthouse: Dev Dashboard client credentials (post–Admin custom apps)
+
+- Shopify no longer allows creating new Admin “Develop apps” / custom apps (Jan 2026+). Lighthouse auth should use a **Dev Dashboard** app:
+  - Create app → scopes `read_products` + `write_themes` → install on the CI store → copy client ID/secret.
+- **`build-pipeline.yml`:** Passes `client_id` / `client_secret` to `shopify/lighthouse-ci-action@v1`; still accepts legacy `access_token`. Gate accepts either pair of client credentials **or** `SHOP_ACCESS_TOKEN`.
+- **`github-secrets.js` / init prompts:** Prompt for `SHOP_CLIENT_ID` + `SHOP_CLIENT_SECRET` (and optional legacy `SHOP_ACCESS_TOKEN`). Multi-store Lighthouse credentials stay repo-level (Lighthouse only runs on `staging` against `SHOPIFY_STORE_URL`).
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.
 - Improve fallback resilience when AI providers return unexpected payloads.
 - Make release/tag workflow behavior more transparent and easier to debug.
+- Align Lighthouse CI with Shopify’s Dev Dashboard custom-app flow after Admin Develop apps went away.

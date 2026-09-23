@@ -45,6 +45,8 @@ jobs:
       run_lighthouse: ${{ steps.check.outputs.run_lighthouse }}
     env:
       SHOPIFY_STORE_URL: ${{ secrets.SHOPIFY_STORE_URL }}
+      SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
+      SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
       SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
       LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
     steps:
@@ -67,8 +69,15 @@ jobs:
           else
             SKIP_REASONS+=("Lighthouse runs only on branch staging (current branch: $BR)")
           fi
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ -z "$SHOP_ACCESS_TOKEN" ] || [ -z "$LHCI_GITHUB_APP_TOKEN" ]; then
-            SKIP_REASONS+=("Missing required secrets: SHOPIFY_STORE_URL, SHOP_ACCESS_TOKEN, or LHCI_GITHUB_APP_TOKEN")
+          # Prefer Dev Dashboard client credentials; fall back to legacy Admin custom-app token.
+          HAS_SHOP_AUTH=false
+          if [ -n "$SHOP_CLIENT_ID" ] && [ -n "$SHOP_CLIENT_SECRET" ]; then
+            HAS_SHOP_AUTH=true
+          elif [ -n "$SHOP_ACCESS_TOKEN" ]; then
+            HAS_SHOP_AUTH=true
+          fi
+          if [ -z "$SHOPIFY_STORE_URL" ] || [ "$HAS_SHOP_AUTH" != "true" ] || [ -z "$LHCI_GITHUB_APP_TOKEN" ]; then
+            SKIP_REASONS+=("Missing required secrets: SHOPIFY_STORE_URL, LHCI_GITHUB_APP_TOKEN, and either SHOP_CLIENT_ID+SHOP_CLIENT_SECRET (Dev Dashboard) or legacy SHOP_ACCESS_TOKEN")
           fi
           if [ ${#SKIP_REASONS[@]} -gt 0 ]; then
             echo "run_lighthouse=false" >> $GITHUB_OUTPUT
@@ -90,6 +99,8 @@ jobs:
         uses: shopify/lighthouse-ci-action@v1
         with:
           store: ${{ secrets.SHOPIFY_STORE_URL }}
+          client_id: ${{ secrets.SHOP_CLIENT_ID }}
+          client_secret: ${{ secrets.SHOP_CLIENT_SECRET }}
           access_token: ${{ secrets.SHOP_ACCESS_TOKEN }}
           password: ${{ secrets.SHOP_PASSWORD }}
           lhci_github_app_token: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
