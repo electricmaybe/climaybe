@@ -60,4 +60,5 @@ jobs:
       cleanup_mode: orphan_pr
       pr_number: ''
       store_alias_secret: ${{ matrix.alias_secret }}
+      store_alias: ${{ matrix.alias }}
     secrets: inherit

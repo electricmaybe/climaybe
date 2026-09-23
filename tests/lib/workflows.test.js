@@ -154,8 +154,10 @@ describe('workflows', () => {
         assert.match(prUpdate, /fromJson\(needs\.validate-environment\.outputs\.preview_targets_json\)/);
         assert.match(
           prUpdate,
-          /cleanup-themes:\s*\n\s*needs:\s*\[validate-environment,\s*extract-pr-number,\s*validate-secrets-per-store\]/m
+          /publish-preview-store:\s*\n\s*needs:\s*\[validate-environment,\s*extract-pr-number,\s*validate-secrets-per-store\]/m
         );
+        assert.doesNotMatch(prUpdate, /cleanup-themes:/);
+        assert.match(prUpdate, /pr_number:\s*\$\{\{\s*needs\.extract-pr-number\.outputs\.pr_number_unpadded\s*\}\}/);
         assert.match(prUpdate, /types:\s*\[opened,\s*synchronize,\s*reopened,\s*labeled,\s*unlabeled\]/);
         assert.match(prUpdate, /contains\(github\.event\.pull_request\.labels\.\*\.name,\s*'skip-preview'\)/);
         assert.match(prUpdate, /\\\[skip-preview\\\]/);
@@ -170,10 +172,20 @@ describe('workflows', () => {
         assert.match(publishPreview, /path:\s*fragment-\*\.json/);
         assert.match(publishPreview, /Sync stores\/<alias>\/ JSON to root for preview/);
         assert.match(publishPreview, /Overlaying stores\/\$\{ALIAS\}\//);
+        assert.match(publishPreview, /theme push/);
+        assert.match(publishPreview, /--development/);
+        assert.match(publishPreview, /development-context/);
+        assert.match(publishPreview, /climaybe-pr-/);
+        assert.match(publishPreview, /SHOP_CLIENT_ID/);
         assert.match(commentWorkflow, /climaybe-preview-comment/);
         assert.match(commentWorkflow, /issues\.updateComment/);
         assert.match(commentWorkflow, /issues\.deleteComment/);
+        assert.match(commentWorkflow, /\/redeploy/);
         assert.match(prUpdate, /reusable-publish-pr-preview-store\.yml/);
+        assert.ok(files.includes('pr-preview-redeploy.yml'), 'expected pr-preview-redeploy.yml');
+        const redeploy = readFileSync(join(workflowsDir, 'pr-preview-redeploy.yml'), 'utf-8');
+        assert.match(redeploy, /issue_comment:/);
+        assert.match(redeploy, /\/redeploy/);
         assert.ok(hasMulti, 'expected cleanup-orphan-preview-themes.yml');
         assert.ok(hasPublish, 'expected reusable-publish-pr-preview-store.yml');
       } finally {
@@ -255,9 +267,12 @@ describe('workflows', () => {
         assert.match(reusable, /cart/);
         assert.match(reusable, /iterations/);
         assert.match(reusable, /warm-up/);
-        assert.match(reusable, /shopify theme share/);
+        assert.match(reusable, /shopify theme push/);
+        assert.match(reusable, /--development/);
+        assert.match(reusable, /climaybe-liquid-profile/);
         assert.match(reusable, /shopify theme delete/);
         assert.match(reusable, /GITHUB_STEP_SUMMARY/);
+        assert.match(reusable, /SHOP_CLIENT_ID/);
 
         const pipeline = readFileSync(join(dir, '.github', 'workflows', 'liquid-performance.yml'), 'utf-8');
         assert.match(pipeline, /push:/);

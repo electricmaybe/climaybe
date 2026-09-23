@@ -48,25 +48,25 @@ export const SECRET_DEFINITIONS = [
     name: 'SHOPIFY_THEME_ACCESS_TOKEN',
     required: false,
     condition: 'preview',
-    description: 'Theme access token so CI can push preview themes (password from Shopify Theme Access app)',
+    description: 'Legacy Theme Access password for preview (prefer SHOP_CLIENT_ID + SHOP_CLIENT_SECRET)',
     whereToGet:
-      'Install the Theme Access app from Shopify: it gives you a password — that password is your theme access token.',
+      'Prefer Dev Dashboard / agency app client credentials. Legacy: Theme Access app password for this store.',
   },
   {
     name: 'SHOP_CLIENT_ID',
     required: false,
-    condition: 'build',
-    description: 'Dev Dashboard app client ID for Lighthouse (pair with SHOP_CLIENT_SECRET)',
+    condition: 'preview_or_build',
+    description: 'Dev Dashboard / agency app client ID (Trafo etc.) for preview + Lighthouse',
     whereToGet:
-      'Shopify Dev Dashboard (dev.shopify.com) → Apps → Create app → set Admin API scopes read_products + write_themes → Release → Install on your store → Settings → Client credentials → Client ID. See https://shopify.dev/docs/apps/build/dev-dashboard/create-apps-using-dev-dashboard',
+      'Shopify Dev Dashboard (dev.shopify.com) → your app (e.g. Trafo) → Settings → Client credentials → Client ID. App needs write_themes (and read_products for Lighthouse). Install on the CI store(s).',
   },
   {
     name: 'SHOP_CLIENT_SECRET',
     required: false,
-    condition: 'build',
-    description: 'Dev Dashboard app client secret for Lighthouse (pair with SHOP_CLIENT_ID)',
+    condition: 'preview_or_build',
+    description: 'Dev Dashboard / agency app client secret (pair with SHOP_CLIENT_ID)',
     whereToGet:
-      'Same Dev Dashboard app → Settings → Client credentials → Client secret. The Lighthouse action exchanges these for a short-lived Admin API token (client credentials grant).',
+      'Same Dev Dashboard app → Client secret. CI exchanges these for a short-lived Admin API token (client credentials grant).',
   },
   {
     name: 'SHOP_ACCESS_TOKEN',
@@ -334,23 +334,24 @@ export function getSecretsToPrompt({
     return false;
   });
 
-  // Multi-store: theme tokens are per-store; Lighthouse auth is repo-level (runs only on
-  // `staging` against SHOPIFY_STORE_URL / Dev Dashboard client credentials).
+  // Multi-store: theme tokens are optional legacy per-store; client credentials are repo-level
+  // (same agency app installed on each store in the org).
   const dropForMulti = isMulti
     ? (s) => s.name !== 'SHOPIFY_THEME_ACCESS_TOKEN'
     : () => true;
 
   let list = base.filter(dropForMulti);
 
-  // Multi-store: prompt theme token per store so user configures one store at a time
+  // Multi-store: optional legacy Theme Access password per store
   if (isMulti && enablePreviewWorkflows) {
     for (const store of stores) {
       const suffix = aliasToSecretSuffix(store.alias);
       list.push({
         name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
         required: false,
-        description: `Store ${store.alias}: Theme access token (password from Theme Access app)`,
-        whereToGet: 'Theme Access app in Shopify — the password it gives is the token for this store.',
+        description: `Store ${store.alias}: Legacy Theme Access password (optional if SHOP_CLIENT_ID/SECRET set)`,
+        whereToGet:
+          'Prefer repo SHOP_CLIENT_ID + SHOP_CLIENT_SECRET. Legacy: Theme Access app password for this store.',
       });
     }
   }
@@ -374,8 +375,9 @@ export function getSecretsToPromptForNewStore(store) {
     {
       name: `SHOPIFY_THEME_ACCESS_TOKEN_${suffix}`,
       required: false,
-      description: `Store ${store.alias}: Theme access token (password from Theme Access app)`,
-      whereToGet: 'Theme Access app in Shopify — the password it gives is the token for this store.',
+      description: `Store ${store.alias}: Legacy Theme Access password (optional if SHOP_CLIENT_ID/SECRET set)`,
+      whereToGet:
+        'Prefer repo SHOP_CLIENT_ID + SHOP_CLIENT_SECRET when Trafo/your app is installed on this store. Legacy: Theme Access password.',
     },
   ];
 }

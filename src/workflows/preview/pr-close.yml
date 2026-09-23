@@ -98,8 +98,9 @@ jobs:
     uses: ./.github/workflows/reusable-cleanup-themes.yml
     with:
       cleanup_mode: by_pr
-      pr_number: ${{ needs.extract-pr-number.outputs.pr_number }}
+      pr_number: ${{ needs.extract-pr-number.outputs.pr_number_unpadded }}
       store_alias_secret: ${{ matrix.alias_secret }}
+      store_alias: ${{ matrix.alias }}
       result_artifact_prefix: pr-close-cleanup
     secrets: inherit
 

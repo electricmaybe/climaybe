@@ -63,16 +63,20 @@ describe('github-secrets prompting behavior', () => {
     assert.ok(secrets.every((secret) => secret.required === false));
   });
 
-  it('prompts Dev Dashboard client credentials for Lighthouse when build is enabled', () => {
+  it('prompts Dev Dashboard client credentials for preview or build', () => {
     const clientId = SECRET_DEFINITIONS.find((s) => s.name === 'SHOP_CLIENT_ID');
     const clientSecret = SECRET_DEFINITIONS.find((s) => s.name === 'SHOP_CLIENT_SECRET');
     const legacyToken = SECRET_DEFINITIONS.find((s) => s.name === 'SHOP_ACCESS_TOKEN');
+    const themeAccess = SECRET_DEFINITIONS.find((s) => s.name === 'SHOPIFY_THEME_ACCESS_TOKEN');
     assert.ok(clientId);
     assert.ok(clientSecret);
     assert.ok(legacyToken);
-    assert.match(clientId.whereToGet, /dev\.shopify\.com|Dev Dashboard/);
-    assert.match(clientId.whereToGet, /read_products/);
+    assert.ok(themeAccess);
+    assert.strictEqual(clientId.condition, 'preview_or_build');
+    assert.strictEqual(clientSecret.condition, 'preview_or_build');
+    assert.match(clientId.whereToGet, /dev\.shopify\.com|Dev Dashboard|Trafo/i);
     assert.match(legacyToken.whereToGet, /Legacy|Prefer SHOP_CLIENT_ID/i);
+    assert.match(themeAccess.whereToGet, /Prefer|Legacy/i);
 
     const withBuild = getSecretsToPrompt({
       enablePreviewWorkflows: false,
@@ -84,6 +88,16 @@ describe('github-secrets prompting behavior', () => {
     assert.ok(withBuild.some((s) => s.name === 'SHOP_CLIENT_SECRET'));
     assert.ok(withBuild.some((s) => s.name === 'SHOP_ACCESS_TOKEN'));
 
+    const previewOnly = getSecretsToPrompt({
+      enablePreviewWorkflows: true,
+      enableBuildWorkflows: false,
+      mode: 'single',
+      stores: [{ alias: 'foo', domain: 'foo.myshopify.com' }],
+    });
+    assert.ok(previewOnly.some((s) => s.name === 'SHOP_CLIENT_ID'));
+    assert.ok(previewOnly.some((s) => s.name === 'SHOP_CLIENT_SECRET'));
+    assert.ok(!previewOnly.some((s) => s.name === 'LHCI_GITHUB_APP_TOKEN'));
+
     const multi = getSecretsToPrompt({
       enablePreviewWorkflows: true,
       enableBuildWorkflows: true,
@@ -93,7 +107,7 @@ describe('github-secrets prompting behavior', () => {
         { alias: 'bar', domain: 'bar.myshopify.com' },
       ],
     });
-    // Lighthouse auth is repo-level (staging / SHOPIFY_STORE_URL), not per-store.
+    // Client credentials are repo-level; theme access may still be per-store legacy.
     assert.ok(multi.some((s) => s.name === 'SHOP_CLIENT_ID'));
     assert.ok(multi.some((s) => s.name === 'SHOP_CLIENT_SECRET'));
     assert.ok(!multi.some((s) => s.name.startsWith('SHOP_ACCESS_TOKEN_')));

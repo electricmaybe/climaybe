@@ -243,9 +243,18 @@ Version is normalized to three parts (e.g. `1.0` → `v1.0.0`). If schema is mis
 - **`build-pipeline.yml`:** Passes `client_id` / `client_secret` to `shopify/lighthouse-ci-action@v1`; still accepts legacy `access_token`. Gate accepts either pair of client credentials **or** `SHOP_ACCESS_TOKEN`.
 - **`github-secrets.js` / init prompts:** Prompt for `SHOP_CLIENT_ID` + `SHOP_CLIENT_SECRET` (and optional legacy `SHOP_ACCESS_TOKEN`). Multi-store Lighthouse credentials stay repo-level (Lighthouse only runs on `staging` against `SHOPIFY_STORE_URL`).
 
+## 21) Preview: development themes + Trafo/client credentials + `/redeploy`
+
+- PR previews use `shopify theme push --development --development-context climaybe-pr-<n>[-alias]` (hidden from Online Store → Themes; reused per PR).
+- Auth prefers `SHOP_CLIENT_ID` + `SHOP_CLIENT_SECRET` (agency Dev Dashboard app such as Trafo); legacy Theme Access / Admin tokens still work.
+- `SHOP_PASSWORD` remains a manual secret (Admin API does not expose storefront passwords).
+- **`pr-preview-redeploy.yml`:** PR comment `/redeploy` (owner/member/collaborator) re-pushes and updates the preview comment — covers ~7-day development-theme inactivity.
+- Cleanup matches `climaybe-pr-<n>` and legacy `-PR{padded}` names on PR close / orphan cleanup.
+
 ## Why these changes were made
 
 - Prevent recurring CI failures caused by unsafe output interpolation and shell parsing edge cases.
 - Improve fallback resilience when AI providers return unexpected payloads.
 - Make release/tag workflow behavior more transparent and easier to debug.
 - Align Lighthouse CI with Shopify’s Dev Dashboard custom-app flow after Admin Develop apps went away.
+- Keep PR previews out of the merchant theme library and refresh them without Theme Access pollution.

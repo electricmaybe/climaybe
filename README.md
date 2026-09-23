@@ -281,7 +281,8 @@ Optional package, enabled via the `climaybe init` prompt (`Enable preview + clea
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `pr-update.yml` | PR opened/synchronize/reopened/labeled/unlabeled (base: main, staging, develop, staging-*, live-*) | Shares draft theme, renames with `-PR<number>`, comments preview + customize URLs. **Skip theme push:** PR label `skip-preview`, or `[skip-preview]` in PR title/body or head commit message. **Multi-store + source branch (`pull_request.head.ref`) not** `staging-<alias>` **or** `live-<alias>`**:** publishes to **every** configured store (matrix) and posts **all** links in one PR comment. For `staging-<alias>` / `live-<alias>` source branches, only that store is used. **Path filter:** theme paths only (`assets/`, `blocks/`, `config/`, `layout/`, `locales/`, `sections/`, `snippets/`, `templates/`, `_scripts/`, `_styles/`, `shopify.theme.toml`, `stores/**`). |
+| `pr-update.yml` | PR opened/synchronize/reopened/labeled/unlabeled (base: main, staging, develop, staging-*, live-*) | Pushes a **development** theme (`climaybe-pr-<n>`), comments preview + customize URLs. **Skip theme push:** PR label `skip-preview`, or `[skip-preview]` in PR title/body or head commit message. **Refresh:** comment `/redeploy`. **Multi-store + source branch (`pull_request.head.ref`) not** `staging-<alias>` **or** `live-<alias>`**:** publishes to **every** configured store (matrix) and posts **all** links in one PR comment. For `staging-<alias>` / `live-<alias>` source branches, only that store is used. **Path filter:** theme paths only (`assets/`, `blocks/`, `config/`, `layout/`, `locales/`, `sections/`, `snippets/`, `templates/`, `_scripts/`, `_styles/`, `shopify.theme.toml`, `stores/**`). |
+| `pr-preview-redeploy.yml` | PR comment `/redeploy` | Re-pushes development theme(s) for the PR (same publish path as `pr-update`) |
 | `pr-close.yml` | PR closed (same branch set) | Deletes this PR’s preview themes using the **same store matrix rule** as `pr-update`; PR comment shows **total** deleted count across stores. |
 | `cleanup-orphan-preview-themes.yml` | PR closed (same branch set) + weekly (Mon 06:00 UTC) + `workflow_dispatch` | Per store: deletes themes ending with `-PR<n>` when PR `#n` is **not** open (merged/closed without cleanup). Uses `gh pr list` (limit 1000 open PRs). |
 | `reusable-publish-pr-preview-store.yml` | workflow_call | Share + rename + upload comment fragment for **one** store (matrix leg in `pr-update`). |
@@ -297,7 +298,7 @@ Enabled via `climaybe init` prompt (`Enable Liquid performance profiling workflo
 
 Runs on every push to `main` (skipping store-sync and hotfix-backport commits). Creates a shared preview theme, measures TTFB for four core templates (index, collection, product, cart) over 4 iterations each, discards the first (warm-up) run, and reports the average of the last 3 in the GitHub Actions job summary.
 
-Requires `SHOPIFY_STORE_URL` and `SHOPIFY_THEME_ACCESS_TOKEN` secrets. When secrets are missing, the workflow skips gracefully.
+Requires `SHOPIFY_STORE_URL` and Shopify auth (`SHOP_CLIENT_ID`+`SHOP_CLIENT_SECRET` preferred, or legacy theme/Admin token). When secrets are missing, the workflow skips gracefully.
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
@@ -501,20 +502,22 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 | `GEMINI_API_KEY` | Optional | Google Gemini API key for AI-generated release notes fallback |
 | `LINEAR_API_KEY` | Optional* | Linear personal API key for issue status sync (needed when `linear_workflows` is enabled). Create one at Linear → Settings → Account → Security & access → Personal API keys. Rotate with `climaybe update:linear-key`. |
 | `SHOPIFY_STORE_URL` | Set from config | Store URL is set automatically from the store domain(s) you add during init (no prompt). |
-| `SHOPIFY_THEME_ACCESS_TOKEN` | Optional* | Theme access token for preview workflows (needed only when you want preview theme publish/cleanup to run). |
-| `SHOP_CLIENT_ID` | Optional* | Dev Dashboard app client ID for Lighthouse (required with `SHOP_CLIENT_SECRET`; preferred after Jan 2026) |
-| `SHOP_CLIENT_SECRET` | Optional* | Dev Dashboard app client secret for Lighthouse (required with `SHOP_CLIENT_ID`) |
-| `SHOP_ACCESS_TOKEN` | Optional* | Legacy Admin custom-app access token for Lighthouse (pre-2026 apps only; prefer client ID/secret) |
-| `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when optional build workflows are enabled (Lighthouse) |
-| `SHOP_PASSWORD` | Optional | Used by Lighthouse action when your store requires password auth |
+| `SHOPIFY_THEME_ACCESS_TOKEN` | Optional* | Legacy Theme Access password for preview (prefer `SHOP_CLIENT_ID` / `SHOP_CLIENT_SECRET`) |
+| `SHOP_CLIENT_ID` | Optional* | Dev Dashboard / agency app client ID for **preview + Lighthouse** (with `SHOP_CLIENT_SECRET`) |
+| `SHOP_CLIENT_SECRET` | Optional* | Dev Dashboard / agency app client secret |
+| `SHOP_ACCESS_TOKEN` | Optional* | Legacy Admin custom-app access token (pre-2026 apps only; prefer client ID/secret) |
+| `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when Lighthouse is enabled |
+| `SHOP_PASSWORD` | Optional | Storefront password for Lighthouse when the shop is password-protected (not available via Admin API) |
 
-**Lighthouse Shopify auth:** Create an app in the [Shopify Dev Dashboard](https://dev.shopify.com) (Partner org → Apps → Create app). On the app version, enable Admin API scopes `read_products` and `write_themes`, release, then install the app on the store you use for CI. Copy **Client ID** and **Client secret** into `SHOP_CLIENT_ID` / `SHOP_CLIENT_SECRET`. The Lighthouse action exchanges them for a short-lived token each run. Existing Admin “Develop apps” tokens still work via `SHOP_ACCESS_TOKEN` until you migrate.
+**Shopify auth (preview + Lighthouse):** Prefer your Dev Dashboard / agency app (e.g. Trafo) client credentials. CI exchanges `SHOP_CLIENT_ID` + `SHOP_CLIENT_SECRET` for a short-lived Admin API token (`write_themes`; also `read_products` for Lighthouse). Install the app on each CI store. Theme Access passwords remain a legacy fallback via `SHOPIFY_THEME_ACCESS_TOKEN`.
+
+**PR previews** use `shopify theme push --development` (hidden from Online Store → Themes, keyed by `climaybe-pr-<n>`). They expire after ~7 days of inactivity — comment `/redeploy` on the PR to refresh. Keep `SHOP_PASSWORD` as a normal secret when needed; Shopify does not expose storefront passwords via the API.
 
 **Prompting behavior:** During `climaybe init` (or `add-store`), every GitHub/GitLab secret prompt is skippable. Add values later in CI settings if you prefer.
 
 **Store URL:** During `climaybe init` (or `add-store`), store URL secret(s) are set from your configured store domain(s); theme tokens are optional prompts.
 
-**Multi-store:** Per-store secrets `SHOPIFY_STORE_URL_<ALIAS>` and `SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>` — the URL is set from config; you must provide the theme token per store. `<ALIAS>` is uppercase with hyphens as underscores (e.g. `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`). **Preview:** if the PR source branch is **`staging-<alias>`** or **`live-<alias>`**, only that store is used. Otherwise, with **multiple** stores in `climaybe.config.json`, **pr-update** publishes the preview theme to **every** store (each must have secrets) and **pr-close** cleans that PR’s preview themes on **all** stores. For a **single** store in config, behavior matches the default-store case. Optional **cleanup-orphan-preview-themes** (weekly + manual) removes stale `-PR<n>` themes when PR `n` is no longer open.
+**Multi-store:** Per-store secrets `SHOPIFY_STORE_URL_<ALIAS>` (and optional legacy `SHOPIFY_THEME_ACCESS_TOKEN_<ALIAS>`). Prefer repo-level `SHOP_CLIENT_ID` / `SHOP_CLIENT_SECRET` when your agency app is installed on each store. `<ALIAS>` is uppercase with hyphens as underscores (e.g. `voldt-norway` → `SHOPIFY_STORE_URL_VOLDT_NORWAY`). **Preview:** if the PR source branch is **`staging-<alias>`** or **`live-<alias>`**, only that store is used. Otherwise, with **multiple** stores in `climaybe.config.json`, **pr-update** publishes the preview theme to **every** store (each must have URL + auth) and **pr-close** cleans that PR’s preview themes on **all** stores. For a **single** store in config, behavior matches the default-store case. Optional **cleanup-orphan-preview-themes** (weekly + manual) removes stale `climaybe-pr-<n>` / `-PR<n>` themes when PR `n` is no longer open.
 
 ## Directory Structure (Multi-store)
 
