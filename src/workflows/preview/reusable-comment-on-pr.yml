@@ -49,6 +49,7 @@ jobs:
           THEME_ID: ${{ inputs.theme_id }}
           SHARE_OUTPUT: ${{ inputs.share_output }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          STORE_ALIAS: ${{ inputs.store_alias }}
           USE_PREVIEW_FRAGMENTS: ${{ inputs.use_preview_fragments }}
         with:
           script: |
@@ -106,8 +107,8 @@ jobs:
                 const alias = f.alias || 'store';
                 if (host && tid) {
                   const previewUrl = `https://${host}?preview_theme_id=${tid}`;
-                  const customizeUrl = `https://${host}/admin/themes/${tid}/editor`;
-                  parts.push('', `- [${alias} preview](${previewUrl}) · [customize](${customizeUrl})`);
+                  const editorUrl = `https://${host}/admin/themes/${tid}/editor`;
+                  parts.push('', `- [${alias} preview](${previewUrl}) · [${alias} editor preview](${editorUrl})`);
                 }
               }
             } else if (useFragments) {
@@ -121,16 +122,19 @@ jobs:
                 .replace(/\/$/, '');
               const themeId = process.env.THEME_ID || '';
               const shareOutput = process.env.SHARE_OUTPUT || '';
+              const alias = String(process.env.STORE_ALIAS || '').trim();
+              const previewLabel = alias ? `${alias} preview` : 'theme preview';
+              const editorLabel = alias ? `${alias} editor preview` : 'editor preview';
               parts.push('', `**Store:** ${process.env.SHOPIFY_STORE_URL || 'N/A'}`);
               let previewUrl = '';
-              let customizeUrl = '';
+              let editorUrl = '';
               if (storeDomain && themeId) {
                 previewUrl = `https://${storeDomain}?preview_theme_id=${themeId}`;
-                customizeUrl = `https://${storeDomain}/admin/themes/${themeId}/editor`;
+                editorUrl = `https://${storeDomain}/admin/themes/${themeId}/editor`;
               }
               if (previewUrl) {
-                const links = [`[theme preview](${previewUrl})`];
-                if (customizeUrl) links.push(`[customize](${customizeUrl})`);
+                const links = [`[${previewLabel}](${previewUrl})`];
+                if (editorUrl) links.push(`[${editorLabel}](${editorUrl})`);
                 parts.push('', links.join(' · '));
               }
               if (shareOutput.trim()) {

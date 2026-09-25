@@ -124,7 +124,7 @@ jobs:
             if [ -n "$STAGING_THEME_ID" ]; then
               PREVIEW_URL="https://${DOMAIN}?preview_theme_id=${STAGING_THEME_ID}"
               CUSTOMIZE_URL="https://${DOMAIN}/admin/themes/${STAGING_THEME_ID}/editor"
-              BODY="${BODY}"$'\n\n'"[${ALIAS} preview](${PREVIEW_URL}) · [customize](${CUSTOMIZE_URL})"
+              BODY="${BODY}"$'\n\n'"[${ALIAS} preview](${PREVIEW_URL}) · [${ALIAS} editor preview](${CUSTOMIZE_URL})"
             else
               BODY="${BODY}"$'\n\n'"⚠️ Staging theme link not found for branch \`${STAGING}\`."$'\n'"Expected naming: \`${REPO_NAME}/${STAGING}\` (or suffix match \`/${STAGING}\`)."
             fi

@@ -178,6 +178,7 @@ describe('workflows', () => {
         assert.match(publishPreview, /climaybe-pr-/);
         assert.match(publishPreview, /SHOP_CLIENT_ID/);
         assert.match(commentWorkflow, /climaybe-preview-comment/);
+        assert.match(commentWorkflow, /\$\{alias\} editor preview/);
         assert.match(commentWorkflow, /issues\.updateComment/);
         assert.match(commentWorkflow, /issues\.deleteComment/);
         assert.match(commentWorkflow, /\/redeploy/);
