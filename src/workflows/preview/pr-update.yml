@@ -1,6 +1,6 @@
 # climaybe — PR Update (Optional Preview Package)
 # Pushes a Shopify development theme on PR update (hidden from the main theme library),
-# keyed by climaybe-pr-<n>, and posts preview/customize links back to the PR.
+# keyed by climaybe-pr-<n>, and posts preview / editor preview links back to the PR.
 #
 # Opt out of theme push for a PR or commit:
 #   - PR label: skip-preview
