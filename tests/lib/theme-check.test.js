@@ -230,4 +230,36 @@ describe('theme-check gate', () => {
       teardown();
     }
   });
+
+  it('--quiet prints a single agent-friendly summary on success', () => {
+    const dir = setup();
+    try {
+      const offenses = [
+        { check: 'MatchingTranslations', severity: 'error', message: 'x', path: 'locales/en.json', start_row: 1 },
+      ];
+      mkdirSync(join(dir, 'docs', 'harness'), { recursive: true });
+      writeFileSync(
+        join(dir, THEME_CHECK_BASELINE_PATH),
+        formatBaseline(normalizeThemeCheckErrors({ Offenses: offenses })),
+        'utf-8'
+      );
+      const logs = [];
+      const orig = console.log;
+      console.log = (...args) => logs.push(args.join(' '));
+      try {
+        const code = runThemeCheckGate({
+          cwd: dir,
+          quiet: true,
+          nodeVersion: '22.14.0',
+          runner: mockRunner(offenses),
+        });
+        assert.strictEqual(code, 0);
+      } finally {
+        console.log = orig;
+      }
+      assert.deepStrictEqual(logs, ['theme check: 0 new errors (baseline 1)']);
+    } finally {
+      teardown();
+    }
+  });
 });

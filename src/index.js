@@ -128,6 +128,7 @@ function registerThemeCommands(cmd) {
     .command('check')
     .description('Run Theme Check and fail only on errors not in the harness baseline')
     .option('--write-baseline', 'Write docs/harness/theme-check-baseline.json from current Theme Check errors')
+    .option('--quiet', 'One-line summary for agent harness (init.sh)')
     .action(checkCommand);
 }
 

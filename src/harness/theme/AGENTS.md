@@ -90,9 +90,12 @@ If `./init.sh` fails, repair that first. Do not stack new feature work on a brok
 ## Verification
 
 ```bash
-./init.sh
+./init.sh              # quiet (~10–15 lines); skip npm when node_modules matches the lockfile
+./init.sh --verbose    # full install / Theme Check / test output
+./init.sh --skip-install
 # or
 npx climaybe check
+npx climaybe check --quiet
 ```
 
 `climaybe check` runs Theme Check and fails only on **new** errors vs `docs/harness/theme-check-baseline.json`. Refresh the baseline intentionally with `npx climaybe check --write-baseline` after reviewing the diff.

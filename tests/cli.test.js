@@ -133,6 +133,7 @@ describe('CLI', () => {
       assert.ok(harnessFlags.includes('--dry-run'));
       assert.ok(harnessFlags.includes('--yes'));
       assert.ok(checkFlags.includes('--write-baseline'));
+      assert.ok(checkFlags.includes('--quiet'));
     }
   });
 });

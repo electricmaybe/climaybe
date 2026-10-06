@@ -7,7 +7,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Theme CI/CD** (workflows, stores, branches): `climaybe theme <command>` or the same command at the top level (e.g. `climaybe init` = `climaybe theme init`).
 - **App repos**: `climaybe app init` sets `config.project_type: "app"` and optional commitlint/Cursor only; theme workflows and store commands are disabled when `project_type` is `app`.
 - **Shared**: `climaybe setup-commitlint`, `climaybe add-cursor` (top level only). Theme also has `climaybe update:linear-key` (alias `update-linear-key`) to set `LINEAR_API_KEY` and enable Linear status sync.
-- **Coding-agent harness (themes)**: `climaybe harness` / `climaybe theme harness` scaffolds `AGENTS.md`, `init.sh`, and session state (never overwrites existing files). `climaybe check` / `climaybe theme check` runs Theme Check against `docs/harness/theme-check-baseline.json` and fails only on **new** errors (`--write-baseline` refreshes the baseline). Config keys: `harness`, optional `base_branch` (default `staging`), optional `dev_store`.
+- **Coding-agent harness (themes)**: `climaybe harness` / `climaybe theme harness` scaffolds `AGENTS.md`, `init.sh`, and session state (never overwrites existing files). Generated `init.sh` is token-cheap by default (lockfile stamp skip, quiet install/check/test; `--verbose` for full logs). `climaybe check` / `climaybe theme check` runs Theme Check against `docs/harness/theme-check-baseline.json` and fails only on **new** errors (`--write-baseline` refreshes the baseline; `--quiet` prints a one-line summary for agents). Config keys: `harness`, optional `base_branch` (default `staging`), optional `dev_store`.
 
 ## Versioning
 

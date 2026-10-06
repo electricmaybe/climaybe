@@ -210,6 +210,7 @@ function defaultThemeCheckRunner(args, { cwd }) {
  * @param {object} [options]
  * @param {string} [options.cwd]
  * @param {boolean} [options.writeBaseline]
+ * @param {boolean} [options.quiet] - one-line agent-friendly summary (for init.sh)
  * @param {string} [options.nodeVersion] - override process.versions.node for tests
  * @param {(args: string[], opts: {cwd: string}) => object} [options.runner]
  * @returns {number} process exit code
@@ -217,29 +218,46 @@ function defaultThemeCheckRunner(args, { cwd }) {
 export function runThemeCheckGate({
   cwd = process.cwd(),
   writeBaseline = false,
+  quiet = false,
   nodeVersion = process.versions.node,
   runner,
 } = {}) {
+  const say = (msg, colorFn) => {
+    if (quiet) {
+      console.log(msg);
+      return;
+    }
+    console.log(colorFn ? colorFn(msg) : msg);
+  };
+
   const node = parseNodeVersion(nodeVersion);
   if (!node.ok) {
-    console.log(
-      pc.red(
-        `  Node.js >= ${HARNESS_MIN_NODE.major}.${HARNESS_MIN_NODE.minor} required for Theme Check / Shopify CLI (found v${node.version}).`
-      )
+    say(
+      quiet
+        ? `theme check: FAILED (Node.js >= ${HARNESS_MIN_NODE.major}.${HARNESS_MIN_NODE.minor} required, found v${node.version})`
+        : `  Node.js >= ${HARNESS_MIN_NODE.major}.${HARNESS_MIN_NODE.minor} required for Theme Check / Shopify CLI (found v${node.version}).`,
+      quiet ? null : pc.red
     );
     return 1;
   }
 
   const check = runThemeCheckJson({ cwd, runner });
   if (check.missingCli) {
-    console.log(pc.red('  Shopify CLI is missing.'));
-    console.log(pc.dim('  Install Shopify CLI, or ensure npx can run @shopify/cli.'));
-    if (check.stderr) console.log(pc.dim(`  ${check.stderr}`));
+    if (quiet) {
+      console.log('theme check: FAILED (Shopify CLI missing)');
+    } else {
+      console.log(pc.red('  Shopify CLI is missing.'));
+      console.log(pc.dim('  Install Shopify CLI, or ensure npx can run @shopify/cli.'));
+      if (check.stderr) console.log(pc.dim(`  ${check.stderr}`));
+    }
     return 1;
   }
   if (check.parseError) {
-    console.log(pc.red('  Theme Check returned output that is not valid JSON.'));
-    if (check.stderr) console.log(pc.dim(check.stderr));
+    say(
+      quiet ? 'theme check: FAILED (invalid JSON from Theme Check)' : '  Theme Check returned output that is not valid JSON.',
+      quiet ? null : pc.red
+    );
+    if (!quiet && check.stderr) console.log(pc.dim(check.stderr));
     return 1;
   }
 
@@ -248,56 +266,73 @@ export function runThemeCheckGate({
     const outPath = join(cwd, THEME_CHECK_BASELINE_PATH);
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, body, 'utf-8');
-    console.log(
-      pc.green(
-        `  Wrote ${THEME_CHECK_BASELINE_PATH} (${check.errors.length} error${check.errors.length === 1 ? '' : 's'}).`
-      )
+    say(
+      quiet
+        ? `theme check: wrote baseline (${check.errors.length} errors)`
+        : `  Wrote ${THEME_CHECK_BASELINE_PATH} (${check.errors.length} error${check.errors.length === 1 ? '' : 's'}).`,
+      quiet ? null : pc.green
     );
     return 0;
   }
 
-  if (check.emptyOutput) {
+  if (check.emptyOutput && !quiet) {
     console.log(pc.dim('  Theme Check produced empty JSON output — treating as 0 errors.'));
   }
 
   const baseline = readBaseline(cwd);
   if (baseline.missing) {
     if (check.errors.length === 0) {
-      console.log(pc.green('  Theme Check: 0 errors (no baseline file).'));
+      say(
+        quiet ? 'theme check: 0 new errors (baseline 0)' : '  Theme Check: 0 errors (no baseline file).',
+        quiet ? null : pc.green
+      );
       return 0;
     }
-    console.log(
-      pc.red(
-        `  No baseline at ${THEME_CHECK_BASELINE_PATH} — treating all ${check.errors.length} error(s) as new.`
-      )
-    );
-    console.log(pc.dim('  Hint: run `climaybe check --write-baseline` after reviewing Theme Check output.'));
-    printErrors(check.errors);
+    if (quiet) {
+      console.log(`theme check: ${check.errors.length} new errors (baseline 0)`);
+      printErrors(check.errors, { quiet: true });
+    } else {
+      console.log(
+        pc.red(
+          `  No baseline at ${THEME_CHECK_BASELINE_PATH} — treating all ${check.errors.length} error(s) as new.`
+        )
+      );
+      console.log(pc.dim('  Hint: run `climaybe check --write-baseline` after reviewing Theme Check output.'));
+      printErrors(check.errors);
+    }
     return 1;
   }
 
   const neu = findNewErrors(check.errors, baseline.errors);
   if (neu.length === 0) {
-    console.log(
-      pc.green(
-        `  Theme Check: ${check.errors.length} error(s) all known in baseline (${baseline.errors.length}).`
-      )
+    say(
+      quiet
+        ? `theme check: 0 new errors (baseline ${baseline.errors.length})`
+        : `  Theme Check: ${check.errors.length} error(s) all known in baseline (${baseline.errors.length}).`,
+      quiet ? null : pc.green
     );
     return 0;
   }
 
-  console.log(pc.red(`  Theme Check: ${neu.length} new error(s) not in baseline.`));
-  printErrors(neu);
+  if (quiet) {
+    console.log(`theme check: ${neu.length} new errors (baseline ${baseline.errors.length})`);
+    printErrors(neu, { quiet: true });
+  } else {
+    console.log(pc.red(`  Theme Check: ${neu.length} new error(s) not in baseline.`));
+    printErrors(neu);
+  }
   return 1;
 }
 
-function printErrors(errors) {
+function printErrors(errors, { quiet = false } = {}) {
   for (const e of errors.slice(0, 50)) {
     const loc =
       e.start_row != null ? `:${e.start_row}${e.start_col != null ? `:${e.start_col}` : ''}` : '';
-    console.log(pc.red(`    - [${e.check}] ${e.path}${loc} — ${e.message}`));
+    const line = `    - [${e.check}] ${e.path}${loc} — ${e.message}`;
+    console.log(quiet ? line : pc.red(line));
   }
   if (errors.length > 50) {
-    console.log(pc.dim(`    … and ${errors.length - 50} more`));
+    const more = `    … and ${errors.length - 50} more`;
+    console.log(quiet ? more : pc.dim(more));
   }
 }

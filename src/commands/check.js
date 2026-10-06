@@ -4,10 +4,11 @@ import { runThemeCheckGate } from '../lib/theme-check.js';
 
 /**
  * `climaybe check` — Theme Check vs committed baseline (new errors only).
- * @param {{ writeBaseline?: boolean }} opts
+ * @param {{ writeBaseline?: boolean, quiet?: boolean }} opts
  */
 export async function checkCommand(opts = {}) {
-  console.log(pc.bold('\n  climaybe — Check\n'));
+  const quiet = opts.quiet === true;
+  if (!quiet) console.log(pc.bold('\n  climaybe — Check\n'));
 
   if (!requireThemeProject()) {
     process.exitCode = 1;
@@ -17,7 +18,8 @@ export async function checkCommand(opts = {}) {
   const code = runThemeCheckGate({
     cwd: process.cwd(),
     writeBaseline: opts.writeBaseline === true,
+    quiet,
   });
   process.exitCode = code;
-  console.log('');
+  if (!quiet) console.log('');
 }

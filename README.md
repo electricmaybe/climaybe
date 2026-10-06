@@ -429,7 +429,7 @@ Optional (theme repos). Scaffolds a shared constitution and verification gate so
 | `AGENTS.md` | Canonical constitution (boot order, WIP=1, branch rules, theme conventions) |
 | `CLAUDE.md` | Pointer to `AGENTS.md` |
 | `.config/ai/rules/agent-harness.mdc` | Always-on Cursor rule pointing at `AGENTS.md` |
-| `init.sh` | Node ≥ 22.12 check, npm install/ci, `climaybe check`, unit tests |
+| `init.sh` | Quiet verification gate (≈10–15 lines): Node ≥ 22.12, lockfile-aware install skip, `climaybe check --quiet`, unit tests. Flags: `--skip-install`, `--verbose` |
 | `feature_list.json` | Feature state (+ snapshot metadata) |
 | `progress.md` / `session-handoff.md` | Session continuity |
 | `docs/harness/DIGEST.md` | Course digest + theme TODO |
