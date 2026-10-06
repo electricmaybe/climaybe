@@ -21,6 +21,8 @@ _scripts
 .clinerules
 AGENTS.md
 CLAUDE.md
+init.sh
+feature_list.json
 .backups
 .github
 .vscode

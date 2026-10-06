@@ -307,6 +307,20 @@ export async function promptCursorSkills() {
 }
 
 /**
+ * Ask whether to scaffold the coding-agent harness (AGENTS.md, init.sh, state files).
+ */
+export async function promptHarness() {
+  const { enableHarness } = await prompts({
+    type: 'confirm',
+    name: 'enableHarness',
+    message: 'Scaffold the coding-agent harness? (AGENTS.md, init.sh, feature_list.json, …)',
+    initial: true,
+  });
+
+  return !!enableHarness;
+}
+
+/**
  * Ask which editors to bridge to the shared `.config/ai/` ruleset. Returns an array of
  * editor keys understood by EDITOR_BRIDGES in cursor-bundle.js. Defaults to Cursor.
  */

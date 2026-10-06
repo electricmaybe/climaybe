@@ -4,6 +4,7 @@ import {
   isBuildWorkflowsEnabled,
   isCommitlintEnabled,
   isCursorSkillsEnabled,
+  isHarnessEnabled,
   getAiEditors,
   isPreviewWorkflowsEnabled,
   isProfileWorkflowsEnabled,
@@ -15,6 +16,7 @@ import { requireThemeProject } from '../lib/theme-guard.js';
 import { scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
 import { scaffoldAiConfig } from '../lib/cursor-bundle.js';
+import { logHarnessResult, scaffoldHarness } from '../lib/harness.js';
 
 export async function updateCommand() {
   console.log(pc.bold('\n  climaybe — Update\n'));
@@ -42,8 +44,21 @@ export async function updateCommand() {
   if (isCommitlintEnabled()) {
     scaffoldCommitlint(process.cwd(), { skipInstall: true });
   }
+
+  // Create only missing harness files; never rewrite existing ones.
+  if (isHarnessEnabled()) {
+    const harnessResult = scaffoldHarness({
+      cwd: process.cwd(),
+      markEnabled: true,
+    });
+    logHarnessResult(harnessResult);
+  }
+
   if (isCursorSkillsEnabled()) {
-    scaffoldAiConfig(process.cwd(), { editors: getAiEditors() });
+    scaffoldAiConfig(process.cwd(), {
+      editors: getAiEditors(),
+      harness: isHarnessEnabled(),
+    });
   }
 
   scaffoldWorkflows(mode, { includePreview, includeBuild, includeProfile, includeLinear });

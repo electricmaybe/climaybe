@@ -4,6 +4,10 @@
 
 ---
 
+## Coding-agent harness (`climaybe harness` / `climaybe check`)
+
+Theme repos can opt into a shared agent constitution (`AGENTS.md`, `init.sh`, session state). `build-pipeline.yml` `paths-ignore` and `.shopifyignore` now include `init.sh` and `feature_list.json`. `climaybe check` gates Theme Check against `docs/harness/theme-check-baseline.json` (new errors only).
+
 ## Skip PR preview theme push (`skip-preview`)
 
 `pr-update.yml` can skip Shopify theme share/push per PR or commit without turning off preview workflows in config:

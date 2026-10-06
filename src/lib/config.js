@@ -285,6 +285,14 @@ export function isCursorSkillsEnabled(cwd = process.cwd()) {
 }
 
 /**
+ * Whether the coding-agent harness was opted in (init or `climaybe harness`).
+ */
+export function isHarnessEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.harness === true;
+}
+
+/**
  * Editors bridged to the .config/ai ruleset. Falls back to ['cursor'] for configs
  * written before the multi-editor option existed.
  */
