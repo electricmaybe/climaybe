@@ -30,6 +30,25 @@ function writeStub(binDir, name, body) {
   chmodSync(path, 0o755);
 }
 
+/**
+ * Stub `node` so init.sh's Node >= 22.12 gate passes on CI Node 20,
+ * while all other node invocations still use the real runtime.
+ */
+function writeNodeVersionStub(binDir, realNode = process.execPath) {
+  writeStub(
+    binDir,
+    'node',
+    `#!/usr/bin/env bash
+REAL_NODE="${realNode}"
+if [ "$#" -eq 2 ] && [ "$1" = "-p" ] && [ "$2" = "process.versions.node" ]; then
+  echo "22.14.0"
+  exit 0
+fi
+exec "$REAL_NODE" "$@"
+`
+  );
+}
+
 function setupTheme({ withLockStamp = true, testScript = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'climaybe-init-sh-'));
   const lock = '{\n  "name": "demo-theme",\n  "lockfileVersion": 3\n}\n';
@@ -57,6 +76,7 @@ function setupTheme({ withLockStamp = true, testScript = true } = {}) {
 
   const bin = join(dir, '.stubs');
   mkdirSync(bin, { recursive: true });
+  writeNodeVersionStub(bin);
   return { dir, bin, lock };
 }
 
