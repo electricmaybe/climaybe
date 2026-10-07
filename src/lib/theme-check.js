@@ -37,21 +37,36 @@ export function offenseKey(offense) {
 }
 
 /**
- * Normalize Theme Check JSON into a sorted list of error-level offenses.
+ * Extract a recognized Theme Check offense list from parsed JSON.
+ * Rejects unknown object shapes so we never treat garbage as "0 errors".
+ * @param {unknown} raw
+ * @returns {{ recognized: true, offenses: object[] } | { recognized: false }}
+ */
+export function extractThemeCheckOffenses(raw) {
+  if (Array.isArray(raw)) {
+    return { recognized: true, offenses: raw };
+  }
+  if (raw && typeof raw === 'object') {
+    const obj = /** @type {Record<string, unknown>} */ (raw);
+    for (const key of ['Offenses', 'offenses', 'results', 'Errors']) {
+      if (Array.isArray(obj[key])) {
+        return { recognized: true, offenses: /** @type {object[]} */ (obj[key]) };
+      }
+    }
+  }
+  return { recognized: false };
+}
+
+/**
+ * Normalize a recognized offense list into a sorted list of error-level offenses.
+ * Prefer `extractThemeCheckOffenses` first when parsing CLI output; this helper also
+ * accepts a bare offense array (e.g. baseline `errors`) or a recognized wrapper object.
  * @param {unknown} raw
  * @returns {object[]}
  */
 export function normalizeThemeCheckErrors(raw) {
-  let offenses = [];
-  if (Array.isArray(raw)) {
-    offenses = raw;
-  } else if (raw && typeof raw === 'object') {
-    const obj = /** @type {Record<string, unknown>} */ (raw);
-    if (Array.isArray(obj.Offenses)) offenses = obj.Offenses;
-    else if (Array.isArray(obj.offenses)) offenses = obj.offenses;
-    else if (Array.isArray(obj.results)) offenses = obj.results;
-    else if (Array.isArray(obj.Errors)) offenses = obj.Errors;
-  }
+  const extracted = extractThemeCheckOffenses(raw);
+  const offenses = extracted.recognized ? extracted.offenses : [];
 
   const errors = offenses.filter((o) => {
     if (!o || typeof o !== 'object') return false;
@@ -117,13 +132,48 @@ export function findNewErrors(current, baseline) {
 }
 
 /**
+ * @param {unknown} parsed
+ * @param {{ stdout: string, stderr: string, status: number|null|undefined }} meta
+ */
+function successFromParsed(parsed, meta) {
+  const extracted = extractThemeCheckOffenses(parsed);
+  if (!extracted.recognized) {
+    return {
+      ok: false,
+      errors: [],
+      stdout: meta.stdout,
+      stderr: meta.stderr || 'Theme Check JSON was not a recognized offense payload.',
+      missingCli: false,
+      emptyOutput: false,
+      unrecognizedShape: true,
+      status: meta.status ?? null,
+    };
+  }
+  return {
+    ok: true,
+    errors: normalizeThemeCheckErrors(extracted.offenses),
+    stdout: meta.stdout,
+    stderr: meta.stderr,
+    missingCli: false,
+    emptyOutput: false,
+    status: meta.status ?? null,
+  };
+}
+
+/**
  * Run `shopify theme check --fail-level error --output json` (fall back to npx).
  * Injectable for tests.
+ *
+ * Fail closed when the CLI exits without a recognized offense payload (empty stdout
+ * on non-zero/null status, network/CLI stderr with no JSON, unrecognized JSON shapes).
+ * A clean exit (status 0) with empty stdout is treated as zero offenses. A non-zero
+ * exit with valid offense JSON is success for parsing — baseline comparison decides
+ * whether those errors are new.
  *
  * @param {object} [options]
  * @param {string} [options.cwd]
  * @param {(args: string[], opts: {cwd: string}) => {status: number|null, stdout: string, stderr: string, error?: NodeJS.ErrnoException}} [options.runner]
- * @returns {{ ok: boolean, errors: object[], stdout: string, stderr: string, missingCli: boolean }}
+ * @returns {{ ok: boolean, errors: object[], stdout: string, stderr: string, missingCli: boolean, emptyOutput?: boolean, parseError?: boolean, unrecognizedShape?: boolean, executionError?: boolean, status?: number|null }}
  */
 export function runThemeCheckJson({ cwd = process.cwd(), runner = defaultThemeCheckRunner } = {}) {
   const args = ['theme', 'check', '--fail-level', 'error', '--output', 'json'];
@@ -136,29 +186,64 @@ export function runThemeCheckJson({ cwd = process.cwd(), runner = defaultThemeCh
       stdout: result.stdout || '',
       stderr: result.stderr || '',
       missingCli: true,
+      status: result.status ?? null,
+    };
+  }
+
+  // Non-ENOENT spawn failures (e.g. killed before start) — fail closed.
+  if (result.error) {
+    return {
+      ok: false,
+      errors: [],
+      stdout: result.stdout || '',
+      stderr: result.stderr || result.error.message || 'Theme Check failed to start.',
+      missingCli: false,
+      executionError: true,
+      status: result.status ?? null,
     };
   }
 
   const stdout = result.stdout || '';
   const stderr = result.stderr || '';
+  const status = result.status ?? null;
   const trimmed = stdout.trim();
   if (!trimmed) {
-    // Empty output: treat as zero offenses (Theme Check may exit non-zero with no JSON).
-    return { ok: true, errors: [], stdout, stderr, missingCli: false, emptyOutput: true };
+    // Only a clean exit may mean "0 offenses with no JSON body".
+    // Non-zero / signal (null) / missing status with empty stdout is an execution failure
+    // (network error, crash, etc.) — never treat as a clean theme.
+    if (status === 0) {
+      return {
+        ok: true,
+        errors: [],
+        stdout,
+        stderr,
+        missingCli: false,
+        emptyOutput: true,
+        status,
+      };
+    }
+    return {
+      ok: false,
+      errors: [],
+      stdout,
+      stderr: stderr || 'Theme Check produced no JSON output.',
+      missingCli: false,
+      emptyOutput: true,
+      executionError: true,
+      status,
+    };
   }
 
   try {
     const parsed = JSON.parse(trimmed);
-    const errors = normalizeThemeCheckErrors(parsed);
-    return { ok: true, errors, stdout, stderr, missingCli: false, emptyOutput: false };
+    return successFromParsed(parsed, { stdout, stderr, status });
   } catch {
     // Some CLI versions wrap JSON among log lines — try last JSON object/array.
     const match = trimmed.match(/(\{[\s\S]*\}|\[[\s\S]*\])\s*$/);
     if (match) {
       try {
         const parsed = JSON.parse(match[1]);
-        const errors = normalizeThemeCheckErrors(parsed);
-        return { ok: true, errors, stdout, stderr, missingCli: false, emptyOutput: false };
+        return successFromParsed(parsed, { stdout, stderr, status });
       } catch {
         // fall through
       }
@@ -171,6 +256,7 @@ export function runThemeCheckJson({ cwd = process.cwd(), runner = defaultThemeCh
       missingCli: false,
       emptyOutput: false,
       parseError: true,
+      status,
     };
   }
 }
@@ -260,7 +346,28 @@ export function runThemeCheckGate({
     if (!quiet && check.stderr) console.log(pc.dim(check.stderr));
     return 1;
   }
+  if (check.unrecognizedShape) {
+    say(
+      quiet
+        ? 'theme check: FAILED (unrecognized Theme Check JSON shape)'
+        : '  Theme Check JSON was not a recognized offense payload (expected Offenses/offenses/results/Errors or an array).',
+      quiet ? null : pc.red
+    );
+    if (!quiet && check.stderr) console.log(pc.dim(check.stderr));
+    return 1;
+  }
+  if (check.executionError || !check.ok) {
+    say(
+      quiet
+        ? 'theme check: FAILED (Theme Check did not return a usable result)'
+        : '  Theme Check failed without a usable offense payload (empty output, crash, or network/CLI error).',
+      quiet ? null : pc.red
+    );
+    if (!quiet && check.stderr) console.log(pc.dim(`  ${check.stderr}`));
+    return 1;
+  }
 
+  // Only write a baseline after a recognized successful parse — never on failure.
   if (writeBaseline) {
     const body = formatBaseline(check.errors);
     const outPath = join(cwd, THEME_CHECK_BASELINE_PATH);
