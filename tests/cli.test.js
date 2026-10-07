@@ -119,4 +119,21 @@ describe('CLI', () => {
     assert.ok(serveAssetsFlags.includes('--theme-check'));
     assert.ok(!serveAssetsFlags.includes('--no-theme-check'));
   });
+
+  it('registers harness and check on theme and root with expected options', () => {
+    const program = createProgram();
+    const theme = program.commands.find((c) => c.name() === 'theme');
+    for (const root of [program, theme]) {
+      const harness = root.commands.find((c) => c.name() === 'harness');
+      const check = root.commands.find((c) => c.name() === 'check');
+      assert.ok(harness, 'harness');
+      assert.ok(check, 'check');
+      const harnessFlags = harness.options.map((o) => o.long);
+      const checkFlags = check.options.map((o) => o.long);
+      assert.ok(harnessFlags.includes('--dry-run'));
+      assert.ok(harnessFlags.includes('--yes'));
+      assert.ok(checkFlags.includes('--write-baseline'));
+      assert.ok(checkFlags.includes('--quiet'));
+    }
+  });
 });

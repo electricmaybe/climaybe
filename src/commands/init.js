@@ -16,6 +16,7 @@ import {
   promptBranchProtection,
   promptCursorSkills,
   promptAiEditors,
+  promptHarness,
   promptConfigureCISecrets,
   promptNoRemoteAction,
   promptOwnerRepo,
@@ -29,6 +30,7 @@ import { scaffoldWorkflows } from '../lib/workflows.js';
 import { createStoreDirectories } from '../lib/store-sync.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
 import { scaffoldAiConfig, logAiConfigResult } from '../lib/cursor-bundle.js';
+import { logHarnessResult, scaffoldHarness } from '../lib/harness.js';
 import { getMissingBuildWorkflowRequirements, ensureBuildWorkflowDefaults } from '../lib/build-workflows.js';
 import { getDevKitExistingFiles, scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
 import {
@@ -139,6 +141,9 @@ async function runInitFlow() {
     aiEditors = await promptAiEditors();
   }
 
+  hint('AGENTS.md constitution, init.sh verification gate, and session state files for coding agents.', 'coding-agent-harness');
+  const enableHarness = await promptHarness();
+
   console.log(pc.dim(`\n  Mode: ${mode}-store (${stores.length} store(s))`));
 
   let missingBuildFiles = [];
@@ -186,6 +191,7 @@ async function runInitFlow() {
     commitlint: enableCommitlint,
     cursor_skills: enableCursorSkills,
     ai_editors: enableCursorSkills ? aiEditors : undefined,
+    harness: enableHarness,
     stores: {},
   };
 
@@ -248,8 +254,20 @@ async function runInitFlow() {
       console.log(pc.yellow('  commitlint setup failed or skipped (run npm install manually).'));
     }
   }
+  // Harness before AI bridges so AGENTS.md / CLAUDE.md exist as real files and are not overwritten.
+  if (enableHarness) {
+    const harnessResult = scaffoldHarness({
+      cwd: process.cwd(),
+      markEnabled: true,
+    });
+    logHarnessResult(harnessResult);
+  }
+
   if (enableCursorSkills) {
-    const aiResult = scaffoldAiConfig(process.cwd(), { editors: aiEditors });
+    const aiResult = scaffoldAiConfig(process.cwd(), {
+      editors: aiEditors,
+      harness: enableHarness,
+    });
     logAiConfigResult(aiResult, { pc });
   }
 
@@ -298,6 +316,7 @@ async function runInitFlow() {
       `  AI ruleset: ${enableCursorSkills ? `installed (${aiEditors.join(', ') || 'cursor'})` : 'skipped'}`
     )
   );
+  console.log(pc.dim(`  Coding-agent harness: ${enableHarness ? 'enabled' : 'skipped'}`));
 
   const suggestedTag = getSuggestedTagForRelease();
   const tagLabel = suggestedTag === 'v1.0.0' ? 'Tag your first release' : 'Tag your next release';

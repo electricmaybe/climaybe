@@ -1,0 +1,18 @@
+{
+  "snapshot": {
+    "source": "climaybe harness",
+    "linear_team": "{{LINEAR_TEAM}}",
+    "captured_at": null,
+    "note": "Seeded by climaybe harness. Live Linear sync is out of scope for this scaffold."
+  },
+  "features": [
+    {
+      "id": "harness-baseline",
+      "name": "Harness baseline",
+      "description": "./init.sh green",
+      "dependencies": [],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}

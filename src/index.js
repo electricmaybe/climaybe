@@ -14,6 +14,8 @@ import { migrateLegacyConfigCommand } from './commands/migrate-legacy-config.js'
 import { buildScriptsCommand } from './commands/build-scripts.js';
 import { createEntrypointsCommand } from './commands/create-entrypoints.js';
 import { buildSchemasCommand } from './commands/build-schemas.js';
+import { harnessCommand } from './commands/harness.js';
+import { checkCommand } from './commands/check.js';
 import { serveAll, serveAssets, serveShopify, lintAll, buildAll } from './lib/dev-runtime.js';
 
 /**
@@ -114,6 +116,20 @@ function registerThemeCommands(cmd) {
     .command('ensure-branches')
     .description('Create missing staging and per-store branches from current HEAD (then push)')
     .action(ensureBranchesCommand);
+
+  cmd
+    .command('harness')
+    .description('Scaffold coding-agent harness files (AGENTS.md, init.sh, state) without overwriting')
+    .option('--dry-run', 'List files that would be created without writing')
+    .option('-y, --yes', 'Non-interactive; accepted for CI (scaffold never overwrites)')
+    .action(harnessCommand);
+
+  cmd
+    .command('check')
+    .description('Run Theme Check and fail only on errors not in the harness baseline')
+    .option('--write-baseline', 'Write docs/harness/theme-check-baseline.json from current Theme Check errors')
+    .option('--quiet', 'One-line summary for agent harness (init.sh)')
+    .action(checkCommand);
 }
 
 /**

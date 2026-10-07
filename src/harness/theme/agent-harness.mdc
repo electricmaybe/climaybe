@@ -1,0 +1,6 @@
+---
+description: Coding-agent harness — follow AGENTS.md
+alwaysApply: true
+---
+
+Read and follow [`AGENTS.md`](../../../AGENTS.md) at the repository root. That file is the canonical constitution for Claude, Cursor, and Grok Bot in this theme.

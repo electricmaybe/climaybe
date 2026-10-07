@@ -8,6 +8,7 @@ import {
   copyFileSync,
   symlinkSync,
   writeFileSync,
+  readFileSync,
 } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,9 @@ export const AI_CONFIG_DIR = '.config/ai';
 /** Canonical entry doc that the flat editor files (AGENTS.md, CLAUDE.md, …) point at. */
 export const AI_RULES_ENTRY = `${AI_CONFIG_DIR}/rules.md`;
 
+/** When harness is enabled, Claude/AGENTS bridges point at the constitution file. */
+export const HARNESS_AGENTS_ENTRY = 'AGENTS.md';
+
 /**
  * Editor "bridges" — each maps an editor's expected path to the shared source of truth.
  * `kind: 'dir'` links a folder (the editor reads rules/skills/agents from it);
@@ -41,6 +45,33 @@ export const EDITOR_BRIDGES = {
   },
   agents: { label: 'Other editors (AGENTS.md)', bridges: [{ link: 'AGENTS.md', target: AI_RULES_ENTRY, kind: 'file' }] },
 };
+
+/**
+ * Resolve bridge target path, redirecting Claude/AGENTS bridges to AGENTS.md when harness is on.
+ * @param {{ link: string, target: string, kind: string }} bridge
+ * @param {{ harness?: boolean }} [opts]
+ */
+export function resolveBridgeTarget(bridge, { harness = false } = {}) {
+  if (
+    harness &&
+    bridge.kind === 'file' &&
+    (bridge.link === 'CLAUDE.md' || bridge.link === 'AGENTS.md')
+  ) {
+    return HARNESS_AGENTS_ENTRY;
+  }
+  return bridge.target;
+}
+
+function isHarnessConfigEnabled(cwd) {
+  try {
+    const configPath = join(cwd, 'climaybe.config.json');
+    if (!existsSync(configPath)) return false;
+    const cfg = JSON.parse(readFileSync(configPath, 'utf-8'));
+    return cfg?.harness === true;
+  } catch {
+    return false;
+  }
+}
 
 const RULES_ENTRY_CONTENT = `# Electric Maybe — AI ruleset
 
@@ -79,12 +110,21 @@ function copyTree(src, dest) {
   }
 }
 
-function removeIfExists(path) {
+/**
+ * Remove an existing bridge path only when it is safe (symlink or missing).
+ * Never deletes a regular file or non-symlink directory.
+ * @returns {'absent' | 'removed-symlink' | 'skipped-regular'}
+ */
+function removeBridgeIfSafe(path) {
   try {
-    lstatSync(path);
-    rmSync(path, { recursive: true, force: true });
+    const st = lstatSync(path);
+    if (st.isSymbolicLink()) {
+      rmSync(path, { recursive: true, force: true });
+      return 'removed-symlink';
+    }
+    return 'skipped-regular';
   } catch {
-    // nothing to remove
+    return 'absent';
   }
 }
 
@@ -92,13 +132,19 @@ function removeIfExists(path) {
  * Create one editor bridge to the shared source of truth.
  * Prefers a symlink (so there is zero duplication); falls back to copying when the
  * platform refuses symlinks (e.g. Windows without privilege).
- * @returns {{ link: string, mode: 'symlink' | 'copy' }}
+ * Never deletes or replaces a regular file — skips and warns instead.
+ * @returns {{ link: string, mode: 'symlink' | 'copy' | 'skipped', warning?: string }}
  */
-function createBridge(cwd, { link, target, kind }) {
+export function createBridge(cwd, { link, target, kind }) {
   const linkPath = join(cwd, link);
   const absTarget = join(cwd, target);
   mkdirSync(dirname(linkPath), { recursive: true });
-  removeIfExists(linkPath);
+
+  const removal = removeBridgeIfSafe(linkPath);
+  if (removal === 'skipped-regular') {
+    const warning = `Skipped bridge ${link}: a regular file/directory already exists (will not overwrite).`;
+    return { link, mode: 'skipped', warning };
+  }
 
   try {
     if (kind === 'dir') {
@@ -114,6 +160,7 @@ function createBridge(cwd, { link, target, kind }) {
     return { link, mode: 'symlink' };
   } catch {
     // Fallback: copy so the file/folder still exists even without symlink support.
+    // Only reached when the path is absent (we never overwrite regular files above).
     if (kind === 'dir') {
       copyTree(absTarget, linkPath);
     } else {
@@ -128,16 +175,18 @@ function createBridge(cwd, { link, target, kind }) {
  * create bridge files/symlinks for the chosen editors.
  *
  * @param {string} [cwd] - Working directory (default process.cwd())
- * @param {{ editors?: string[] }} [opts] - Editor keys from EDITOR_BRIDGES (default: ['cursor'])
- * @returns {{ ok: boolean, editors: string[], bridges: Array<{link: string, mode: string}> }}
+ * @param {{ editors?: string[], harness?: boolean }} [opts] - Editor keys from EDITOR_BRIDGES (default: ['cursor'])
+ * @returns {{ ok: boolean, editors: string[], bridges: Array<{link: string, mode: string, warning?: string}>, warnings: string[] }}
  */
-export function scaffoldAiConfig(cwd = process.cwd(), { editors = ['cursor'] } = {}) {
+export function scaffoldAiConfig(cwd = process.cwd(), { editors = ['cursor'], harness } = {}) {
   const rulesSrc = join(BUNDLE_ROOT, 'rules');
   const skillsSrc = join(BUNDLE_ROOT, 'skills');
   const agentsSrc = join(BUNDLE_ROOT, 'agents');
   if (!existsSync(rulesSrc) || !existsSync(skillsSrc) || !existsSync(agentsSrc)) {
-    return { ok: false, editors: [], bridges: [] };
+    return { ok: false, editors: [], bridges: [], warnings: [] };
   }
+
+  const harnessEnabled = harness ?? isHarnessConfigEnabled(cwd);
 
   const aiRoot = join(cwd, AI_CONFIG_DIR);
   copyTree(rulesSrc, join(aiRoot, 'rules'));
@@ -147,12 +196,16 @@ export function scaffoldAiConfig(cwd = process.cwd(), { editors = ['cursor'] } =
 
   const selected = editors.filter((key) => EDITOR_BRIDGES[key]);
   const bridges = [];
+  const warnings = [];
   for (const key of selected) {
     for (const bridge of EDITOR_BRIDGES[key].bridges) {
-      bridges.push(createBridge(cwd, bridge));
+      const target = resolveBridgeTarget(bridge, { harness: harnessEnabled });
+      const result = createBridge(cwd, { ...bridge, target });
+      bridges.push(result);
+      if (result.warning) warnings.push(result.warning);
     }
   }
-  return { ok: true, editors: selected, bridges };
+  return { ok: true, editors: selected, bridges, warnings };
 }
 
 /**
@@ -168,10 +221,16 @@ export function logAiConfigResult(result, { pc }) {
   }
   console.log(pc.green(`  Electric Maybe AI ruleset → ${AI_CONFIG_DIR}/ (rules, skills, agents)`));
   if (result.bridges.length > 0) {
-    const links = result.bridges.map((b) => (b.mode === 'copy' ? `${b.link} (copy)` : b.link));
-    console.log(pc.dim(`  Editor bridges: ${links.join(', ')}`));
+    const active = result.bridges.filter((b) => b.mode !== 'skipped');
+    if (active.length > 0) {
+      const links = active.map((b) => (b.mode === 'copy' ? `${b.link} (copy)` : b.link));
+      console.log(pc.dim(`  Editor bridges: ${links.join(', ')}`));
+    }
     if (result.bridges.some((b) => b.mode === 'copy')) {
       console.log(pc.dim('  (Some bridges were copied because this platform blocked symlinks.)'));
+    }
+    for (const b of result.bridges) {
+      if (b.mode === 'skipped' && b.warning) console.log(pc.yellow(`  ${b.warning}`));
     }
   }
   console.log(pc.dim(`  Edit rules in ${AI_CONFIG_DIR}/ — every bridged editor reads the same files.`));

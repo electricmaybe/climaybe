@@ -310,6 +310,8 @@ describe('workflows', () => {
         assert.match(buildPipeline, /client_id:\s*\$\{\{\s*secrets\.SHOP_CLIENT_ID\s*\}\}/);
         assert.match(buildPipeline, /client_secret:\s*\$\{\{\s*secrets\.SHOP_CLIENT_SECRET\s*\}\}/);
         assert.match(buildPipeline, /SHOP_CLIENT_ID\+SHOP_CLIENT_SECRET/);
+        assert.match(buildPipeline, /paths-ignore:[\s\S]*init\.sh/);
+        assert.match(buildPipeline, /paths-ignore:[\s\S]*feature_list\.json/);
       } finally {
         teardown();
       }

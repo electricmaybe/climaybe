@@ -8,6 +8,7 @@ Built by [Electric Maybe](https://electricmaybe.com) — a Shopify-focused produ
 
 - **Conventional commit linting:** During `climaybe theme init` or `climaybe app init`, you can install [commitlint](https://commitlint.js.org/) and [Husky](https://typicode.github.io/husky) for [Conventional Commits](https://www.conventionalcommits.org/).
 - **AI ruleset (rules + skills + subagents):** Opt in to Electric Maybe’s bundled rules, skills, and subagents (themes, JS, a11y, commits, changelog, Linear, **theme-translator** for locale sync, etc.). They install into a single `.config/ai/` source of truth and are bridged to the editors you pick (Cursor, Claude, Copilot, Windsurf, Cline, …). See [AI ruleset](#ai-ruleset).
+- **Coding-agent harness (themes):** Opt in to `AGENTS.md`, `init.sh`, and session state files so Claude / Cursor / Grok Bot share one constitution. See [Coding-agent harness](#coding-agent-harness).
 
 ## Command layout (Shopify CLI–style)
 
@@ -70,8 +71,9 @@ shown in the prompt; press Enter to accept.
 10. Asks whether to enable **commitlint + Husky** (enforce [conventional commits](https://www.conventionalcommits.org/) on `git commit`)
 11. Asks whether to set up **[branch protection](#branch-protection)** (default: yes)
 12. Asks whether to install the **[AI ruleset](#ai-ruleset)**, and if so which editors to bridge
-13. Writes `climaybe.config.json`, scaffolds workflows, and creates branches/store directories
-14. Optionally configures CI secrets (and can add a GitHub/GitLab remote if the folder has none). When Linear sync is enabled, `LINEAR_API_KEY` is in the skippable secret list.
+13. Asks whether to scaffold the **[coding-agent harness](#coding-agent-harness)** (`AGENTS.md`, `init.sh`, state files)
+14. Writes `climaybe.config.json`, scaffolds workflows, and creates branches/store directories
+15. Optionally configures CI secrets (and can add a GitHub/GitLab remote if the folder has none). When Linear sync is enabled, `LINEAR_API_KEY` is in the skippable secret list.
 
 ### `climaybe app init`
 
@@ -136,12 +138,32 @@ Refresh all climaybe-managed project files from your installed CLI version:
 - optional `.vscode/tasks.json` (if enabled)
 - optional commitlint + Husky files (if enabled)
 - optional AI ruleset in `.config/ai/` + editor bridges (if enabled)
+- optional coding-agent harness files (if `harness: true` — creates **missing** files only; never overwrites)
 
 ```bash
 npx climaybe update
 ```
 
 `update-workflows` still works as a backward-compatible alias.
+
+### `climaybe harness` / `climaybe theme harness`
+
+Scaffold the [coding-agent harness](#coding-agent-harness) into an existing theme repo. Skips any file that already exists (lists them). Sets `harness: true` in `climaybe.config.json`.
+
+```bash
+npx climaybe harness
+npx climaybe harness --dry-run
+npx climaybe harness --yes
+```
+
+### `climaybe check` / `climaybe theme check`
+
+Run `shopify theme check --fail-level error` (falls back to `npx @shopify/cli`) and compare against `docs/harness/theme-check-baseline.json`. Exits `1` only when there are **new** errors not in the baseline. Requires Node.js ≥ 22.12 (Shopify CLI floor).
+
+```bash
+npx climaybe check
+npx climaybe check --write-baseline   # deterministic, sorted baseline JSON
+```
 
 ### `climaybe update:linear-key` / `climaybe theme update:linear-key`
 
@@ -199,6 +221,8 @@ The CLI writes config into `climaybe.config.json`:
   "commitlint": true,
   "cursor_skills": true,
   "ai_editors": ["cursor", "claude"],
+  "harness": true,
+  "base_branch": "staging",
   "stores": {
     "voldt-staging": "voldt-staging.myshopify.com",
     "voldt-norway": "voldt-norway.myshopify.com"
@@ -208,7 +232,7 @@ The CLI writes config into `climaybe.config.json`:
 
 `linear_team` is the Linear team key (from IDs like `VOL-77`). `linear_statuses.store` is a **literal** Linear workflow state name (angle brackets included), not interpolated with a store alias. Do **not** put `LINEAR_API_KEY` in this file.
 
-`lighthouse_workflows` gates Lighthouse CI inside the build pipeline (it still only runs on `staging` with the right secrets). `ai_editors` records which editors are bridged to `.config/ai/`. Older configs without these keys keep working: Lighthouse defaults to on when build workflows exist.
+`lighthouse_workflows` gates Lighthouse CI inside the build pipeline (it still only runs on `staging` with the right secrets). `ai_editors` records which editors are bridged to `.config/ai/`. `harness` opts into the coding-agent harness (and lets `update` create only missing harness files). Optional `base_branch` defaults to `staging`. Optional `dev_store` overrides which domain AGENTS.md labels as the default/dev store (falls back to `default_store`). Older configs without these keys keep working: Lighthouse defaults to on when build workflows exist.
 
 Workflows read this config at runtime — no hardcoded values in YAML files.
 
@@ -356,7 +380,7 @@ Optional local-development bundle, enabled during `climaybe init` (default: yes)
 | File | What it's for |
 |------|---------------|
 | `.theme-check.yml` | Theme Check defaults (`theme-check:recommended`); ignores `node_modules/` and generated `_styles/` output |
-| `.shopifyignore` | Keeps dev-only files out of theme uploads (`_scripts`, `_styles`, `stores`, editor/AI config, docs, package files, …) |
+| `.shopifyignore` | Keeps dev-only files out of theme uploads (`_scripts`, `_styles`, `stores`, editor/AI config, `init.sh`, `feature_list.json`, docs, package files, …) |
 | `.prettierrc` | Prettier with the Shopify Liquid plugin |
 | `.lighthouserc.js` | Lighthouse CI config: local URL, start command, and score thresholds |
 | `.vscode/tasks.json` *(optional)* | One background task that runs `climaybe serve` (added only if you opt in) |
@@ -382,17 +406,36 @@ your-repo/
 ├── .cursor               --> bridge to .config/ai            (Cursor)
 ├── .windsurf             --> bridge to .config/ai            (Windsurf)
 ├── .clinerules           --> bridge to .config/ai            (Cline / Roo Code)
-├── AGENTS.md             --> bridge to .config/ai/rules.md   (generic / other editors)
-├── CLAUDE.md             --> bridge to .config/ai/rules.md   (Claude Code)
+├── AGENTS.md             --> bridge to .config/ai/rules.md   (or real constitution when harness is on)
+├── CLAUDE.md             --> bridge to .config/ai/rules.md   (or AGENTS.md when harness is on)
 └── .github/
     └── copilot-instructions.md --> bridge to .config/ai/rules.md  (Copilot / VS Code)
 ```
 
 - `climaybe init` (and `add-cursor` / `app init`) asks **which editors** to bridge. Only the bridges you pick are created.
 - Bridges are **symlinks** where the OS allows (relative symlinks on macOS/Linux, directory junctions on Windows), so there is zero duplication — edit a rule once under `.config/ai/` and every editor sees it. If a platform blocks symlinks, climaybe falls back to copying the file so the bridge still works.
+- **Regular files are never overwritten.** If `AGENTS.md` / `CLAUDE.md` already exist as real files (for example from the coding-agent harness), bridges skip them and warn.
+- When `harness: true`, Claude/AGENTS bridges target `AGENTS.md` instead of `.config/ai/rules.md`.
 - The chosen editors are recorded as `ai_editors` in `climaybe.config.json`. `.config/ai/` and the bridges are kept out of theme uploads via `.shopifyignore`.
 
 Install or refresh anytime with `climaybe add-cursor` (alias `add-cursor-skill`).
+
+### Coding-agent harness
+
+Optional (theme repos). Scaffolds a shared constitution and verification gate so Claude, Cursor, and Grok Bot boot from the same files. Shape follows [walkinglabs/learn-harness-engineering](https://github.com/walkinglabs/learn-harness-engineering) (`skills/harness-creator/templates`, commit `38ddcd2`) adapted for Climaybe themes.
+
+| File | Role |
+|------|------|
+| `AGENTS.md` | Canonical constitution (boot order, WIP=1, branch rules, theme conventions) |
+| `CLAUDE.md` | Pointer to `AGENTS.md` |
+| `.config/ai/rules/agent-harness.mdc` | Always-on Cursor rule pointing at `AGENTS.md` |
+| `init.sh` | Quiet verification gate (≈10–15 lines): Node ≥ 22.12, lockfile-aware install skip, `climaybe check --quiet`, unit tests. Flags: `--skip-install`, `--verbose` |
+| `feature_list.json` | Feature state (+ snapshot metadata) |
+| `progress.md` / `session-handoff.md` | Session continuity |
+| `docs/harness/DIGEST.md` | Course digest + theme TODO |
+| `docs/harness/theme-check-baseline.json` | Written by `climaybe check --write-baseline` |
+
+Re-runs **never overwrite** existing harness files (they are reported as skipped). Opt in at `climaybe init`, or later with `climaybe harness`. With `harness: true`, `climaybe update` only creates missing harness files.
 
 ### Section schema builder
 

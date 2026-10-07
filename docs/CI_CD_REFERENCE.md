@@ -7,6 +7,7 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Theme CI/CD** (workflows, stores, branches): `climaybe theme <command>` or the same command at the top level (e.g. `climaybe init` = `climaybe theme init`).
 - **App repos**: `climaybe app init` sets `config.project_type: "app"` and optional commitlint/Cursor only; theme workflows and store commands are disabled when `project_type` is `app`.
 - **Shared**: `climaybe setup-commitlint`, `climaybe add-cursor` (top level only). Theme also has `climaybe update:linear-key` (alias `update-linear-key`) to set `LINEAR_API_KEY` and enable Linear status sync.
+- **Coding-agent harness (themes)**: `climaybe harness` / `climaybe theme harness` scaffolds `AGENTS.md`, `init.sh`, and session state (never overwrites existing files). Generated `init.sh` is token-cheap by default (lockfile stamp skip, quiet install/check/test; `--verbose` for full logs). `climaybe check` / `climaybe theme check` runs Theme Check against `docs/harness/theme-check-baseline.json` and fails only on **new** errors (`--write-baseline` refreshes the baseline; `--quiet` prints a one-line summary for agents). Config keys: `harness`, optional `base_branch` (default `staging`), optional `dev_store`.
 
 ## Versioning
 
@@ -30,7 +31,8 @@ Full workflow and versioning specification for climaybe. For a quick overview, s
 - **Serve (multi-store)**: In an interactive terminal, `climaybe serve` and `climaybe serve:shopify` prompt once for which store’s JSON layout to use (default: `default_store`). Choosing another store runs the same root ↔ `stores/<alias>/` copies as `sync` then `switch`: current root JSONs go to the previous store folder, then the chosen store’s JSONs replace the root and `default_store` is updated. In CI or non-interactive environments there is no prompt; use `default_store` or set **`CLIMAYBE_SERVE_STORE=<alias>`** to pick a store without prompting.
 - **Edit**: Change root JSONs as needed.
 - **Write back**: `climaybe theme sync [alias]` or `climaybe sync [alias]`. If no alias, syncs to the default store. There is no file watcher; sync is manual.
-- **AI ruleset (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled rules, skills, and subagents (e.g. **theme-translator** for syncing `theme/locales/` from English defaults) into a single `.config/ai/` source of truth, bridged to the editors you pick (Cursor, Claude, Copilot, Windsurf, Cline, …). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`).
+- **AI ruleset (optional)**: `climaybe theme init` / `climaybe init` or `climaybe app init` can install the bundled rules, skills, and subagents (e.g. **theme-translator** for syncing `theme/locales/` from English defaults) into a single `.config/ai/` source of truth, bridged to the editors you pick (Cursor, Claude, Copilot, Windsurf, Cline, …). Add or refresh later with `climaybe add-cursor` (alias: `add-cursor-skill`). Bridges never overwrite regular `AGENTS.md` / `CLAUDE.md` files; with `harness: true` those bridges target `AGENTS.md`.
+- **Coding-agent harness (optional)**: `climaybe init` can set `harness: true` and scaffold constitution + `init.sh`. Later: `climaybe harness` (missing files only) and `climaybe check` for the Theme Check baseline gate. `init.sh` / `feature_list.json` are listed in `.shopifyignore` and in `build-pipeline.yml` `paths-ignore`.
 
 ## Liquid performance profiling (optional)
 
@@ -155,3 +157,4 @@ When the implementation changes, update the external “CI/CD – Developer Comm
 | **Linear status sync** | Optional `linear-status-sync.yml` moves Linear issues on staging / store / live pushes. Status names default to `Staged @staging`, literal `Staged @staging-<alias>`, and `Done`. Secret `LINEAR_API_KEY` is not stored in config. Linear UI regexes still apply for the first hop; this Action covers store-alias hops. |
 | **Lighthouse auth** | Prefer Dev Dashboard `SHOP_CLIENT_ID` + `SHOP_CLIENT_SECRET` (`read_products`, `write_themes`); legacy `SHOP_ACCESS_TOKEN` only for pre-2026 Admin custom apps. |
 | **PR preview themes** | Development themes via `theme push --development` (`climaybe-pr-<n>`); `/redeploy` comment to refresh; prefer same client credentials as Lighthouse. |
+| **Coding-agent harness** | Optional `climaybe harness` / `climaybe check`; config `harness`, `base_branch`, `dev_store`. Never overwrite existing harness files. Theme Check baseline at `docs/harness/theme-check-baseline.json`. |

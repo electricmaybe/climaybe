@@ -49,6 +49,8 @@ describe('theme-dev-kit', () => {
       const shopifyignore = readFileSync(join(dir, '.shopifyignore'), 'utf-8');
       assert.ok(shopifyignore.includes('.cursor'));
       assert.ok(shopifyignore.includes('stores'));
+      assert.ok(shopifyignore.includes('init.sh'));
+      assert.ok(shopifyignore.includes('feature_list.json'));
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf-8');
       assert.ok(gitignore.includes('# climaybe: theme dev kit (managed)'));
       assert.ok(gitignore.includes('node_modules/'));
