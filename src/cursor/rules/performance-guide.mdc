@@ -332,6 +332,7 @@ Inject `cart.js` when cart drawer opens — not on every page upfront (if theme 
 6. **GTM double-load** — theme + Customer Events same container ID
 7. **`{% for %}` split across liquid tags** — Liquid syntax errors; keep loops in one block
 8. **Font repo drift** — all woff2 files must exist in `assets/` for CI/deploy parity
+9. **iOS Safari pinch-zoom reload** — WebContent jetsam from scaled compositor layers + decoded images; see `ios-safari-memory.mdc` (never disable zoom; pause layers only while zoomed; no visible regression at normal zoom)
 
 ---
 
@@ -356,6 +357,7 @@ Inject `cart.js` when cart drawer opens — not on every page upfront (if theme 
 - `javascript-standards.mdc` — web components, `scheduleIdle`, no layout thrashing
 - `tailwindcss-rules.mdc` — `@source` for critical CSS
 - `project-overview.mdc` — edit `_scripts/` / `_styles/`, never `assets/` directly
+- `ios-safari-memory.mdc` — iOS Safari pinch-zoom jetsam, gallery budgets, no-visible-regression hard rule
 
 ---
 

@@ -162,10 +162,18 @@ describe('cursor-bundle (AI config)', () => {
       assert.ok(index.includes('theme-color-modes.mdc'));
       assert.ok(index.includes('tailwindcss-rules.mdc'));
       assert.ok(index.includes('figma-design-system.mdc'));
+      assert.ok(index.includes('ios-safari-memory.mdc'));
       assert.match(index, /must read.*theme-color-modes\.mdc[\s\S]*tailwindcss-rules\.mdc/);
       assert.match(index, /must read.*theme-color-modes\.mdc[\s\S]*figma-design-system.mdc/);
       assert.ok(index.includes('<html>') || index.includes('`<html>`'));
       assert.ok(index.includes('discover') || index.includes('Discover'));
+
+      const iosMemory = readFileSync(join(shippedDir, 'ios-safari-memory.mdc'), 'utf-8');
+      assert.ok(iosMemory.includes('data-viewport-zoomed'));
+      assert.ok(iosMemory.includes('visualViewport'));
+      assert.match(iosMemory, /[Nn]o visible regression/);
+      assert.ok(iosMemory.includes('user-scalable'));
+      assert.ok(srcRules.includes('ios-safari-memory.mdc'));
 
       assert.ok(!figma.includes('Voldt Theme'));
       assert.ok(!figma.includes('--color-dune-'));

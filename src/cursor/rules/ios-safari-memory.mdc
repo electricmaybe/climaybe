@@ -1,0 +1,50 @@
+---
+description: iOS Safari pinch-zoom memory (jetsam) and no-visible-regression hard rule — learned on Voldt, Aisle, Interior Icons, Eisco (Oct 2026)
+globs:
+  - "_scripts/**"
+  - "snippets/a--image*.liquid"
+  - "snippets/**/*slider*"
+  - "snippets/**/*gallery*"
+  - "sections/**/*product*"
+  - "layout/theme.liquid"
+alwaysApply: false
+---
+# iOS Safari pinch-zoom / memory
+
+Learned on real client themes (Voldt, Aisle, Interior Icons, Eisco) in Oct 2026. Apply when fixing memory, zoom reloads, gallery image budgets, or any “perf” change that touches images, layers, or media.
+
+## Symptom & cause
+
+- **Symptom:** pinch-zoom on iPhone Safari reloads the page.
+- **Cause:** WebContent process jetsam — composited layers and decoded images scale with `pageScale × DPR`, exhausting memory.
+
+## Do
+
+- Never disable zoom (`user-scalable=no`, `maximum-scale`).
+- Avoid permanent `will-change`. Endless animations (skeleton pulses, marquees) and `backdrop-filter` add compositor layers — pause/disable them **only while zoomed** via `html[data-viewport-zoomed]`, driven by `visualViewport.scale` (reset when scale returns to `1`, short debounce).
+- **PDP galleries:** full-resolution images only for the visible slide and its neighbours; offscreen slides get lightweight placeholders but **keep their stored srcset**. Do not decode lightbox copies or hidden breakpoint duplicates (mobile/tablet/desktop trees) until needed. Do not autoplay hidden/offscreen videos/iframes; unload far-offscreen media.
+
+## No visible regression (hard rule)
+
+Performance/memory fixes must not change anything visible at **normal zoom**:
+
+- Active slide always gets full DPR-correct resolution (e.g. ~1000px+ on a 390px iPhone at 3x). Do not cap srcset widths in Liquid or drop retina entries.
+- No removed animations, features, or autoplay sections. No swapping blur effects for solid fills.
+- Only invisible savings are allowed, or reductions applied **only while zoomed**, restored right after.
+
+### Bugs to avoid
+
+- Counting non-slide elements (badge overlays) as gallery slides.
+- Running the image budget before the slider marks its active slide and never re-syncing — watch `data-active` attribute changes; re-run after custom element definition and on `scrollend`.
+- Removing the autoplay path for players that have a play button.
+
+### Verify before merge
+
+- Before/after screenshots at **390×844 DPR3** (base branch vs PR) for PDP, home, and collection — visual parity required.
+- Memory numbers under 3–4× zoom.
+- Test on a real iPhone via the PR preview theme.
+
+## Related
+
+- `performance-guide.mdc` — LCP, images, CSS/JS tiering
+- `javascript-standards.mdc` — web components, cleanup, no layout thrashing
