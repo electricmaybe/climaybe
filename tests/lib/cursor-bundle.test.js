@@ -173,6 +173,9 @@ describe('cursor-bundle (AI config)', () => {
       assert.ok(iosMemory.includes('visualViewport'));
       assert.match(iosMemory, /[Nn]o visible regression/);
       assert.ok(iosMemory.includes('user-scalable'));
+      assert.match(iosMemory, /[Nn]ever.*downgrad(?:e|ed)|must \*\*never\*\* be downgraded/);
+      assert.ok(/pinch-zoomed/i.test(iosMemory));
+      assert.ok(iosMemory.includes('other slider slides') || iosMemory.includes('other slider'));
       assert.ok(srcRules.includes('ios-safari-memory.mdc'));
 
       assert.ok(!figma.includes('Voldt Theme'));
