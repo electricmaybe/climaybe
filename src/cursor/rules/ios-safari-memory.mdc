@@ -32,6 +32,12 @@ Performance/memory fixes must not change anything visible at **normal zoom**:
 - No removed animations, features, or autoplay sections. No swapping blur effects for solid fills.
 - Only invisible savings are allowed, or reductions applied **only while zoomed**, restored right after.
 
+### Active image while pinch-zoomed (hard rule)
+
+While pinch-zoomed, the currently visible/active image must **never** be downgraded — users zoom to see detail; keep it at full or higher DPR-correct resolution.
+
+Zoom-time savings apply **only** to: other slider slides, offscreen images, hidden media, animations, and compositor layers.
+
 ### Bugs to avoid
 
 - Counting non-slide elements (badge overlays) as gallery slides.
