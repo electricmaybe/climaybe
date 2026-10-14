@@ -200,6 +200,9 @@ describe('workflows', () => {
         assert.match(prUpdate, /Overlaying stores\/\$\{ALIAS\}\//);
         assert.match(prUpdate, /name: preview-fragment-all/);
         assert.match(prUpdate, /pull-requests: read/);
+        assert.match(commentWorkflow, /process\.env\.HEAD_SHA_INPUT \|\| context\.payload\.pull_request\?\.head\?\.sha/);
+        const redeployWf = readFileSync(join(workflowsDir, 'pr-preview-redeploy.yml'), 'utf-8');
+        assert.match(redeployWf, /head_sha: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/);
         assert.match(prUpdate, /types:\s*\[opened,\s*synchronize,\s*reopened,\s*ready_for_review,\s*labeled,\s*unlabeled\]/);
         assert.match(prUpdate, /contains\(github\.event\.pull_request\.labels\.\*\.name,\s*'skip-preview'\)/);
         assert.match(prUpdate, /\\\[skip-preview\\\]/);
