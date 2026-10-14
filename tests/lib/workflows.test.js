@@ -199,6 +199,7 @@ describe('workflows', () => {
         assert.match(prUpdate, /--development-context "\$DEV_CONTEXT"/);
         assert.match(prUpdate, /Overlaying stores\/\$\{ALIAS\}\//);
         assert.match(prUpdate, /name: preview-fragment-all/);
+        assert.match(prUpdate, /pull-requests: read/);
         assert.match(prUpdate, /types:\s*\[opened,\s*synchronize,\s*reopened,\s*ready_for_review,\s*labeled,\s*unlabeled\]/);
         assert.match(prUpdate, /contains\(github\.event\.pull_request\.labels\.\*\.name,\s*'skip-preview'\)/);
         assert.match(prUpdate, /\\\[skip-preview\\\]/);
@@ -209,6 +210,9 @@ describe('workflows', () => {
         assert.match(prClose, /HEAD_REF:\s*\$\{\{\s*github\.event\.pull_request\.head\.ref\s*\}\}/);
         assert.match(prClose, /const branchRef = headRef \|\| baseRef;/);
         assert.match(orphanCleanup, /actions:\s*write/);
+        const cleanup = readFileSync(join(workflowsDir, 'reusable-cleanup-themes.yml'), 'utf-8');
+        assert.doesNotMatch(cleanup, /\*"climaybe-pr-\$\{UNPADDED\}"\*/);
+        assert.match(cleanup, /climaybe-pr-\$\{UNPADDED\}\(\\\$\|-\[a-z\]\)/);
         assert.match(orphanCleanup, /pull_request:\s*\n\s*types:\s*\[closed\]/m);
         assert.match(publishPreview, /path:\s*fragment-\*\.json/);
         assert.match(publishPreview, /Sync stores\/<alias>\/ JSON to root for preview/);
