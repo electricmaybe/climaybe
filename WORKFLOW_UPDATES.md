@@ -8,6 +8,7 @@
 
 - **Lighthouse** moved out of `build-pipeline.yml` into `build/lighthouse.yml`. Runs **only** on pull requests `staging` → `main` (not drafts), with concurrency cancel-in-progress. Previously ran on every push to `staging`.
 - **`pr-update.yml`**: adds `ready_for_review`, skips draft PRs (`github.event.pull_request.draft == false` on `filter`, so every downstream job skips), and `concurrency: pr-update-<n>` with cancel-in-progress. Policy: PRs stay draft until Bugbot / cursor-review finish; the first preview is built on *Ready for review*.
+- **`pr-update.yml` single job**: filter, store-target resolution, credential checks and the dev-theme push for every store (e.g. euro + norway) now run sequentially in one `preview` job, each store in an isolated copy so `stores/<alias>/` overlays don't leak. Previously it was ~5 + 2N jobs, each billed at least 1 minute. Scoped secrets (`SHOPIFY_STORE_URL_<ALIAS>`, …) are read by name at runtime. A failing store does not stop the others, but it still fails the run. `comment-on-pr` is unchanged (one comment from all fragments). `pr-preview-redeploy.yml` still uses `reusable-publish-pr-preview-store.yml`.
 - **`nightly-hotfix.yml`** is now **opt-in** (`"nightly_hotfix": true` in `climaybe.config.json`). `climaybe update` removes it from repos that do not opt in.
 - **`pr-close.yml`**: the `cleanup-theme` job grants `contents: read`, `pull-requests: read`, `actions: write` (required by `reusable-cleanup-themes.yml`; without it every PR Close run was `startup_failure`).
 

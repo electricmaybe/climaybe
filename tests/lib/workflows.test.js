@@ -190,13 +190,15 @@ describe('workflows', () => {
         const orphanCleanup = readFileSync(join(workflowsDir, 'cleanup-orphan-preview-themes.yml'), 'utf-8');
         const publishPreview = readFileSync(join(workflowsDir, 'reusable-publish-pr-preview-store.yml'), 'utf-8');
         const commentWorkflow = readFileSync(join(workflowsDir, 'reusable-comment-on-pr.yml'), 'utf-8');
-        assert.match(prUpdate, /fromJson\(needs\.validate-environment\.outputs\.preview_targets_json\)/);
-        assert.match(
-          prUpdate,
-          /publish-preview-store:\s*\n\s*needs:\s*\[validate-environment,\s*extract-pr-number,\s*validate-secrets-per-store\]/m
-        );
+        // Single preview job: filter + resolve + per-store push in one runner.
+        assert.match(prUpdate, /^  preview:\s*$/m);
+        assert.doesNotMatch(prUpdate, /^  (filter|extract-pr-number|validate-environment|validate-secrets-per-store|publish-preview-store):/m);
         assert.doesNotMatch(prUpdate, /cleanup-themes:/);
-        assert.match(prUpdate, /pr_number:\s*\$\{\{\s*needs\.extract-pr-number\.outputs\.pr_number_unpadded\s*\}\}/);
+        assert.match(prUpdate, /comment-on-pr:\s*\n\s*needs:\s*\[preview\]/m);
+        assert.match(prUpdate, /SHOPIFY_STORE_URL_\$\{ALIAS_SECRET\}/);
+        assert.match(prUpdate, /--development-context "\$DEV_CONTEXT"/);
+        assert.match(prUpdate, /Overlaying stores\/\$\{ALIAS\}\//);
+        assert.match(prUpdate, /name: preview-fragment-all/);
         assert.match(prUpdate, /types:\s*\[opened,\s*synchronize,\s*reopened,\s*ready_for_review,\s*labeled,\s*unlabeled\]/);
         assert.match(prUpdate, /contains\(github\.event\.pull_request\.labels\.\*\.name,\s*'skip-preview'\)/);
         assert.match(prUpdate, /\\\[skip-preview\\\]/);
@@ -221,7 +223,7 @@ describe('workflows', () => {
         assert.match(commentWorkflow, /issues\.updateComment/);
         assert.match(commentWorkflow, /issues\.deleteComment/);
         assert.match(commentWorkflow, /\/redeploy/);
-        assert.match(prUpdate, /reusable-publish-pr-preview-store\.yml/);
+        assert.doesNotMatch(prUpdate, /reusable-publish-pr-preview-store\.yml/);
         assert.ok(files.includes('pr-preview-redeploy.yml'), 'expected pr-preview-redeploy.yml');
         const redeploy = readFileSync(join(workflowsDir, 'pr-preview-redeploy.yml'), 'utf-8');
         assert.match(redeploy, /issue_comment:/);
