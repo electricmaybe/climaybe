@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pc from 'picocolors';
 import { ensureBuildWorkflowDefaults } from './build-workflows.js';
+import { isNightlyHotfixEnabled } from './config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, '..', 'workflows');
@@ -72,7 +73,13 @@ function cleanWorkflows(cwd = process.cwd()) {
  * - Copies single/ or multi/ (+ single/) based on mode.
  */
 export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.cwd()) {
-  const { includePreview = false, includeBuild = false, includeProfile = false, includeLinear = false } = options;
+  const {
+    includePreview = false,
+    includeBuild = false,
+    includeProfile = false,
+    includeLinear = false,
+    includeNightlyHotfix = isNightlyHotfixEnabled(cwd),
+  } = options;
   const dest = ghWorkflowsDir(cwd);
   mkdirSync(dest, { recursive: true });
 
@@ -88,6 +95,8 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
   // Single-store workflows (used in both modes)
   const singleDir = join(TEMPLATES_DIR, 'single');
   for (const f of listYmls(singleDir)) {
+    // Scheduled nightly hotfix tagging is opt-in (config: nightly_hotfix: true).
+    if (f === 'nightly-hotfix.yml' && !includeNightlyHotfix) continue;
     copyWorkflow(singleDir, f, dest);
   }
 
@@ -133,5 +142,6 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
   console.log(pc.dim(`  Preview workflows: ${includePreview ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${includeBuild ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Profile workflows: ${includeProfile ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Nightly hotfix tag: ${includeNightlyHotfix ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Linear workflows: ${includeLinear ? 'enabled' : 'disabled'}`));
 }

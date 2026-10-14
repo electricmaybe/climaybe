@@ -14,19 +14,37 @@ name: PR Update
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
     branches: [main, staging, develop, 'staging-*', 'live-*']
 
+# Draft PRs never build previews (PRs stay draft until Bugbot / cursor-review finish;
+# `ready_for_review` then triggers the first preview). A newer push to the same PR
+# cancels the in-flight preview run.
+concurrency:
+  group: pr-update-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  filter:
-    # Ignore unrelated label churn; only re-evaluate when skip-preview is added/removed.
+  preview:
+    # Single job: filter + resolve store targets + push a dev theme per store
+    # (sequential). Replaces ~5 + 2N tiny jobs that each billed a full minute.
+    # Skip drafts entirely; ignore unrelated label churn.
     if: >
+      github.event.pull_request.draft == false && (
       (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-      github.event.label.name == 'skip-preview'
+      github.event.label.name == 'skip-preview')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     outputs:
       theme: ${{ steps.decide.outputs.theme }}
       skip_preview: ${{ steps.decide.outputs.skip_preview }}
+      pr_number: ${{ github.event.pull_request.number }}
+      store_alias: ${{ steps.resolve.outputs.store_alias }}
+      store_alias_secret: ${{ steps.resolve.outputs.store_alias_secret }}
+      theme_id: ${{ steps.push.outputs.theme_id }}
+      share_output: ${{ steps.push.outputs.share_output }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -107,25 +125,9 @@ jobs:
             echo "theme=false" >> "$GITHUB_OUTPUT"
           fi
 
-  extract-pr-number:
-    needs: [filter]
-    if: needs.filter.outputs.theme == 'true'
-    uses: ./.github/workflows/reusable-extract-pr-number.yml
-
-  validate-environment:
-    needs: [filter]
-    if: needs.filter.outputs.theme == 'true'
-    runs-on: ubuntu-latest
-    outputs:
-      store_alias: ${{ steps.resolve.outputs.store_alias }}
-      store_alias_secret: ${{ steps.resolve.outputs.store_alias_secret }}
-      preview_targets_json: ${{ steps.resolve.outputs.preview_targets_json }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Resolve preview store targets from source branch
         id: resolve
+        if: steps.decide.outputs.theme == 'true'
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -187,60 +189,136 @@ jobs:
           console.log(`store_alias_secret=${targets[0].alias_secret}`);
           NODE
 
-  validate-secrets-per-store:
-    needs: [validate-environment]
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJson(needs.validate-environment.outputs.preview_targets_json) }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require Shopify URL + auth for this store
+      - name: Install Shopify CLI
+        if: steps.decide.outputs.theme == 'true'
+        run: npm install -g @shopify/cli @shopify/theme
+
+      - name: Push development theme per store
+        id: push
+        if: steps.decide.outputs.theme == 'true'
         env:
-          SHOPIFY_STORE_URL_SCOPED: ${{ secrets[format('SHOPIFY_STORE_URL_{0}', matrix.alias_secret)] }}
-          SHOPIFY_THEME_ACCESS_TOKEN_SCOPED: ${{ secrets[format('SHOPIFY_THEME_ACCESS_TOKEN_{0}', matrix.alias_secret)] }}
-          SHOPIFY_STORE_URL_DEFAULT: ${{ secrets.SHOPIFY_STORE_URL }}
-          SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT: ${{ secrets.SHOPIFY_THEME_ACCESS_TOKEN }}
-          SHOP_CLIENT_ID: ${{ secrets.SHOP_CLIENT_ID }}
-          SHOP_CLIENT_SECRET: ${{ secrets.SHOP_CLIENT_SECRET }}
-          SHOP_ACCESS_TOKEN: ${{ secrets.SHOP_ACCESS_TOKEN }}
+          # Per-store scoped secrets (SHOPIFY_STORE_URL_<ALIAS>, ...) are looked up by
+          # name at runtime, so all stores can be pushed from one job. Values stay masked.
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          TARGETS_JSON: ${{ steps.resolve.outputs.preview_targets_json }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          SHOPIFY_STORE_URL="${SHOPIFY_STORE_URL_SCOPED:-$SHOPIFY_STORE_URL_DEFAULT}"
-          SHOPIFY_THEME_ACCESS_TOKEN="${SHOPIFY_THEME_ACCESS_TOKEN_SCOPED:-$SHOPIFY_THEME_ACCESS_TOKEN_DEFAULT}"
-          HAS_AUTH=false
-          if [ -n "$SHOP_CLIENT_ID" ] && [ -n "$SHOP_CLIENT_SECRET" ]; then
-            HAS_AUTH=true
-          elif [ -n "$SHOPIFY_THEME_ACCESS_TOKEN" ] || [ -n "$SHOP_ACCESS_TOKEN" ]; then
-            HAS_AUTH=true
-          fi
-          if [ -z "$SHOPIFY_STORE_URL" ] || [ "$HAS_AUTH" != "true" ]; then
-            echo "Missing SHOPIFY_STORE_URL or auth for ${{ matrix.alias }} (secret suffix ${{ matrix.alias_secret }})."
-            echo "Prefer SHOP_CLIENT_ID+SHOP_CLIENT_SECRET; legacy: SHOPIFY_THEME_ACCESS_TOKEN / SHOP_ACCESS_TOKEN."
+          set -euo pipefail
+          if [ ! -f "layout/theme.liquid" ]; then
+            echo "layout/theme.liquid not found. Ensure workflow runs at theme repository root."
             exit 1
           fi
-          echo "Shopify credentials OK for ${{ matrix.alias }}"
+          sec() { printf '%s' "$SECRETS_JSON" | jq -r --arg k "$1" '.[$k] // empty'; }
+          SHOP_CLIENT_ID="$(sec SHOP_CLIENT_ID)"
+          SHOP_CLIENT_SECRET="$(sec SHOP_CLIENT_SECRET)"
+          SHOP_ACCESS_TOKEN="$(sec SHOP_ACCESS_TOKEN)"
+          
+          resolve_shopify_cli_token() {
+            if [ -n "${SHOP_CLIENT_ID:-}" ] && [ -n "${SHOP_CLIENT_SECRET:-}" ]; then
+              local resp token
+              resp="$(curl -sS -f -X POST "https://${STORE_HOST}/admin/oauth/access_token" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                --data-urlencode "grant_type=client_credentials" \
+                --data-urlencode "client_id=${SHOP_CLIENT_ID}" \
+                --data-urlencode "client_secret=${SHOP_CLIENT_SECRET}")" || return 1
+              token="$(printf '%s' "$resp" | jq -r '.access_token // empty')"
+              if [ -z "$token" ] || [ "$token" = "null" ]; then
+                echo "Client credentials response did not include access_token." >&2
+                return 1
+              fi
+              printf '%s' "$token"; return 0
+            fi
+            if [ -n "${SHOPIFY_THEME_ACCESS_TOKEN:-}" ]; then printf '%s' "$SHOPIFY_THEME_ACCESS_TOKEN"; return 0; fi
+            if [ -n "${SHOP_ACCESS_TOKEN:-}" ]; then printf '%s' "$SHOP_ACCESS_TOKEN"; return 0; fi
+            return 1
+          }
 
-  publish-preview-store:
-    needs: [validate-environment, extract-pr-number, validate-secrets-per-store]
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJson(needs.validate-environment.outputs.preview_targets_json) }}
-    uses: ./.github/workflows/reusable-publish-pr-preview-store.yml
-    with:
-      pr_number: ${{ needs.extract-pr-number.outputs.pr_number_unpadded }}
-      store_alias: ${{ matrix.alias }}
-      store_alias_secret: ${{ matrix.alias_secret }}
-    secrets: inherit
+          mkdir -p "$RUNNER_TEMP/fragments"
+          FAILED=0
+          FIRST_ID=""; FIRST_OUT=""
+          COUNT=$(printf '%s' "$TARGETS_JSON" | jq 'length')
+          for i in $(seq 0 $((COUNT - 1))); do
+            ALIAS="$(printf '%s' "$TARGETS_JSON" | jq -r ".[$i].alias")"
+            ALIAS_SECRET="$(printf '%s' "$TARGETS_JSON" | jq -r ".[$i].alias_secret")"
+            echo "::group::Store ${ALIAS}"
+            SHOPIFY_STORE_URL="$(sec "SHOPIFY_STORE_URL_${ALIAS_SECRET}")"
+            [ -n "$SHOPIFY_STORE_URL" ] || SHOPIFY_STORE_URL="$(sec SHOPIFY_STORE_URL)"
+            SHOPIFY_THEME_ACCESS_TOKEN="$(sec "SHOPIFY_THEME_ACCESS_TOKEN_${ALIAS_SECRET}")"
+            [ -n "$SHOPIFY_THEME_ACCESS_TOKEN" ] || SHOPIFY_THEME_ACCESS_TOKEN="$(sec SHOPIFY_THEME_ACCESS_TOKEN)"
+            if [ -z "$SHOPIFY_STORE_URL" ]; then
+              echo "Missing SHOPIFY_STORE_URL for ${ALIAS} (secret suffix ${ALIAS_SECRET})."
+              FAILED=1; echo "::endgroup::"; continue
+            fi
+            STORE_HOST="${SHOPIFY_STORE_URL#https://}"; STORE_HOST="${STORE_HOST#http://}"; STORE_HOST="${STORE_HOST%%/*}"
+            if ! CLI_TOKEN="$(resolve_shopify_cli_token)"; then
+              echo "Missing Shopify auth for ${ALIAS}: set SHOP_CLIENT_ID+SHOP_CLIENT_SECRET (preferred), or legacy SHOPIFY_THEME_ACCESS_TOKEN / SHOP_ACCESS_TOKEN."
+              FAILED=1; echo "::endgroup::"; continue
+            fi
+            echo "::add-mask::$CLI_TOKEN"
+
+            # Isolated copy per store so stores/<alias>/ overlays never leak between stores.
+            DIR="$RUNNER_TEMP/theme-${i}"
+            rm -rf "$DIR"; mkdir -p "$DIR"
+            tar --exclude=./.git -cf - . | tar -xf - -C "$DIR"
+            STORE_DIR="$DIR/stores/${ALIAS}"
+            if [ -d "$STORE_DIR" ]; then
+              echo "Overlaying stores/${ALIAS}/ config, templates, and sections onto root..."
+              for SUB in config templates sections; do
+                [ -d "$STORE_DIR/$SUB" ] || continue
+                (cd "$STORE_DIR" && find "$SUB" -name "*.json") | while read -r REL_PATH; do
+                  [ "$REL_PATH" = "config/settings_schema.json" ] && continue
+                  mkdir -p "$DIR/$(dirname "$REL_PATH")"
+                  cp "$STORE_DIR/$REL_PATH" "$DIR/$REL_PATH"
+                done
+              done
+            fi
+
+            DEV_CONTEXT="climaybe-pr-$((10#${PR_NUMBER}))"
+            ALIAS_SAFE="$(printf '%s' "$ALIAS" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+            if [ -n "$ALIAS_SAFE" ] && [ "$ALIAS_SAFE" != "default" ]; then DEV_CONTEXT="${DEV_CONTEXT}-${ALIAS_SAFE}"; fi
+            echo "Pushing development theme with context: ${DEV_CONTEXT}"
+            set +e
+            OUTPUT="$(shopify theme push --path "$DIR" --store "$SHOPIFY_STORE_URL" --password "$CLI_TOKEN" \
+              --development --development-context "$DEV_CONTEXT" --json 2>"$RUNNER_TEMP/err-${i}")"
+            STATUS=$?
+            set -e
+            echo "$OUTPUT"; [ -s "$RUNNER_TEMP/err-${i}" ] && { echo "--- stderr ---"; cat "$RUNNER_TEMP/err-${i}"; }
+            THEME_ID="$(printf '%s' "$OUTPUT" | jq -r '.theme.id // empty' 2>/dev/null || true)"
+            if [ $STATUS -ne 0 ] || [ -z "$THEME_ID" ]; then
+              echo "Theme push (development) failed for ${ALIAS}."
+              FAILED=1; echo "::endgroup::"; continue
+            fi
+            jq -cn --arg alias "$ALIAS" --arg id "$THEME_ID" --arg host "$STORE_HOST" \
+              '{alias:$alias, theme_id:$id, store_host:$host}' > "$RUNNER_TEMP/fragments/fragment-${ALIAS_SAFE:-store}.json"
+            if [ -z "$FIRST_ID" ]; then FIRST_ID="$THEME_ID"; FIRST_OUT="$OUTPUT"; fi
+            rm -rf "$DIR"
+            echo "::endgroup::"
+          done
+
+          echo "theme_id=$FIRST_ID" >> "$GITHUB_OUTPUT"
+          { echo "share_output<<SHARE_EOF"; echo "$FIRST_OUT"; echo "SHARE_EOF"; } >> "$GITHUB_OUTPUT"
+          # Same semantics as the old fail-fast:false matrix: other stores still publish,
+          # the run still fails if any store failed.
+          exit $FAILED
+
+      - name: Upload preview fragments
+        if: always() && steps.decide.outputs.theme == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-fragment-all
+          path: ${{ runner.temp }}/fragments/fragment-*.json
+          if-no-files-found: ignore
+          retention-days: 2
 
   comment-on-pr:
-    needs: [publish-preview-store, extract-pr-number, validate-environment]
+    needs: [preview]
+    if: always() && needs.preview.outputs.theme == 'true' && needs.preview.outputs.theme_id != ''
     uses: ./.github/workflows/reusable-comment-on-pr.yml
     with:
-      theme_id: ${{ needs.publish-preview-store.outputs.theme_id }}
-      share_output: ${{ needs.publish-preview-store.outputs.share_output }}
-      pr_number: ${{ needs.extract-pr-number.outputs.pr_number_unpadded }}
-      store_alias: ${{ needs.validate-environment.outputs.store_alias }}
-      store_alias_secret: ${{ needs.validate-environment.outputs.store_alias_secret }}
+      theme_id: ${{ needs.preview.outputs.theme_id }}
+      share_output: ${{ needs.preview.outputs.share_output }}
+      pr_number: ${{ needs.preview.outputs.pr_number }}
+      store_alias: ${{ needs.preview.outputs.store_alias }}
+      store_alias_secret: ${{ needs.preview.outputs.store_alias_secret }}
       use_preview_fragments: 'true'
     secrets: inherit

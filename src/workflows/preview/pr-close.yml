@@ -91,6 +91,12 @@ jobs:
 
   cleanup-theme:
     needs: [extract-pr-number, resolve-store]
+    # Reusable cleanup job requests actions: write (artifact upload); the caller must
+    # grant at least that or the run fails with startup_failure.
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
