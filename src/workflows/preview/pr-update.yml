@@ -36,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # dorny/paths-filter lists PR files through the Pull Request API.
+      pull-requests: read
       actions: write
     outputs:
       theme: ${{ steps.decide.outputs.theme }}

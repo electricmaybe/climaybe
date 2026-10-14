@@ -250,9 +250,10 @@ jobs:
               case "$name" in
                 *"-PR${PADDED}"|*"-PR${UNPADDED}") return 0 ;;
               esac
-              case "$name" in
-                *"climaybe-pr-${UNPADDED}"*) return 0 ;;
-              esac
+              # Exact PR number: climaybe-pr-9 or climaybe-pr-9-<alias>, never climaybe-pr-90.
+              if printf '%s' "$name" | grep -Eq "climaybe-pr-${UNPADDED}(\$|-[a-z])"; then
+                return 0
+              fi
               return 1
             fi
 
