@@ -210,6 +210,9 @@ jobs:
       store_alias: ${{ needs.prepare.outputs.store_alias }}
       store_alias_secret: ${{ needs.prepare.outputs.store_alias_secret }}
       use_preview_fragments: 'true'
+      # issue_comment payload has no pull_request.head; pass the published PR head.
+      head_ref: ${{ needs.prepare.outputs.head_ref }}
+      head_sha: ${{ needs.prepare.outputs.head_sha }}
     secrets: inherit
 
   acknowledge:

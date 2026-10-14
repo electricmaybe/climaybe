@@ -24,6 +24,16 @@ on:
         type: string
         default: 'false'
         description: "When 'true', download preview-fragment-* artifacts (from publish matrix) and post one comment with all preview URLs."
+      head_ref:
+        required: false
+        type: string
+        default: ''
+        description: "PR head branch to show. Required for issue_comment callers (e.g. /redeploy), whose payload has no pull_request.head."
+      head_sha:
+        required: false
+        type: string
+        default: ''
+        description: "PR head commit that was published (see head_ref)."
 
 jobs:
   comment:
@@ -48,6 +58,8 @@ jobs:
           SHOPIFY_STORE_URL: ${{ inputs.store_alias_secret && secrets[format('SHOPIFY_STORE_URL_{0}', inputs.store_alias_secret)] || secrets.SHOPIFY_STORE_URL }}
           THEME_ID: ${{ inputs.theme_id }}
           SHARE_OUTPUT: ${{ inputs.share_output }}
+          HEAD_REF_INPUT: ${{ inputs.head_ref }}
+          HEAD_SHA_INPUT: ${{ inputs.head_sha }}
           PR_NUMBER: ${{ inputs.pr_number }}
           STORE_ALIAS: ${{ inputs.store_alias }}
           USE_PREVIEW_FRAGMENTS: ${{ inputs.use_preview_fragments }}
@@ -89,8 +101,8 @@ jobs:
               marker,
               '## 🎨 Theme Preview Generated',
               '',
-              `**Branch:** ${context.payload.pull_request?.head?.ref || context.ref.replace('refs/heads/', '')}`,
-              `**Commit:** ${(context.payload.pull_request?.head?.sha || context.sha || '').substring(0, 7)}`
+              `**Branch:** ${process.env.HEAD_REF_INPUT || context.payload.pull_request?.head?.ref || context.ref.replace('refs/heads/', '')}`,
+              `**Commit:** ${(process.env.HEAD_SHA_INPUT || context.payload.pull_request?.head?.sha || context.sha || '').substring(0, 7)}`
             ];
 
             if (fragments.length > 0) {
