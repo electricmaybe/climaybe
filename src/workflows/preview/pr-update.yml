@@ -14,15 +14,24 @@ name: PR Update
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
     branches: [main, staging, develop, 'staging-*', 'live-*']
+
+# Draft PRs never build previews (PRs stay draft until Bugbot / cursor-review finish;
+# `ready_for_review` then triggers the first preview). A newer push to the same PR
+# cancels the in-flight preview run.
+concurrency:
+  group: pr-update-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   filter:
     # Ignore unrelated label churn; only re-evaluate when skip-preview is added/removed.
+    # Skip drafts entirely; ignore unrelated label churn.
     if: >
+      github.event.pull_request.draft == false && (
       (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-      github.event.label.name == 'skip-preview'
+      github.event.label.name == 'skip-preview')
     runs-on: ubuntu-latest
     outputs:
       theme: ${{ steps.decide.outputs.theme }}

@@ -4,6 +4,13 @@
 
 ---
 
+## Cut Actions minutes: Lighthouse release gate, draft-aware previews, opt-in nightly
+
+- **Lighthouse** moved out of `build-pipeline.yml` into `build/lighthouse.yml`. Runs **only** on pull requests `staging` → `main` (not drafts), with concurrency cancel-in-progress. Previously ran on every push to `staging`.
+- **`pr-update.yml`**: adds `ready_for_review`, skips draft PRs (`github.event.pull_request.draft == false` on `filter`, so every downstream job skips), and `concurrency: pr-update-<n>` with cancel-in-progress. Policy: PRs stay draft until Bugbot / cursor-review finish; the first preview is built on *Ready for review*.
+- **`nightly-hotfix.yml`** is now **opt-in** (`"nightly_hotfix": true` in `climaybe.config.json`). `climaybe update` removes it from repos that do not opt in.
+- **`pr-close.yml`**: the `cleanup-theme` job grants `contents: read`, `pull-requests: read`, `actions: write` (required by `reusable-cleanup-themes.yml`; without it every PR Close run was `startup_failure`).
+
 ## Coding-agent harness (`climaybe harness` / `climaybe check`)
 
 Theme repos can opt into a shared agent constitution (`AGENTS.md`, `init.sh`, session state). `build-pipeline.yml` `paths-ignore` and `.shopifyignore` now include `init.sh` and `feature_list.json`. `climaybe check` gates Theme Check against `docs/harness/theme-check-baseline.json` (new errors only).

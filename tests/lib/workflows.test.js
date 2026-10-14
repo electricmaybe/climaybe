@@ -125,12 +125,51 @@ describe('workflows', () => {
     it('ignores no-op commits in nightly hotfix tagging', () => {
       const dir = setup();
       try {
-        scaffoldWorkflows('single', {}, dir);
+        scaffoldWorkflows('single', { includeNightlyHotfix: true }, dir);
         const workflowPath = join(dir, '.github', 'workflows', 'nightly-hotfix.yml');
         const workflow = readFileSync(workflowPath, 'utf-8');
 
         assert.match(workflow, /git diff-tree --quiet --no-commit-id -r "\$SHA"/);
         assert.match(workflow, /Skipping no-op commit \(empty tree diff\): \$SHA/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('skips nightly hotfix by default (opt-in)', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', {}, dir);
+        assert.equal(existsSync(join(dir, '.github', 'workflows', 'nightly-hotfix.yml')), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('pr-update skips drafts, listens to ready_for_review, and cancels in-progress', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includePreview: true }, dir);
+        const wf = readFileSync(join(dir, '.github', 'workflows', 'pr-update.yml'), 'utf-8');
+        assert.match(wf, /ready_for_review/);
+        assert.match(wf, /github\.event\.pull_request\.draft == false/);
+        assert.match(wf, /cancel-in-progress: true/);
+        const close = readFileSync(join(dir, '.github', 'workflows', 'pr-close.yml'), 'utf-8');
+        assert.match(close, /cleanup-theme:[\s\S]*?actions: write/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('lighthouse runs only on staging -> main PRs, not in build-pipeline', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeBuild: true }, dir);
+        const lh = readFileSync(join(dir, '.github', 'workflows', 'lighthouse.yml'), 'utf-8');
+        assert.match(lh, /branches: \[main\]/);
+        assert.match(lh, /head\.ref == 'staging'/);
+        const bp = readFileSync(join(dir, '.github', 'workflows', 'build-pipeline.yml'), 'utf-8');
+        assert.doesNotMatch(bp, /lighthouse/i);
       } finally {
         teardown();
       }
@@ -158,7 +197,7 @@ describe('workflows', () => {
         );
         assert.doesNotMatch(prUpdate, /cleanup-themes:/);
         assert.match(prUpdate, /pr_number:\s*\$\{\{\s*needs\.extract-pr-number\.outputs\.pr_number_unpadded\s*\}\}/);
-        assert.match(prUpdate, /types:\s*\[opened,\s*synchronize,\s*reopened,\s*labeled,\s*unlabeled\]/);
+        assert.match(prUpdate, /types:\s*\[opened,\s*synchronize,\s*reopened,\s*ready_for_review,\s*labeled,\s*unlabeled\]/);
         assert.match(prUpdate, /contains\(github\.event\.pull_request\.labels\.\*\.name,\s*'skip-preview'\)/);
         assert.match(prUpdate, /\\\[skip-preview\\\]/);
         assert.match(prUpdate, /Detect skip-preview opt-out/);
@@ -307,9 +346,10 @@ describe('workflows', () => {
         const buildPipeline = readFileSync(join(workflowsDir, 'build-pipeline.yml'), 'utf-8');
         assert.match(buildPipeline, /startsWith\(github\.ref_name, 'live-'\)/);
         assert.match(buildPipeline, /contains\(github\.actor, '\[bot\]'\)/);
-        assert.match(buildPipeline, /client_id:\s*\$\{\{\s*secrets\.SHOP_CLIENT_ID\s*\}\}/);
-        assert.match(buildPipeline, /client_secret:\s*\$\{\{\s*secrets\.SHOP_CLIENT_SECRET\s*\}\}/);
-        assert.match(buildPipeline, /SHOP_CLIENT_ID\+SHOP_CLIENT_SECRET/);
+        const lighthouse = readFileSync(join(workflowsDir, 'lighthouse.yml'), 'utf-8');
+        assert.match(lighthouse, /client_id:\s*\$\{\{\s*secrets\.SHOP_CLIENT_ID\s*\}\}/);
+        assert.match(lighthouse, /client_secret:\s*\$\{\{\s*secrets\.SHOP_CLIENT_SECRET\s*\}\}/);
+        assert.match(lighthouse, /SHOP_CLIENT_ID\+SHOP_CLIENT_SECRET/);
         assert.match(buildPipeline, /paths-ignore:[\s\S]*init\.sh/);
         assert.match(buildPipeline, /paths-ignore:[\s\S]*feature_list\.json/);
       } finally {

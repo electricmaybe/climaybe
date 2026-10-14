@@ -232,7 +232,7 @@ The CLI writes config into `climaybe.config.json`:
 
 `linear_team` is the Linear team key (from IDs like `VOL-77`). `linear_statuses.store` is a **literal** Linear workflow state name (angle brackets included), not interpolated with a store alias. Do **not** put `LINEAR_API_KEY` in this file.
 
-`lighthouse_workflows` gates Lighthouse CI inside the build pipeline (it still only runs on `staging` with the right secrets). `ai_editors` records which editors are bridged to `.config/ai/`. `harness` opts into the coding-agent harness (and lets `update` create only missing harness files). Optional `base_branch` defaults to `staging`. Optional `dev_store` overrides which domain AGENTS.md labels as the default/dev store (falls back to `default_store`). Older configs without these keys keep working: Lighthouse defaults to on when build workflows exist.
+`lighthouse_workflows` gates the `lighthouse.yml` workflow, which runs only on non-draft pull requests from `staging` into `main` (with the right secrets). `nightly_hotfix: true` opts into the scheduled Nightly Hotfix Tag workflow (off by default). `ai_editors` records which editors are bridged to `.config/ai/`. `harness` opts into the coding-agent harness (and lets `update` create only missing harness files). Optional `base_branch` defaults to `staging`. Optional `dev_store` overrides which domain AGENTS.md labels as the default/dev store (falls back to `default_store`). Older configs without these keys keep working: Lighthouse defaults to on when build workflows exist.
 
 Workflows read this config at runtime — no hardcoded values in YAML files.
 
