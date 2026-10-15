@@ -358,3 +358,52 @@ describe('harness + AI bridges', () => {
     }
   });
 });
+
+describe('PR base branch rule', () => {
+  it('renders an explicit PR base rule (staging by default, never main)', async () => {
+    const { resolvePrBaseBranch } = await import('../../src/lib/harness.js');
+    const dir = mkdtempSync(join(tmpdir(), 'climaybe-prbase-'));
+    try {
+      writeSingleStoreConfig(dir, { base_branch: undefined });
+      assert.strictEqual(resolvePrBaseBranch(dir, {}), 'staging');
+      assert.strictEqual(resolvePrBaseBranch(dir, { base_branch: 'develop' }), 'develop');
+      assert.strictEqual(resolvePrBaseBranch(dir, { base_branch: 'main' }), 'staging');
+      assert.strictEqual(resolvePrBaseBranch(dir, { base_branch: 'live-euro' }), 'staging');
+      const values = buildHarnessValues(dir, { climaybeVersion: '0.0.0', date: '2026-01-01' });
+      assert.strictEqual(values.PR_BASE_BRANCH, 'staging');
+      scaffoldHarness({ cwd: dir, climaybeVersion: '0.0.0', date: '2026-01-01' });
+      for (const f of ['AGENTS.md', 'CLAUDE.md']) {
+        const body = readFileSync(join(dir, f), 'utf-8');
+        assert.match(body, /--base staging/);
+        assert.doesNotMatch(body, /\{\{PR_BASE_BRANCH\}\}/);
+      }
+      assert.match(readFileSync(join(dir, 'AGENTS.md'), 'utf-8'), /Never target `main` or `live-\*` directly/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('honours a custom base_branch in AGENTS.md', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'climaybe-prbase-custom-'));
+    try {
+      writeSingleStoreConfig(dir, { base_branch: 'develop' });
+      scaffoldHarness({ cwd: dir, climaybeVersion: '0.0.0', date: '2026-01-01' });
+      assert.match(readFileSync(join(dir, 'AGENTS.md'), 'utf-8'), /gh pr create --draft --base develop/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('ships an alwaysApply branch/PR rule in the AI ruleset', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'climaybe-prrule-'));
+    try {
+      scaffoldAiConfig(dir, { editors: ['cursor'] });
+      const rule = readFileSync(join(dir, '.config/ai/rules/branch-and-pr-rules.mdc'), 'utf-8');
+      assert.match(rule, /alwaysApply: true/);
+      assert.match(rule, /never against `main` or `live-\*`/);
+      assert.match(readFileSync(join(dir, '.config/ai/rules/00-rule-index.mdc'), 'utf-8'), /branch-and-pr-rules\.mdc/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

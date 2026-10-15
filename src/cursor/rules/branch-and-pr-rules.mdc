@@ -1,0 +1,33 @@
+---
+description: Git branch and pull request targeting — PRs go to staging, never main
+globs:
+  - "**/*"
+alwaysApply: true
+---
+# Branch & PR Rules (mandatory for every agent, including Cursor cloud/background agents)
+
+## PR base branch — read this before `gh pr create` or any "Create PR" action
+
+**Always open pull requests against the integration branch, never against `main` or `live-*`.**
+
+Resolve the PR base branch in this order:
+
+1. `base_branch` in `climaybe.config.json`.
+2. Otherwise `staging`, if it exists: `git ls-remote --exit-code --heads origin staging`.
+3. Only if neither exists, stop and ask the human which base to use. Do **not** fall back to `main` silently.
+
+Always pass the base explicitly — tools default to the repo's default branch (`main`):
+
+```bash
+gh pr create --draft --base staging   # or the base_branch from climaybe.config.json
+```
+
+Cloud/background agents: when the platform opens the PR for you, set the target/base branch to the resolved base. If a PR was opened against `main` by mistake, retarget it (`gh pr edit <n> --base staging`) instead of merging it.
+
+## Hard rules
+
+- Never open a PR whose base is `main` or `live-*`. `staging → main` release PRs and `staging-<alias> → live-<alias>` PRs are created by climaybe workflows, not by agents.
+- Never push, commit, force-push, or rebase onto `main`, `live-*`, or `staging-<alias>` branches directly.
+- Branch feature work off the resolved base branch (`git switch -c feat/... origin/staging`).
+- Open PRs as **draft**; keep them draft until the Bugbot / code review has finished and is clean. Do not merge your own PR without human approval.
+- Keep climaybe sync commit markers intact: `[hotfix-backport]`, `[stores-to-root]`, `[root-to-stores]`.

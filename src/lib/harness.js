@@ -109,10 +109,7 @@ export function buildHarnessValues(cwd = process.cwd(), opts = {}) {
   const stores = config.stores && typeof config.stores === 'object' ? config.stores : {};
   const aliases = Object.keys(stores);
   const mode = aliases.length > 1 ? 'multi' : 'single';
-  const baseBranch =
-    typeof config.base_branch === 'string' && config.base_branch.trim()
-      ? config.base_branch.trim()
-      : 'staging';
+  const baseBranch = resolvePrBaseBranch(cwd, config);
   const devStore =
     (typeof config.dev_store === 'string' && config.dev_store.trim()) ||
     (typeof config.default_store === 'string' && config.default_store.trim()) ||
@@ -207,6 +204,7 @@ export function buildHarnessValues(cwd = process.cwd(), opts = {}) {
     THEME_NAME: resolveThemeName(cwd),
     MODE: mode,
     BASE_BRANCH: baseBranch,
+    PR_BASE_BRANCH: baseBranch,
     DEV_STORE: devStore,
     LINEAR_TEAM: linearTeam,
     STORES_TABLE: storesTable,
@@ -217,6 +215,19 @@ export function buildHarnessValues(cwd = process.cwd(), opts = {}) {
     CLIMAYBE_VERSION: climaybeVersion,
     GENERATED_DATE: date,
   };
+}
+
+/**
+ * Branch agents must open PRs against.
+ * Order: config.base_branch → `staging` (default for climaybe themes; exists locally or on origin).
+ * Never resolves to `main` / `live-*`.
+ * @param {string} [cwd]
+ * @param {object} [config]
+ */
+export function resolvePrBaseBranch(cwd = process.cwd(), config = readConfig(cwd) || {}) {
+  const configured = typeof config.base_branch === 'string' ? config.base_branch.trim() : '';
+  if (configured && configured !== 'main' && !configured.startsWith('live-')) return configured;
+  return 'staging';
 }
 
 function readClimaybePackageVersion() {
