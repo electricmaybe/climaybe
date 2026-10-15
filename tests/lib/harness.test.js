@@ -366,7 +366,7 @@ describe('PR base branch rule', () => {
     try {
       writeSingleStoreConfig(dir, { base_branch: undefined });
       assert.strictEqual(resolvePrBaseBranch(dir, {}), 'staging');
-      assert.strictEqual(resolvePrBaseBranch(dir, { base_branch: 'v4' }), 'v4');
+      assert.strictEqual(resolvePrBaseBranch(dir, { base_branch: 'develop' }), 'develop');
       assert.strictEqual(resolvePrBaseBranch(dir, { base_branch: 'main' }), 'staging');
       assert.strictEqual(resolvePrBaseBranch(dir, { base_branch: 'live-euro' }), 'staging');
       const values = buildHarnessValues(dir, { climaybeVersion: '0.0.0', date: '2026-01-01' });
@@ -383,12 +383,12 @@ describe('PR base branch rule', () => {
     }
   });
 
-  it('honours base_branch (Aisle v4) in AGENTS.md', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'climaybe-prbase-v4-'));
+  it('honours a custom base_branch in AGENTS.md', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'climaybe-prbase-custom-'));
     try {
-      writeSingleStoreConfig(dir, { base_branch: 'v4' });
+      writeSingleStoreConfig(dir, { base_branch: 'develop' });
       scaffoldHarness({ cwd: dir, climaybeVersion: '0.0.0', date: '2026-01-01' });
-      assert.match(readFileSync(join(dir, 'AGENTS.md'), 'utf-8'), /gh pr create --draft --base v4/);
+      assert.match(readFileSync(join(dir, 'AGENTS.md'), 'utf-8'), /gh pr create --draft --base develop/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
