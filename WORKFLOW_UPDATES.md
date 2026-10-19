@@ -4,6 +4,16 @@
 
 ---
 
+## Multistore hotfix to main: auto-resolve version conflicts
+
+`multistore-hotfix-to-main.yml` used to fail whenever a `live-*` / `staging-*` branch lagged main's release version, because `package.json` and `config/settings_schema.json` conflicted on `version` / `theme_version`. The merge now runs with `--no-commit` and:
+
+- resolves a conflict in `package.json` or `config/settings_schema.json` to main's side **only** when every conflicting line is a `version` / `theme_version` field (`git merge-file --ours`, so non-conflicting edits from the store branch are kept);
+- for a **non-default** store, keeps main's copy of conflicted files under `config/`, `templates/`, `sections/` (those paths are restored from main right after the merge anyway); the default store gets no such shortcut;
+- aborts the merge and fails the job on any other conflict, or if the merge fails without conflicts.
+
+Covered end to end by `tests/lib/multistore-hotfix-merge.test.js`, which runs the generated step against throwaway git repos.
+
 ## Cut Actions minutes: Lighthouse release gate, draft-aware previews, opt-in nightly
 
 - **Lighthouse** moved out of `build-pipeline.yml` into `build/lighthouse.yml`. Runs **only** on pull requests `staging` → `main` (not drafts), with concurrency cancel-in-progress. Previously ran on every push to `staging`.
