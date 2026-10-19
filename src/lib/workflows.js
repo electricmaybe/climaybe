@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readdirSync, copyFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, copyFileSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pc from 'picocolors';
 import { ensureBuildWorkflowDefaults } from './build-workflows.js';
 import { isNightlyHotfixEnabled } from './config.js';
+import { PRESERVE_CUSTOM_JOBS_FILES, mergeCustomJobs } from './workflow-custom-jobs.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, '..', 'workflows');
@@ -83,6 +84,13 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
   const dest = ghWorkflowsDir(cwd);
   mkdirSync(dest, { recursive: true });
 
+  // Remember existing workflows whose repo-specific jobs must survive regeneration.
+  const previous = {};
+  for (const f of PRESERVE_CUSTOM_JOBS_FILES) {
+    const p = join(dest, f);
+    if (existsSync(p)) previous[f] = readFileSync(p, 'utf-8');
+  }
+
   // Clean previously scaffolded files
   cleanWorkflows(cwd);
 
@@ -134,6 +142,16 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
     for (const f of listYmls(linearDir)) {
       copyWorkflow(linearDir, f, dest);
     }
+  }
+
+  // Re-attach repo-specific jobs (e.g. a custom unit-tests job) to regenerated workflows.
+  for (const [f, old] of Object.entries(previous)) {
+    const p = join(dest, f);
+    if (!existsSync(p)) continue;
+    const { content, preserved } = mergeCustomJobs(old, readFileSync(p, 'utf-8'));
+    if (!preserved.length) continue;
+    writeFileSync(p, content, 'utf-8');
+    console.log(pc.dim(`  Kept custom job(s) in ${f}: ${preserved.join(', ')}`));
   }
 
   const total = readdirSync(dest).filter((f) => f.endsWith('.yml')).length;

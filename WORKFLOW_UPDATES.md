@@ -4,6 +4,10 @@
 
 ---
 
+## Build pipeline: keep repo-specific jobs on update
+
+`climaybe update` used to overwrite `build-pipeline.yml` and delete any job a theme repo had added (for example a `unit-tests` job running `npm test`). Regeneration now keeps every top-level job whose id is not defined by the climaybe template, copied verbatim (including the comments above it) after the generated jobs. Jobs climaybe owns (`build`) are always replaced by the template version. Covered by `tests/lib/workflow-custom-jobs.test.js`.
+
 ## Multistore hotfix to main: auto-resolve version conflicts
 
 `multistore-hotfix-to-main.yml` used to fail whenever a `live-*` / `staging-*` branch lagged main's release version, because `package.json` and `config/settings_schema.json` conflicted on `version` / `theme_version`. The merge now runs with `--no-commit` and:
