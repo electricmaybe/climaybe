@@ -139,7 +139,54 @@ jobs:
 
           git fetch origin
           git checkout main
-          git merge origin/$SOURCE --no-ff -m "Merge $SOURCE into main [hotfix-backport]"
+          # Version-only conflicts: live-* lags main's release version in
+          # package.json and config/settings_schema.json. Resolve ONLY those
+          # conflict hunks to main's side (git merge-file --ours keeps every
+          # non-conflicting change from $SOURCE). Any other conflict still fails.
+          VERSION_FILES="package.json config/settings_schema.json"
+          if ! git merge origin/$SOURCE --no-ff --no-commit; then
+            UNMERGED=$(git diff --name-only --diff-filter=U)
+            if [ -z "$UNMERGED" ]; then
+              echo "::error::git merge of $SOURCE failed without conflicts; resolve manually."
+              git merge --abort 2>/dev/null || true
+              exit 1
+            fi
+            for f in $UNMERGED; do
+              # Non-default store: config/, templates/, sections/ are restored
+              # from main right after the merge (see below), so take main's side
+              # for conflicts there too. Code (snippets/, assets/, stores/<alias>/)
+              # still merges normally.
+              if [ "$IS_DEFAULT" != "true" ]; then
+                case "$f" in
+                  config/*|templates/*|sections/*)
+                    git checkout --ours -- "$f" && git add "$f"
+                    echo "Non-default store: kept main's $f."
+                    continue ;;
+                esac
+              fi
+              case " $VERSION_FILES " in
+                *" $f "*) ;;
+                *) echo "::error::Unexpected merge conflict in $f; resolve manually."; git merge --abort; exit 1 ;;
+              esac
+              git show ":1:$f" > /tmp/base 2>/dev/null || : > /tmp/base
+              git show ":2:$f" > /tmp/ours
+              git show ":3:$f" > /tmp/theirs
+              # Every conflicting line must be a version field.
+              BAD=$(git merge-file -p /tmp/ours /tmp/base /tmp/theirs | \
+                awk '/^<<<<<<< /{c=1;next} /^>>>>>>> /{c=0;next} /^=======$/{next} c' | \
+                grep -vE '^[[:space:]]*"(theme_)?version"[[:space:]]*:' || true)
+              if [ -n "$BAD" ]; then
+                echo "::error::Non-version conflict in $f; resolve manually:"; echo "$BAD"
+                git merge --abort; exit 1
+              fi
+              git merge-file -p --ours /tmp/ours /tmp/base /tmp/theirs > "$f"
+              git add "$f"
+              echo "Resolved version-only conflict in $f (kept main's version)."
+            done
+          fi
+          if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            git commit --no-edit -m "Merge $SOURCE into main [hotfix-backport]"
+          fi
 
           # Non-default store: do not bring root sync files to main (avoid conflicts).
           # Keep only stores/<alias>/ and shared code; restore config/, templates/, sections/ from main.
