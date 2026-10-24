@@ -136,6 +136,26 @@ describe('workflows', () => {
       }
     });
 
+    it('runs hotfix tagging weekly behind a cheap API-only gate', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeNightlyHotfix: true }, dir);
+        const workflow = readFileSync(join(dir, '.github', 'workflows', 'nightly-hotfix.yml'), 'utf-8');
+        assert.match(workflow, /cron: '0 7 \* \* 1'/);
+        assert.doesNotMatch(workflow, /cron: '0 7 \* \* \*'/);
+        assert.match(workflow, /workflow_dispatch:/);
+        // Name kept so create-release / main-to-staging-stores workflow_run triggers still match.
+        assert.match(workflow, /^name: Nightly Hotfix Tag$/m);
+        const gate = workflow.slice(workflow.indexOf('  gate:'), workflow.indexOf('  check:'));
+        assert.match(gate, /git\/matching-refs\/tags\/v/);
+        assert.match(gate, /compare\/\$\{LATEST_TAG\}\.\.\.\$\{HEAD_SHA\}/);
+        assert.doesNotMatch(gate, /actions\/checkout|npm (ci|install)/);
+        assert.match(workflow, /check:\n    needs: gate\n    if: needs\.gate\.outputs\.proceed == 'true'/);
+      } finally {
+        teardown();
+      }
+    });
+
     it('skips nightly hotfix by default (opt-in)', () => {
       const dir = setup();
       try {
@@ -407,6 +427,21 @@ describe('workflows', () => {
             `${file} must not interpolate head_commit.message into the shell script`
           );
         }
+      } finally {
+        teardown();
+      }
+    });
+
+    it('gates create-release on an existing release without checkout', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeBuild: true }, dir);
+        const wf = readFileSync(join(dir, '.github', 'workflows', 'create-release.yml'), 'utf-8');
+        const gate = wf.slice(wf.indexOf('  gate:'), wf.indexOf('  build:'));
+        assert.match(gate, /releases\/tags\/\$TAG_NAME/);
+        assert.match(gate, /workflow_run\.conclusion == 'success'/);
+        assert.doesNotMatch(gate, /actions\/checkout/);
+        assert.match(wf, /build:\n    needs: gate\n    if: needs\.gate\.outputs\.proceed == 'true'/);
       } finally {
         teardown();
       }

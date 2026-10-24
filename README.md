@@ -287,7 +287,7 @@ It is **best-effort**: it only runs when `origin` is GitHub and the `gh` CLI is 
 |----------|---------|-------------|
 | `release-pr-check.yml` | PR from `staging` to `main` | Finds latest tag on main, AI changelog to PR head, creates pre-release patch tag (e.g. v3.1.13) to lock state; posts changelog comment |
 | `post-merge-tag.yml` | Push to `main` (merged PR) | Staging→main only: minor bump from latest tag (e.g. v3.1.13 → v3.2.0). No version in PR title |
-| `nightly-hotfix.yml` | Cron 02:00 US Eastern | Collects commits since latest tag (incl. hotfix backports), ignores no-op/empty-tree commits, generates AI changelog, patch bump and tag |
+| `nightly-hotfix.yml` | Weekly cron, Mondays 02:00 US Eastern (opt-in `nightly_hotfix`) | API-only `gate` job exits in seconds when nothing relevant landed since the latest tag; otherwise collects commits since latest tag (incl. hotfix backports), ignores no-op/empty-tree commits, generates AI changelog, patch bump and tag |
 
 ### Multi-store (additional)
 
@@ -371,7 +371,7 @@ Build workflows install deps with `npm ci` and run `npx --no-install climaybe bu
 |----------|---------|-------------|
 | `build-pipeline.yml` | Push to any branch (ignores docs-only/tooling-only paths; see CI/CD reference) | Runs reusable build; skips entirely on **`live-*`** when the pusher is a GitHub **`[bot]`** user; Lighthouse only on branch **`staging`**, when a build ran, and secrets allow |
 | `reusable-build.yml` | workflow_call | Path-filtered `build-scripts` / Tailwind (`climaybe build`), then commits compiled assets when changed |
-| `create-release.yml` | Push tag `v*`, or **workflow_run** after Post-Merge Tag / Nightly Hotfix Tag succeed on `main` | Builds release archive and creates GitHub Release notes from commits since the previous tag. It filters repetitive automation subjects (main→staging syncs, store/root sync chores, bot merge noise) before generating notes. If remaining subjects are low-signal and `GEMINI_API_KEY` exists, it uses Gemini to generate cleaner merchant-facing notes. Also covers tags created by workflows with `GITHUB_TOKEN`, which may not trigger tag-push workflows. |
+| `create-release.yml` | Push tag `v*`, or **workflow_run** after Post-Merge Tag / Nightly Hotfix Tag succeed on `main` | Builds release archive and creates GitHub Release notes from commits since the previous tag. It filters repetitive automation subjects (main→staging syncs, store/root sync chores, bot merge noise) before generating notes. If remaining subjects are low-signal and `GEMINI_API_KEY` exists, it uses Gemini to generate cleaner merchant-facing notes. Also covers tags created by workflows with `GITHUB_TOKEN`, which may not trigger tag-push workflows. An API-only `gate` job skips everything when the tag already has a release. |
 
 ### Theme dev kit
 
@@ -499,7 +499,7 @@ You can install/update this later with:
 - **Version format**: Always three-part (e.g. `v3.2.0`). No version in code or PR title; the system infers from tags.
 - **No tags yet?** The system uses `theme_version` from `config/settings_schema.json` (`theme_info`), creates that tag on main (e.g. `v1.0.0`), and continues from there.
 - **Staging → main**: On PR, a pre-release patch tag (e.g. v3.1.13) locks the current minor line; on merge, **minor** bump (e.g. v3.1.13 → v3.2.0).
-- **Non-staging to main** (hotfix backports, direct commits): **Patch** bump only, via **nightly workflow** at 02:00 US Eastern (not at commit time). No-op/empty-tree commits are ignored.
+- **Non-staging to main** (hotfix backports, direct commits): **Patch** bump only, via the **weekly hotfix workflow** (Mondays 02:00 US Eastern, opt-in; not at commit time). No-op/empty-tree commits are ignored.
 - **Version bump runs only on main** (post-merge-tag and nightly-hotfix). Main-to-staging-stores merges main into each `staging-<alias>` on every push (version bumps and hotfixes). For hotfix-backport, only a `staging-<alias> -> main` source skips syncing back to the same staging branch; a `live-<alias> -> main` source still syncs into `staging-<alias>`.
 - Version bumps update `config/settings_schema.json` and, when present, `package.json` `version`.
 - **Safety**: The version-bump workflow fails if the new tag would not be **strictly higher** than the latest merged release tag (semver), so the release line cannot step backward.

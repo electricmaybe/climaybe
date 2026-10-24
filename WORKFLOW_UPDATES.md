@@ -4,6 +4,13 @@
 
 ---
 
+## Hotfix tagging weekly with an early-exit gate; Create Release gate
+
+- `nightly-hotfix.yml` (opt-in via `nightly_hotfix: true`) now runs **weekly** (Mondays 07:00 UTC / 02:00 US Eastern) instead of nightly; `workflow_dispatch` is kept. The workflow name stays `Nightly Hotfix Tag` so `workflow_run` listeners (`create-release.yml`, `main-to-staging-stores.yml`) keep matching.
+- New first job `gate`: API calls only (no checkout, no npm). It finds the latest `vX.Y(.Z)` tag via `git/matching-refs/tags/v` and compares it to the head with `compare/<tag>...<sha>`. When no commits remain after removing release-bump / store-sync noise, it ends in seconds and `check`, `changelog` and `bump` skip. With no tag yet, or if the compare call fails, it falls back to the full check.
+- `create-release.yml`: new API-only `gate` job skips the checkout/zip/notes build when the target tag (pushed tag, or latest version tag for `workflow_run`) already has a GitHub release.
+- Covered by `tests/lib/workflows.test.js`.
+
 ## Build pipeline: keep repo-specific jobs on update
 
 `climaybe update` used to overwrite `build-pipeline.yml` and delete any job a theme repo had added (for example a `unit-tests` job running `npm test`). Regeneration now keeps every top-level job whose id is not defined by the climaybe template, copied verbatim (including the comments above it) after the generated jobs. Jobs climaybe owns (`build`) are always replaced by the template version. Covered by `tests/lib/workflow-custom-jobs.test.js`.

@@ -13,8 +13,39 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # Early-exit gate: API calls only (no checkout). Skips the build when the
+  # target tag already has a GitHub release (e.g. a weekly hotfix run that tagged nothing).
+  gate:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.gate.outputs.proceed }}
+    steps:
+      - name: Skip if the tag already has a release
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            TAG_NAME=$(gh api "repos/$REPO/git/matching-refs/tags/v" --jq '.[].ref' 2>/dev/null \
+              | sed 's#^refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' | sort -V | tail -1 || true)
+          fi
+          if [ -z "$TAG_NAME" ]; then
+            echo "No version tag found; skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          elif gh api "repos/$REPO/releases/tags/$TAG_NAME" --silent 2>/dev/null; then
+            echo "Release for $TAG_NAME already exists; skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
