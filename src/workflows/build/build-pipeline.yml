@@ -24,6 +24,11 @@ on:
       - 'CHANGELOG*'
       - 'CONTRIBUTING*'
 
+# A newer push to the same branch cancels the in-flight build (saves minutes).
+concurrency:
+  group: build-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     # Skip pure store-sync + hotfix-backport commits; those are infrastructure-only
