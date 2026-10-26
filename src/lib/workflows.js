@@ -50,8 +50,20 @@ function getKnownWorkflowFiles() {
   return files;
 }
 
-/** Deprecated workflow filenames to remove when scaffolding (renamed or replaced). */
-const DEPRECATED_WORKFLOW_FILES = ['hotfix-backport.yml'];
+/**
+ * Deprecated workflow filenames to remove when scaffolding (renamed or replaced).
+ * The legacy theme workflows below predate climaybe and are superseded by
+ * lighthouse.yml (staging->main only), build-pipeline.yml and pr-update.yml.
+ * They run on every push (e.g. aisle `Shopify Lighthouse CI`: 238 runs, 222
+ * failed in 30 days) and burn billable Actions minutes.
+ */
+const DEPRECATED_WORKFLOW_FILES = [
+  'hotfix-backport.yml',
+  'lighthouse-ci.yml',
+  'tailwind-build.yml',
+  'scripts-build.yml',
+  'theme-preview.yml',
+];
 
 /**
  * Remove previously scaffolded climaybe workflows from target.
