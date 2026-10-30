@@ -1,5 +1,7 @@
 # climaybe — AI Changelog Generator (Reusable Workflow)
-# Uses Gemini when available, otherwise falls back to GitHub Models.
+# Uses Gemini when GEMINI_API_KEY is set; otherwise (or on any request/response
+# failure) falls back to a static changelog built from commit subjects.
+# The step never fails because of the AI provider.
 
 name: AI Changelog
 
@@ -15,6 +17,11 @@ on:
         required: false
         type: string
         default: 'HEAD'
+      gemini_model:
+        description: 'Gemini model id (default tracks the latest Flash alias)'
+        required: false
+        type: string
+        default: 'gemini-flash-latest'
     outputs:
       changelog:
         description: 'Generated changelog in markdown format'
@@ -28,7 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      models: read
     outputs:
       changelog: ${{ steps.ai.outputs.changelog || steps.no_commits.outputs.changelog }}
 
@@ -50,15 +56,18 @@ jobs:
           printf '%s\n' "$COMMITS" > commits-for-ai.txt
           echo "has_commits=true" >> $GITHUB_OUTPUT
 
-      - name: Generate changelog (Gemini -> GitHub Models fallback)
+      - name: Generate changelog (Gemini -> static fallback)
         id: ai
         if: steps.commits.outputs.has_commits == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_MODEL: ${{ inputs.gemini_model }}
         run: |
-          COMMITS=$(cat commits-for-ai.txt)
-          PROVIDER="fallback"
+          # Any provider problem (DNS/network error, timeout, HTTP error, retired
+          # model, empty or malformed JSON) must fall through to the static
+          # changelog instead of failing the job.
+          PROVIDER="static-fallback"
+          CHANGELOG=""
 
           PROMPT=$(cat <<'PROMPT_EOF'
           You are a changelog generator for a Shopify theme repository.
@@ -76,11 +85,11 @@ jobs:
           PROMPT_EOF
           )
 
-          CHANGELOG=""
-
-          # 1) Gemini path (if secret exists)
-          if [ -n "$GEMINI_API_KEY" ]; then
-            PAYLOAD=$(jq -n \
+          if [ -n "${GEMINI_API_KEY:-}" ]; then
+            MODEL="${GEMINI_MODEL:-gemini-flash-latest}"
+            RESPONSE_FILE="$(mktemp)"
+            PAYLOAD_FILE="$(mktemp)"
+            if jq -n \
               --arg prompt "$PROMPT" \
               --rawfile commits commits-for-ai.txt \
               '{
@@ -91,66 +100,73 @@ jobs:
                   "temperature": 0.3,
                   "maxOutputTokens": 2048
                 }
-              }')
+              }' > "$PAYLOAD_FILE"; then
+              CURL_RC=0
+              HTTP_CODE=$(curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' \
+                --connect-timeout 10 --max-time 60 \
+                --retry 2 --retry-delay 3 \
+                -X POST \
+                "https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent" \
+                -H "Content-Type: application/json" \
+                -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+                --data-binary @"$PAYLOAD_FILE") || CURL_RC=$?
 
-            RESPONSE=$(curl -s -X POST \
-              "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
-              -H "Content-Type: application/json" \
-              -d "$PAYLOAD")
-
-            CHANGELOG=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null || true)
-            if [ -n "$CHANGELOG" ] && [ "$CHANGELOG" != "null" ]; then
-              PROVIDER="gemini"
+              if [ "$CURL_RC" -ne 0 ]; then
+                echo "::warning::Gemini request failed (curl exit ${CURL_RC}); using static changelog."
+              elif [ "$HTTP_CODE" != "200" ]; then
+                ERR_MSG=$(jq -r '.error.message // empty' "$RESPONSE_FILE" 2>/dev/null | head -c 300 || true)
+                echo "::warning::Gemini returned HTTP ${HTTP_CODE} for model ${MODEL}${ERR_MSG:+: ${ERR_MSG}}; using static changelog."
+              else
+                CHANGELOG=$(jq -r '[.candidates[0].content.parts[]? | select(.thought != true) | .text // empty] | join("")' "$RESPONSE_FILE" 2>/dev/null || true)
+                if [ -n "$CHANGELOG" ] && [ "$CHANGELOG" != "null" ]; then
+                  PROVIDER="gemini"
+                else
+                  CHANGELOG=""
+                  echo "::warning::Gemini response had no text; using static changelog."
+                fi
+              fi
+            else
+              echo "::warning::Could not build Gemini payload; using static changelog."
             fi
+            rm -f "$RESPONSE_FILE" "$PAYLOAD_FILE"
           fi
 
-          # 2) GitHub Models path (Copilot-backed models)
-          if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "null" ]; then
-            GH_PAYLOAD=$(jq -n \
-              --arg prompt "$PROMPT" \
-              --rawfile commits commits-for-ai.txt \
-              '{
-                "model": "gpt-4o-mini",
-                "messages": [
-                  {"role":"system","content":"You are a changelog generator for Shopify theme repos. Output markdown only."},
-                  {"role":"user","content": ($prompt + "\n" + $commits)}
-                ],
-                "temperature": 0.3,
-                "max_tokens": 1200
-              }')
-
-            GH_RESPONSE=$(curl -s -X POST \
-              "https://models.inference.ai.azure.com/chat/completions" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-              -d "$GH_PAYLOAD")
-
-            CHANGELOG=$(echo "$GH_RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
-            if [ -n "$CHANGELOG" ] && [ "$CHANGELOG" != "null" ]; then
-              PROVIDER="github-models"
-            fi
-          fi
-
-          # 3) Safe fallback if both providers fail
-          if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "null" ]; then
-            COMMIT_LINES="$COMMITS"
-            CHANGELOG=$(printf "## Chore\n")
-            while IFS= read -r line; do
+          # Static fallback: group conventional-commit subjects, everything else under Chore.
+          if [ -z "$CHANGELOG" ]; then
+            FEATURES=""
+            FIXES=""
+            IMPROVEMENTS=""
+            CHORES=""
+            while IFS= read -r line || [ -n "$line" ]; do
               [ -z "$line" ] && continue
               SUBJECT="${line#* }"
-              CHANGELOG="${CHANGELOG}- ${SUBJECT}\n"
-            done <<< "$COMMIT_LINES"
+              [ -z "$SUBJECT" ] && continue
+              case "$SUBJECT" in
+                feat:*|feat\(*|feat!:*) FEATURES="${FEATURES}- ${SUBJECT}"$'\n' ;;
+                fix:*|fix\(*|fix!:*) FIXES="${FIXES}- ${SUBJECT}"$'\n' ;;
+                perf:*|perf\(*|refactor:*|refactor\(*|style:*|style\(*) IMPROVEMENTS="${IMPROVEMENTS}- ${SUBJECT}"$'\n' ;;
+                *) CHORES="${CHORES}- ${SUBJECT}"$'\n' ;;
+              esac
+            done < commits-for-ai.txt
+            [ -n "$FEATURES" ] && CHANGELOG="${CHANGELOG}## Features"$'\n'"${FEATURES}"$'\n'
+            [ -n "$FIXES" ] && CHANGELOG="${CHANGELOG}## Fixes"$'\n'"${FIXES}"$'\n'
+            [ -n "$IMPROVEMENTS" ] && CHANGELOG="${CHANGELOG}## Improvements"$'\n'"${IMPROVEMENTS}"$'\n'
+            [ -n "$CHORES" ] && CHANGELOG="${CHANGELOG}## Chore"$'\n'"${CHORES}"
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG="No changes detected."
+            fi
             PROVIDER="static-fallback"
           fi
 
           echo "Changelog provider: $PROVIDER"
 
-          # Write to output (multiline)
+          # Write to output (multiline). Random delimiter so changelog text can't end the block early.
+          DELIM="CHANGELOG_EOF_$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
           {
-            echo "changelog<<CHANGELOG_EOF"
-            printf "%b\n" "$CHANGELOG"
-            echo "CHANGELOG_EOF"
-          } >> $GITHUB_OUTPUT
+            echo "changelog<<${DELIM}"
+            printf '%s\n' "$CHANGELOG"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Fallback if no commits
         id: no_commits

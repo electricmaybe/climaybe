@@ -211,11 +211,16 @@ jobs:
                 }
               }')
 
-            RESPONSE=$(curl -s -X POST \
-              "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}" \
+            # Never fail release-notes generation on a network/API problem; fall back to commit list.
+            RESPONSE=$(curl -sS \
+              --connect-timeout 10 --max-time 60 \
+              --retry 2 --retry-delay 3 \
+              -X POST \
+              "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent" \
               -H "Content-Type: application/json" \
-              -d "$PAYLOAD")
-            AI_NOTES=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null || true)
+              -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+              -d "$PAYLOAD") || { echo "::warning::Gemini request failed (curl exit $?); using commit list."; RESPONSE=""; }
+            AI_NOTES=$(printf '%s' "$RESPONSE" | jq -r '[.candidates[0].content.parts[]? | select(.thought != true) | .text // empty] | join("")' 2>/dev/null || true)
 
             if [ -n "$AI_NOTES" ] && [ "$AI_NOTES" != "null" ]; then
               printf '%s\n' "$AI_NOTES" >> "$NOTES_FILE"

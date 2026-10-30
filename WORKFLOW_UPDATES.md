@@ -80,12 +80,12 @@ Scaffolded **build** and **preview** workflows use `dorny/paths-filter` (and `bu
 - Writes commits to workspace file `commits-for-ai.txt` and uses `jq --rawfile commits ...` so large histories avoid env size limits and raw log lines are never passed to `jq --argjson` (which requires valid JSON and fails on plain `git log` text).
 - Step output `has_commits` (`true` / `false`) gates the AI step instead of a multiline `commits` output blob.
 - Added provider fallback chain stability:
-  - Gemini (when `GEMINI_API_KEY` is available)
-  - GitHub Models fallback
-  - Static markdown fallback from commit subjects
+  - Gemini (when `GEMINI_API_KEY` is available; model via `gemini_model` input, default `gemini-flash-latest`; key sent in the `x-goog-api-key` header)
+  - Static markdown fallback from commit subjects (grouped by conventional-commit type)
+  - Any curl/network error (e.g. DNS exit 6), timeout, non-200 response or empty/malformed JSON now falls through to the static fallback instead of failing the job.
+  - The GitHub Models fallback was removed: `models.inference.ai.azure.com` no longer resolves and GitHub Models was retired on 2026-07-30.
 - Added provider visibility logs:
   - `gemini`
-  - `github-models`
   - `static-fallback`
 - Added safer `jq` extraction behavior so parse failures fall through to fallback logic instead of crashing the step.
 
