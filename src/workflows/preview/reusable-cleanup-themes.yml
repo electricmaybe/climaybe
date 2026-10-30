@@ -185,7 +185,14 @@ jobs:
             echo "[]" > "$THEME_LIST_JSON"
           fi
 
-          ALL_COUNT="$(jq -r 'length' "$THEME_LIST_JSON" 2>/dev/null || echo "0")"
+          # Shopify CLI <5 prints a bare array; CLI 5+ prints {"themes":[...]}.
+          # Normalize to a flat array of theme objects so both shapes work.
+          THEMES_FLAT="$(mktemp)"
+          if ! jq -c '[ .. | objects | select(has("id") and has("name")) ]' "$THEME_LIST_JSON" > "$THEMES_FLAT" 2>/dev/null; then
+            echo "[]" > "$THEMES_FLAT"
+          fi
+
+          ALL_COUNT="$(jq -r 'length' "$THEMES_FLAT" 2>/dev/null || echo "0")"
           echo "Found ${ALL_COUNT} total theme(s) on store."
 
           MATCHED_COUNT=0
@@ -210,7 +217,7 @@ jobs:
               echo "deleted_count=0" >> "$GITHUB_OUTPUT"
               echo "deleted_themes<<DELETED_EOF" >> "$GITHUB_OUTPUT"
               echo "DELETED_EOF" >> "$GITHUB_OUTPUT"
-              rm -f "$THEME_LIST_ERR" "$THEME_LIST_JSON" "$OPEN_PRS_FILE"
+              rm -f "$THEME_LIST_ERR" "$THEME_LIST_JSON" "${THEMES_FLAT:-}" "$OPEN_PRS_FILE"
               exit 0
             fi
             echo "Open PR count (lines): $(wc -l < "$OPEN_PRS_FILE" | tr -d ' ')"
@@ -273,6 +280,9 @@ jobs:
 
           while IFS=$'\t' read -r THEME_ID THEME_NAME THEME_ROLE; do
             [ -z "$THEME_ID" ] && continue
+            case "$(printf '%s' "$THEME_ROLE" | tr '[:upper:]' '[:lower:]')" in
+              main|live) continue ;;
+            esac
             [ -z "$THEME_NAME" ] && continue
 
             if should_delete_theme "$THEME_ID" "$THEME_NAME" "${THEME_ROLE:-}"; then
@@ -295,7 +305,7 @@ jobs:
                 sed -n '1,80p' "$DELETE_ERR" || true
               fi
             fi
-          done < <(jq -r '.[] | [.id, .name, (.role // "")] | @tsv' "$THEME_LIST_JSON")
+          done < <(jq -r '.[] | [(.id | tostring), .name, (.role // "")] | @tsv' "$THEMES_FLAT")
 
           {
             echo ""
@@ -335,7 +345,7 @@ jobs:
             echo "DELETED_EOF"
           } >> "$GITHUB_OUTPUT"
 
-          rm -f "$THEME_LIST_ERR" "$THEME_LIST_JSON" "$OPEN_PRS_FILE"
+          rm -f "$THEME_LIST_ERR" "$THEME_LIST_JSON" "${THEMES_FLAT:-}" "$OPEN_PRS_FILE"
 
       - name: Upload deleted count for matrix fan-in
         if: inputs.result_artifact_prefix != ''

@@ -110,15 +110,28 @@ jobs:
               THEME_JSON=$(shopify theme list \
                 --store "$DOMAIN" \
                 --password "$SHOPIFY_TOKEN" \
-                --json 2>/dev/null || echo "[]")
+                --json 2>/dev/null || true)
 
-              STAGING_THEME_ID=$(echo "$THEME_JSON" | jq -r '
+              # Shopify CLI <5 prints a bare array of themes; CLI 5+ prints
+              # {"themes":[...]} (or {"environments":[...]} for multi-env runs).
+              # Collect every theme-shaped object regardless of nesting, skip the
+              # live theme, and never fail the step: a missing preview link only
+              # degrades the PR body, it must not block opening the PR.
+              STAGING_THEME_ID=$(printf '%s' "$THEME_JSON" | jq -r \
+                --arg repo "$REPO_NAME" --arg branch "$STAGING" '
+                [ .. | objects | select(has("id") and has("name")) ]
+                | map(select(((.role // "") | ascii_downcase) as $r | $r != "main" and $r != "live"))
+                | map(select((.name | type) == "string")) as $themes
                 # Prefer exact branch theme naming: "<repo>/<staging-branch>"
-                (map(select(.role != "main" and .name == ($repo + "/" + $branch)))[0].id)
+                | ( ($themes | map(select(.name == ($repo + "/" + $branch)))[0].id)
                 # Fallback: branch suffix match (still branch-specific)
-                // (map(select(.role != "main" and (.name | endswith("/" + $branch))))[0].id)
-                // empty
-              ' --arg repo "$REPO_NAME" --arg branch "$STAGING")
+                  // ($themes | map(select(.name | endswith("/" + $branch)))[0].id)
+                  // empty )
+                | tostring
+              ' 2>/dev/null | head -n 1 || true)
+              case "$STAGING_THEME_ID" in
+                ''|*[!0-9]*) STAGING_THEME_ID="" ;;
+              esac
             fi
 
             if [ -n "$STAGING_THEME_ID" ]; then
