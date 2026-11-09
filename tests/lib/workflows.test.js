@@ -351,6 +351,19 @@ describe('workflows', () => {
         assert.match(wf, /Exact SHA only/);
         assert.match(wf, /stale-head/);
         assert.match(wf, /skipped: no theme changes, no preview/);
+        // Fail closed on select: never synthesize skipBrowser/themeFileCount:0 on failure
+        assert.match(wf, /failing closed: running full suite/);
+        assert.match(wf, /selectionFailed: true/);
+        assert.match(wf, /skipBrowser: false/);
+        assert.doesNotMatch(
+          wf,
+          /echo '\{"scope":"small"[^']*"skipBrowser":true,"themeFileCount":0\}'/
+        );
+        // Preview resolve failure must close qa-manual (not leave required check pending)
+        assert.match(wf, /Close checks when preview URL cannot be resolved/);
+        assert.match(wf, /preview\.outcome == 'failure'/);
+        assert.match(wf, /failed: preview URL unresolved/);
+        assert.match(wf, /conclusion: 'neutral'/);
         // Theme specs via dual projects — do not pass qa/specs as CLI path
         assert.doesNotMatch(wf, /EXTRA="qa\/specs"/);
         assert.match(wf, /Do not pass qa\/specs as a CLI path/);

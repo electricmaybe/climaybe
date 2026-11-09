@@ -8,12 +8,14 @@ import {
   QA_REQUIRED_CHECKS,
   QA_RULESET_NAME,
   QA_RULESET_ADMIN_BYPASS_ACTORS,
+  QA_RULESET_PLAN_LIMITATION_MESSAGE,
   getQaRulesetRefIncludes,
   buildQaRulesetPayload,
   normalizeBypassActorsForCompare,
   normalizeQaRulesetForCompare,
   qaRulesetMatchesDesired,
   isAdminPermissionError,
+  isRulesetPlanLimitationError,
   syncQaRuleset,
   logQaRulesetResult,
 } from '../../src/lib/qa-ruleset.js';
@@ -153,12 +155,21 @@ describe('qa-ruleset', () => {
     });
   });
 
-  describe('isAdminPermissionError', () => {
+  describe('isAdminPermissionError / isRulesetPlanLimitationError', () => {
     it('recognizes common admin/403 failure text', () => {
       assert.equal(isAdminPermissionError('HTTP 403: Forbidden'), true);
       assert.equal(isAdminPermissionError('Must have admin rights to Repository'), true);
       assert.equal(isAdminPermissionError('Resource not accessible by integration'), true);
       assert.equal(isAdminPermissionError('Not Found'), false);
+    });
+
+    it('detects free-org private-repo plan gating and does not call it admin', () => {
+      const planMsg =
+        "Upgrade to GitHub Pro or make this repository public to enable this feature";
+      assert.equal(isRulesetPlanLimitationError(planMsg), true);
+      assert.equal(isRulesetPlanLimitationError(`HTTP 403: ${planMsg}`), true);
+      assert.equal(isAdminPermissionError(`HTTP 403: ${planMsg}`), false);
+      assert.equal(isRulesetPlanLimitationError('HTTP 403: Forbidden'), false);
     });
   });
 
@@ -273,6 +284,26 @@ describe('qa-ruleset', () => {
       assert.equal(result.skipped, 'admin_required');
       assert.match(result.message, /admin permission/i);
     });
+
+    it('reports plan_required (not admin) for free-org rulesets 403', () => {
+      const body =
+        'HTTP 403: Upgrade to GitHub Pro or make this repository public to enable this feature';
+      const client = {
+        listRulesets() {
+          const err = new Error(body);
+          err.body = body;
+          throw err;
+        },
+        getRuleset() {},
+        createRuleset() {},
+        updateRuleset() {},
+      };
+      const result = syncQaRuleset({ mode: 'single', cwd, client });
+      assert.equal(result.skipped, 'plan_required');
+      assert.equal(result.message, QA_RULESET_PLAN_LIMITATION_MESSAGE);
+      assert.match(result.message, /not enforced via a ruleset/i);
+      assert.doesNotMatch(result.message, /admin permission/i);
+    });
   });
 
   describe('logQaRulesetResult', () => {
@@ -294,6 +325,17 @@ describe('qa-ruleset', () => {
         message: 'GitHub token lacks admin permission to manage repository rulesets.',
       });
       assert.match(logs.join('\n'), /admin permission/i);
+    });
+
+    it('reports plan_required with plan-limitation copy', () => {
+      logQaRulesetResult({
+        skipped: 'plan_required',
+        message: QA_RULESET_PLAN_LIMITATION_MESSAGE,
+      });
+      const out = logs.join('\n');
+      assert.match(out, /unavailable on this GitHub plan/i);
+      assert.match(out, /not enforced via a ruleset/i);
+      assert.doesNotMatch(out, /admin permission/i);
     });
 
     it('reports create / noop', () => {

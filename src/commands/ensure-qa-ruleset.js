@@ -32,6 +32,16 @@ export async function ensureQaRulesetCommand(opts = {}) {
   const result = syncQaRuleset({ mode, cwd: process.cwd(), dryRun });
   logQaRulesetResult(result, mode);
 
+  // Plan limitation: informative only — checks still run, just aren't ruleset-enforced.
+  if (result.skipped === 'plan_required') {
+    console.log(
+      pc.dim(
+        '\n  No action needed for this plan: Store QA workflows still post qa-auto / qa-manual checks; ' +
+          'they simply cannot be required via a repository ruleset until the plan allows it.\n'
+      )
+    );
+    return;
+  }
   if (result.skipped === 'admin_required') {
     console.log(
       pc.dim(
