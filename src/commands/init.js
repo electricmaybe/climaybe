@@ -49,6 +49,7 @@ import {
   setGitLabVariable,
 } from '../lib/github-secrets.js';
 import { logBranchProtectionResult, syncBranchProtection } from '../lib/branch-protection.js';
+import { logQaRulesetResult, syncQaRuleset } from '../lib/qa-ruleset.js';
 
 function installThemeDependencies(cwd = process.cwd()) {
   try {
@@ -256,6 +257,15 @@ async function runInitFlow() {
     includeLinear: enableLinearWorkflows,
     includeStoreQa: enableStoreQaWorkflows,
   });
+
+  // 6b. Repo-level QA ruleset (required checks) when Store QA is enabled
+  if (enableStoreQaWorkflows) {
+    const qaRuleset = syncQaRuleset({
+      mode,
+      cwd: process.cwd(),
+    });
+    logQaRulesetResult(qaRuleset, mode);
+  }
 
   // 7. Optional commitlint + Husky and the AI ruleset (rules, skills, agents + editor bridges)
   if (enableCommitlint) {

@@ -1,5 +1,5 @@
 import pc from 'picocolors';
-import { readConfig } from '../lib/config.js';
+import { isStoreQaWorkflowsEnabled, readConfig } from '../lib/config.js';
 import { requireThemeProject } from '../lib/theme-guard.js';
 import {
   isGitRepo,
@@ -10,6 +10,7 @@ import {
   pushBranchesToOrigin,
 } from '../lib/git.js';
 import { logBranchProtectionResult, syncBranchProtection } from '../lib/branch-protection.js';
+import { logQaRulesetResult, syncQaRuleset } from '../lib/qa-ruleset.js';
 
 /**
  * Create missing staging (single-store) or staging + per-store branches (multi-store) from current HEAD.
@@ -60,6 +61,10 @@ export async function ensureBranchesCommand() {
             '  Rule: PR required on protected branches; live-* bypass allowed for shopify[bot], github-actions[bot], actions-user.'
           )
         );
+      }
+      if (isStoreQaWorkflowsEnabled()) {
+        const qaRuleset = syncQaRuleset({ mode, cwd: process.cwd() });
+        logQaRulesetResult(qaRuleset, mode);
       }
       console.log('');
     } catch (err) {
