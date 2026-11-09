@@ -32,6 +32,8 @@ List of `{ id, title, expected?, devices?, when?, required_on? }`. Merged with [
 
 Project Playwright tests. Tag with the same `@funnel` / `@pdp` / `@cart` / `@car` / … labels used by [`selection-rules.json`](./selection-rules.json). CI greps the selected tag set.
 
+Discovered via dual Playwright projects: packaged `journeys/` + `universal/` use the climaybe package playwright dir as `testDir` (so `node_modules` skip does not hide them), and theme `qa/specs` use a sibling `*-theme` project with `testDir` = `qa/specs`. Do **not** pass `qa/specs` alone as a CLI path — that replaces discovery roots. Diff-based `--grep` still selects across both projects.
+
 ## Opt-in (theme repo)
 
 1. Install a climaybe version that includes store QA.
@@ -62,7 +64,8 @@ Plus `qa/config.yml` with `base_branches: [live-*]` and store fixtures. A follow
 - **Selection:** `git diff` base…head → [`selection-rules.json`](./selection-rules.json) → Playwright `--grep`. No theme changes → `qa-auto` **passes** with `skipped: no theme changes, no preview`. Theme-changing PRs always run the purchase funnel. Scope: small / medium / release.
 - **Install:** `npm ci --ignore-scripts` so PR-head lifecycle scripts never see secrets.
 - **Gatekeeper:** funnel steps record pass/fail/blocked without aborting the chain; report applies `blockedTagsForFailures` / implications. Console errors aggregate into the auto comment.
-- **Checks:** `qa-auto` (blocks merge on failure) + `qa-manual` (pending until checklist boxes are ticked; forge-safe re-eval on bot comment edit bound to head SHA). **Branch protection:** require `qa-auto` / `qa-manual` only on `main` and `live-*` rules — not on staging/other bases. Non-target bases still get terminal success checks so nothing hangs if they were required by mistake.
+- **Checks:** `qa-auto` (blocks merge on failure) + `qa-manual` (pending until checklist boxes are ticked; forge-safe re-eval on bot comment edit bound to head SHA). **Branch protection:** require `qa-auto` / `qa-manual` only on `main` and `live-*` rules where Store QA is enabled — not on staging/other bases. Non-target bases **and** gate skips (not opted in / missing `qa/config.yml`) post terminal success checks so required-check lists do not hang.
+- **Preview navigation:** `gotoPath` joins the preview base with the storefront path via the URL API so `?preview_theme_id=` stays a query param (never `…?preview_theme_id=ID/products/…`).
 - **Comments:** one auto results comment + one manual task-list comment (updated in place; manual ticks preserved across synchronize).
 - **Auto-fix:** on failure, one Cursor agent via `CURSOR_API_KEY` **per PR** (`climaybe-qa-autofix-attempted`); after the fix push, still-failing → owner comment, no more agents. No auto-merge.
 - **Cost:** single job, browser cache, selected tests only, `workflow_run` instead of polling.

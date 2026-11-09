@@ -2,6 +2,7 @@ import { test as base, expect } from '@playwright/test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadQaConfig, resolveStoreFixtures } from '../../lib/config-loader.js';
+import { joinPreviewUrl } from '../../lib/preview-url.js';
 
 function consoleLogPath() {
   const root = process.env.QA_THEME_ROOT || process.cwd();
@@ -76,16 +77,18 @@ export { expect };
 
 /**
  * Navigate to a product path on the preview base.
+ * Uses the URL API so `?preview_theme_id=` on the base is preserved and the
+ * path is not concatenated into the query string.
  * @param {import('@playwright/test').Page} page
  * @param {string} path
  */
 export async function gotoPath(page, path) {
   const base = process.env.PLAYWRIGHT_BASE_URL || process.env.QA_PREVIEW_URL || '';
-  const url = path.startsWith('http')
-    ? path
-    : `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+  const url = joinPreviewUrl(base, path);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
 }
+
+export { joinPreviewUrl };
 
 /**
  * Rough z-index / overlay check: primary ATC center must not be covered by sticky chrome.

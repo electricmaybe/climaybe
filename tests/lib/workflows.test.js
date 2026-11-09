@@ -346,10 +346,15 @@ describe('workflows', () => {
         assert.doesNotMatch(wf, /pull_requests\[0\]\.base\.ref/);
         assert.match(wf, /wrong-base/);
         assert.match(wf, /Close checks for non-target base/);
+        assert.match(wf, /Close checks when gate skips/);
         assert.match(wf, /npm ci --ignore-scripts/);
         assert.match(wf, /Exact SHA only/);
         assert.match(wf, /stale-head/);
         assert.match(wf, /skipped: no theme changes, no preview/);
+        // Theme specs via dual projects — do not pass qa/specs as CLI path
+        assert.doesNotMatch(wf, /EXTRA="qa\/specs"/);
+        assert.match(wf, /Do not pass qa\/specs as a CLI path/);
+        assert.match(wf, /dual projects/);
         // CURSOR_API_KEY must not be job-level env (only autofix step)
         assert.doesNotMatch(wf, /^ {4}env:\n {6}CURSOR_API_KEY:/m);
         assert.match(wf, /# Secret only on this step[\s\S]*CURSOR_API_KEY: \$\{\{ secrets\.CURSOR_API_KEY \}\}/);
