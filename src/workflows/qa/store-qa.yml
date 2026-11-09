@@ -206,6 +206,44 @@ jobs:
             echo "Store QA skipped (not opted in, wrong base, or missing qa/config.yml)."
           fi
 
+      - name: Close checks when gate skips (avoid hanging required checks)
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'false'
+        uses: actions/github-script@v7
+        env:
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_BASE_BRANCH: ${{ steps.pr.outputs.base_branch }}
+        with:
+          script: |
+            const sha = process.env.QA_HEAD_SHA;
+            const base = process.env.QA_BASE_BRANCH || '';
+            if (!sha) {
+              console.log('No head SHA; cannot close checks.');
+              return;
+            }
+            const summary =
+              `Store QA gate skipped for base \`${base}\` (not opted in, base not in ` +
+              'store QA bases, or missing qa/config.yml). ' +
+              'Require qa-auto / qa-manual only on main and live-* branch protection rules ' +
+              'where Store QA is enabled.';
+            for (const name of ['qa-auto', 'qa-manual']) {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name,
+                head_sha: sha,
+                status: 'completed',
+                conclusion: 'success',
+                output: {
+                  title: 'Store QA skipped (gate)',
+                  summary,
+                },
+              });
+            }
+            await core.summary
+              .addHeading('Store QA skipped — gate')
+              .addRaw(summary)
+              .write();
+
       - name: Select tests (skip green when no theme changes)
         id: select
         if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true'

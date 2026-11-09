@@ -346,6 +346,7 @@ describe('workflows', () => {
         assert.doesNotMatch(wf, /pull_requests\[0\]\.base\.ref/);
         assert.match(wf, /wrong-base/);
         assert.match(wf, /Close checks for non-target base/);
+        assert.match(wf, /Close checks when gate skips/);
         assert.match(wf, /npm ci --ignore-scripts/);
         assert.match(wf, /Exact SHA only/);
         assert.match(wf, /stale-head/);

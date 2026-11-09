@@ -20,6 +20,7 @@ import {
   pickPreviewUrlFromComment,
   previewCommentMatchesHead,
   resolveQaStoreAlias,
+  joinPreviewUrl,
 } from '../../src/qa/lib/preview-url.js';
 import { normalizePlaywrightResults, applyGatekeeperToRows } from '../../src/commands/store-qa.js';
 
@@ -55,6 +56,45 @@ describe('store QA config + autofix helpers', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('lets per-store features override root features (e.g. contact_path)', () => {
+    const fixtures = resolveStoreFixtures(
+      {
+        features: { contact_path: '/pages/contact', newsletter: true },
+        stores: [
+          {
+            alias: 'norway',
+            features: { contact_path: '/pages/kontakt', newsletter: false },
+          },
+        ],
+      },
+      'norway'
+    );
+    assert.equal(fixtures.contactPath, '/pages/kontakt');
+    assert.equal(fixtures.features.newsletter, false);
+    assert.equal(fixtures.features.contact_path, '/pages/kontakt');
+  });
+
+  it('joins preview base + path without swallowing path into preview_theme_id', () => {
+    const base = 'https://voldt-euro.myshopify.com/?preview_theme_id=123456789';
+    const joined = joinPreviewUrl(base, '/products/sample-bike');
+    const url = new URL(joined);
+    assert.equal(url.origin, 'https://voldt-euro.myshopify.com');
+    assert.equal(url.pathname, '/products/sample-bike');
+    assert.equal(url.searchParams.get('preview_theme_id'), '123456789');
+    assert.equal(joined.includes('preview_theme_id=123456789/products'), false);
+
+    const withQuery = joinPreviewUrl(base, '/products/x?variant=9');
+    const u2 = new URL(withQuery);
+    assert.equal(u2.pathname, '/products/x');
+    assert.equal(u2.searchParams.get('preview_theme_id'), '123456789');
+    assert.equal(u2.searchParams.get('variant'), '9');
+
+    assert.equal(
+      joinPreviewUrl(base, 'https://other.example/products/y'),
+      'https://other.example/products/y'
+    );
   });
 
   it('documents CURSOR_API_KEY secret name and no-ops without it', async () => {

@@ -1,6 +1,58 @@
 /**
  * Extract a preview URL from the climaybe preview PR comment, pinned to head SHA.
+ * Also helpers to join a preview base (often `https://host/?preview_theme_id=…`)
+ * with a storefront path without swallowing the path into the query string.
  */
+
+/**
+ * Join a Playwright/preview base URL with a relative storefront path.
+ * Correctly preserves `preview_theme_id` (and any other) query params on the base,
+ * and merges query/hash from the path when present.
+ *
+ * @param {string} baseUrl e.g. `https://shop.myshopify.com/?preview_theme_id=123`
+ * @param {string} pathOrUrl e.g. `/products/foo` or `/products/foo?variant=1`
+ * @returns {string}
+ */
+export function joinPreviewUrl(baseUrl, pathOrUrl) {
+  const rawPath = String(pathOrUrl || '').trim();
+  if (!rawPath) return String(baseUrl || '');
+  if (/^https?:\/\//i.test(rawPath)) return rawPath;
+
+  const base = String(baseUrl || '').trim();
+  if (!base) {
+    return rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+  }
+
+  let url;
+  try {
+    url = new URL(base);
+  } catch {
+    // Relative or invalid base — fall back to path-only join without query mangling
+    const origin = base.replace(/\/$/, '');
+    const path = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+    return `${origin}${path}`;
+  }
+
+  const pathUrl = new URL(rawPath.startsWith('/') ? rawPath : `/${rawPath}`, 'https://climaybe.invalid');
+  url.pathname = joinPathnames(url.pathname, pathUrl.pathname);
+  for (const [key, value] of pathUrl.searchParams.entries()) {
+    url.searchParams.set(key, value);
+  }
+  if (pathUrl.hash) url.hash = pathUrl.hash;
+  return url.toString();
+}
+
+/**
+ * @param {string} basePath
+ * @param {string} extraPath
+ */
+function joinPathnames(basePath, extraPath) {
+  const left = String(basePath || '/').replace(/\/+$/, '') || '';
+  const right = String(extraPath || '/');
+  if (!left || left === '') return right.startsWith('/') ? right : `/${right}`;
+  if (right === '/') return left || '/';
+  return `${left}${right.startsWith('/') ? right : `/${right}`}`;
+}
 
 /**
  * @param {string} body

@@ -32,7 +32,8 @@ export function resolveStoreFixtures(config, storeAlias) {
   const products = { ...(config?.products || {}), ...(store?.products || {}) };
   const collections = { ...(config?.collections || {}), ...(store?.collections || {}) };
   const viewports = config?.viewports || ['mobile', 'tablet', 'desktop'];
-  const features = config?.features || {};
+  // Per-store features override root features (e.g. contact_path, variants).
+  const features = { ...(config?.features || {}), ...(store?.features || {}) };
   const baseBranches = config?.base_branches || null;
 
   // Soft-pass variant change only when config explicitly says the product has no variants.
