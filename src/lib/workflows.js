@@ -39,7 +39,7 @@ function copyWorkflow(srcDir, fileName, destDir) {
  * but for simplicity we track known filenames instead.
  */
 function getKnownWorkflowFiles() {
-  const dirs = ['shared', 'single', 'multi', 'preview', 'build', 'profile', 'linear'];
+  const dirs = ['shared', 'single', 'multi', 'preview', 'build', 'profile', 'linear', 'qa'];
   const files = new Set();
   for (const dir of dirs) {
     const dirPath = join(TEMPLATES_DIR, dir);
@@ -91,6 +91,7 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
     includeBuild = false,
     includeProfile = false,
     includeLinear = false,
+    includeStoreQa = false,
     includeNightlyHotfix = isNightlyHotfixEnabled(cwd),
   } = options;
   const dest = ghWorkflowsDir(cwd);
@@ -156,6 +157,13 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
     }
   }
 
+  if (includeStoreQa) {
+    const qaDir = join(TEMPLATES_DIR, 'qa');
+    for (const f of listYmls(qaDir)) {
+      copyWorkflow(qaDir, f, dest);
+    }
+  }
+
   // Re-attach repo-specific jobs (e.g. a custom unit-tests job) to regenerated workflows.
   for (const [f, old] of Object.entries(previous)) {
     const p = join(dest, f);
@@ -174,4 +182,5 @@ export function scaffoldWorkflows(mode = 'single', options = {}, cwd = process.c
   console.log(pc.dim(`  Profile workflows: ${includeProfile ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Nightly hotfix tag: ${includeNightlyHotfix ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Linear workflows: ${includeLinear ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Store QA workflows: ${includeStoreQa ? 'enabled' : 'disabled'}`));
 }

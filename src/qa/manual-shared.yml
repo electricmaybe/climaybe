@@ -1,0 +1,59 @@
+# Shared manual checklist shipped by climaybe.
+# Theme repos merge this with qa/manual.yml; selection filters by diff tags.
+version: 1
+items:
+  - id: M01
+    title: Swipe the PDP gallery and pinch-zoom on a real device or iOS Simulator
+    expected: Smooth snap, correct active slide, sharp image after zoom
+    devices: [iphone]
+    when: [gallery, pdp, length]
+    required_on: [release]
+
+  - id: M02
+    title: Tap search / Find Your Car / newsletter inputs on mobile Safari
+    expected: Page does not auto-zoom; keyboard does not cover primary CTA
+    devices: [iphone]
+    when: [nav, car, forms, header]
+    required_on: [release, medium]
+
+  - id: M03
+    title: Scroll until the address bar collapses; check sticky ATC and float buttons
+    expected: Controls stay in the safe area and are tappable
+    devices: [iphone]
+    when: [cart, overlay, header, pdp]
+    required_on: [release]
+
+  - id: M04
+    title: Run the purchase funnel manually with Mac Safari → Develop → Simulator console open
+    expected: No theme-sourced red errors
+    devices: [iphone]
+    when: [funnel, pdp, cart, quality]
+    required_on: [release]
+
+  - id: M05
+    title: Confirm form submissions arrive (mail / Klaviyo) on staging or preview
+    expected: Record received for newsletter / contact / waitlist test address
+    devices: [desktop]
+    when: [forms]
+    required_on: [release]
+
+  - id: M06
+    title: Open changed sections in the theme editor
+    expected: Settings work; preview does not break
+    devices: [desktop]
+    when: [templates, config, pdp, layout]
+    required_on: [release, medium]
+
+  - id: M07
+    title: Skim AI / screenshot tour for overlaps, shifts, and empty regions
+    expected: No CTA covered; no horizontal scroll; no stuck overlays
+    devices: [desktop]
+    when: [styles, overlay, visual, zindex]
+    required_on: [release]
+
+  - id: M08
+    title: Spot-check third-party wishlist / review widgets when those areas changed
+    expected: Widgets render and respond to clicks
+    devices: [iphone, desktop]
+    when: [tracking]
+    required_on: [release]

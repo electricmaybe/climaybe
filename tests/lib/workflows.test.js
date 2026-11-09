@@ -325,6 +325,37 @@ describe('workflows', () => {
       }
     });
 
+    it('includes store QA workflows when includeStoreQa is true', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeStoreQa: true }, dir);
+        const workflowsDir = join(dir, '.github', 'workflows');
+        assert.ok(existsSync(join(workflowsDir, 'store-qa.yml')), 'expected store-qa.yml');
+        assert.ok(existsSync(join(workflowsDir, 'store-qa-manual.yml')), 'expected store-qa-manual.yml');
+        const wf = readFileSync(join(workflowsDir, 'store-qa.yml'), 'utf-8');
+        assert.match(wf, /name: qa-auto/);
+        assert.match(wf, /CURSOR_API_KEY/);
+        assert.match(wf, /draft == false/);
+        assert.match(wf, /live-\*/);
+        assert.match(wf, /store_qa_workflows/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('omits store QA workflows by default and removes them on rescaffold', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeStoreQa: true }, dir);
+        assert.ok(existsSync(join(dir, '.github', 'workflows', 'store-qa.yml')));
+        scaffoldWorkflows('single', {}, dir);
+        const files = readdirSync(join(dir, '.github', 'workflows')).filter((f) => f.endsWith('.yml'));
+        assert.ok(!files.includes('store-qa.yml'), 'expected store-qa.yml removed when disabled');
+      } finally {
+        teardown();
+      }
+    });
+
     it('profile workflow measures 4 templates with TTFB averaging', () => {
       const dir = setup();
       try {

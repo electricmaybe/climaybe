@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://electricmaybe.com/schemas/climaybe-qa-config.json",
+  "title": "climaybe theme qa/config.yml",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "base_branches": {
+      "type": "array",
+      "description": "PR base branch patterns that enable store QA (e.g. main, live-*). Defaults from climaybe mode when omitted.",
+      "items": { "type": "string" }
+    },
+    "preview_base": {
+      "type": "string",
+      "description": "Optional fallback storefront origin when the PR preview comment has no URL yet."
+    },
+    "viewports": {
+      "type": "array",
+      "items": { "enum": ["mobile", "tablet", "desktop"] },
+      "default": ["mobile", "tablet", "desktop"]
+    },
+    "features": {
+      "type": "object",
+      "properties": {
+        "newsletter": { "type": "boolean" },
+        "contact_form": { "type": "boolean" },
+        "contact_path": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "console_allowlist": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Substrings; matching console/network noise is ignored (third parties)."
+    },
+    "products": {
+      "type": "object",
+      "properties": {
+        "sample": { "type": "string" },
+        "with_variants": { "type": "string" },
+        "sold_out": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "collections": {
+      "type": "object",
+      "properties": {
+        "sample": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "stores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["alias"],
+        "properties": {
+          "alias": { "type": "string" },
+          "preview_base": { "type": "string" },
+          "products": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "collections": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

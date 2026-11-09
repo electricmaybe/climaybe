@@ -4,6 +4,13 @@
 
 ---
 
+## Store QA (change-aware Playwright, opt-in)
+
+- New optional package (`store_qa_workflows: true`): scaffolds `store-qa.yml` + `store-qa-manual.yml`.
+- Shared core under `src/qa/` (selection rules, purchase funnel, universal checks, shared manual list, Cursor auto-fix helper). Theme repos add `qa/config.yml` (+ optional `manual.yml` / `specs/`) — contract in `src/qa/README.md`.
+- Runs only on non-draft PRs into `main` / `live-*` after **PR Update** succeeds for the head SHA. `qa-auto` + pending `qa-manual` checklist. Optional `CURSOR_API_KEY` for one auto-fix round per SHA (never auto-merges).
+- Covered by `tests/qa/*.test.js` and scaffolding asserts in `tests/lib/workflows.test.js`.
+
 ## Hotfix tagging weekly with an early-exit gate; Create Release gate
 
 - `nightly-hotfix.yml` (opt-in via `nightly_hotfix: true`) now runs **weekly** (Mondays 07:00 UTC / 02:00 US Eastern) instead of nightly; `workflow_dispatch` is kept. The workflow name stays `Nightly Hotfix Tag` so `workflow_run` listeners (`create-release.yml`, `main-to-staging-stores.yml`) keep matching.

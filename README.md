@@ -218,6 +218,7 @@ The CLI writes config into `climaybe.config.json`:
     "live": "Done"
   },
   "lighthouse_workflows": true,
+  "store_qa_workflows": false,
   "commitlint": true,
   "cursor_skills": true,
   "ai_editors": ["cursor", "claude"],
@@ -232,7 +233,7 @@ The CLI writes config into `climaybe.config.json`:
 
 `linear_team` is the Linear team key (from IDs like `VOL-77`). `linear_statuses.store` is a **literal** Linear workflow state name (angle brackets included), not interpolated with a store alias. Do **not** put `LINEAR_API_KEY` in this file.
 
-`lighthouse_workflows` gates the `lighthouse.yml` workflow, which runs only on non-draft pull requests from `staging` into `main` (with the right secrets). `nightly_hotfix: true` opts into the scheduled Nightly Hotfix Tag workflow (off by default). `ai_editors` records which editors are bridged to `.config/ai/`. `harness` opts into the coding-agent harness (and lets `update` create only missing harness files). Optional `base_branch` defaults to `staging`. Optional `dev_store` overrides which domain AGENTS.md labels as the default/dev store (falls back to `default_store`). Older configs without these keys keep working: Lighthouse defaults to on when build workflows exist.
+`lighthouse_workflows` gates the `lighthouse.yml` workflow, which runs only on non-draft pull requests from `staging` into `main` (with the right secrets). `store_qa_workflows: true` opts into change-aware Playwright store QA on non-draft PRs into `main` (single-store) or `live-*` (multi-store); see [Store QA](#store-qa-optional). `nightly_hotfix: true` opts into the scheduled Nightly Hotfix Tag workflow (off by default). `ai_editors` records which editors are bridged to `.config/ai/`. `harness` opts into the coding-agent harness (and lets `update` create only missing harness files). Optional `base_branch` defaults to `staging`. Optional `dev_store` overrides which domain AGENTS.md labels as the default/dev store (falls back to `default_store`). Older configs without these keys keep working: Lighthouse defaults to on when build workflows exist.
 
 Workflows read this config at runtime — no hardcoded values in YAML files.
 
@@ -351,6 +352,21 @@ Configure Linear team workflow **regexes** in the Linear UI as usual; this Actio
 | `linear-status-sync.yml` | Push to `staging`, `main`, `staging-*`, `live-*` | Gate on `LINEAR_API_KEY`, scan `git log` (+ associated PR titles) for Linear IDs, `issueUpdate` to the mapped workflow state |
 
 Requires secret `LINEAR_API_KEY` (Linear personal API key). Do not store the key in `climaybe.config.json`.
+
+### Store QA (optional)
+
+Opt-in change-aware Playwright store QA. Enabled via `climaybe init` (`Enable store QA workflows?`; default **no**) or by setting `"store_qa_workflows": true` then `npx climaybe update`. Requires preview workflows and a theme-repo `qa/` folder (contract: [`src/qa/README.md`](src/qa/README.md)).
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| `store-qa.yml` | Non-draft PR into `main` or `live-*` | Waits for **PR Update** success on the head SHA, selects at-risk tests from the base…head diff, always runs the purchase funnel, posts/updates one `qa-auto` results comment, posts a manual checklist comment, uploads traces/screenshots. Optional one-shot Cursor auto-fix via `CURSOR_API_KEY`. |
+| `store-qa-manual.yml` | Checklist comment create/edit | Re-evaluates task boxes; `qa-manual` check stays pending until all are ticked |
+
+**Theme contract:** `qa/config.yml` (stores, sample products/variants/collections, viewports, flags), optional `qa/manual.yml`, optional `qa/specs/`. Shared core (selection rules, funnel journey, universal checks, shared manual list) ships inside climaybe.
+
+**Secrets:** `CURSOR_API_KEY` (optional) — Cursor Cloud Agents API key for one auto-fix round per head SHA; step no-ops when unset. Never auto-merges.
+
+**Voldt `live-*` pilot:** set `store_qa_workflows: true`, keep `preview_workflows: true`, add `qa/config.yml` with `base_branches: [live-*]`, install `@playwright/test`, run `npx climaybe update`.
 
 ### Build and Lighthouse workflows
 
@@ -551,6 +567,7 @@ Add the following secrets to your GitHub repository (or use **GitLab CI/CD varia
 | `SHOP_ACCESS_TOKEN` | Optional* | Legacy Admin custom-app access token (pre-2026 apps only; prefer client ID/secret) |
 | `LHCI_GITHUB_APP_TOKEN` | Optional* | Required only when Lighthouse is enabled |
 | `SHOP_PASSWORD` | Optional | Storefront password for Lighthouse when the shop is password-protected (not available via Admin API) |
+| `CURSOR_API_KEY` | Optional | Cursor Cloud Agents API key for store QA auto-fix (one attempt per head SHA; no-op when unset) |
 
 **Shopify auth (preview + Lighthouse):** Prefer your Dev Dashboard / agency app (e.g. Trafo) client credentials. CI exchanges `SHOP_CLIENT_ID` + `SHOP_CLIENT_SECRET` for a short-lived Admin API token (`write_themes`; also `read_products` for Lighthouse). Install the app on each CI store. Theme Access passwords remain a legacy fallback via `SHOPIFY_THEME_ACCESS_TOKEN`.
 

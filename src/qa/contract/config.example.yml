@@ -1,0 +1,49 @@
+# Example qa/config.yml for a theme repo (Voldt-style multi-store).
+# Copy to the theme repo as qa/config.yml and adjust fixtures.
+version: 1
+
+# Multi-store live pilot: only PRs into live-* (never staging-*).
+# Single-alias repos (e.g. Interior Icons) typically use: [main]
+base_branches: [live-*]
+
+viewports: [mobile, tablet, desktop]
+
+features:
+  newsletter: true
+  contact_form: true
+  contact_path: /pages/contact
+
+console_allowlist:
+  - klaviyo
+  - swym
+  - etrusted
+  - clarity
+  - googletagmanager
+  - youtube
+  - shopifycloud
+
+# Defaults used when a store entry omits a path
+products:
+  sample: /products/type-2-cable
+  with_variants: /products/type-2-cable
+  sold_out: /products/sold-out-fixture
+
+collections:
+  sample: /collections/all
+
+stores:
+  - alias: euro
+    # Optional fallback origin; CI prefers the PR Update preview URL for the head SHA
+    preview_base: https://voldt-staging.myshopify.com
+    products:
+      sample: /products/type-2-cable
+      with_variants: /products/type-2-cable
+      sold_out: /products/sold-out-fixture
+    collections:
+      sample: /collections/chargers
+  - alias: norway
+    preview_base: https://voldt-norway.myshopify.com
+    products:
+      sample: /products/type-2-cable
+    collections:
+      sample: /collections/all

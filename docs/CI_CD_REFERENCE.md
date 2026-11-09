@@ -58,6 +58,17 @@ When enabled (`linear_workflows: true`), `linear-status-sync.yml` runs on pushes
 
 Linear team workflow regexes remain configured in the Linear UI. This Action covers store-alias hops Linear’s native git automations cannot see (`main-to-staging-stores` and generic live deploy PRs). Do not store the API key in git or `climaybe.config.json`. Set or rotate it with `climaybe update:linear-key`.
 
+## Store QA (optional)
+
+When enabled (`store_qa_workflows: true`), climaybe scaffolds `store-qa.yml` and `store-qa-manual.yml`. Theme repos also add a `qa/` folder — see `src/qa/README.md` for the contract (`config.yml`, optional `manual.yml`, optional `specs/`).
+
+1. **Trigger:** non-draft PRs whose base is `main` (single-store default) or `live-*` (multi-store default). Override with `qa/config.yml` → `base_branches` or `climaybe.config.json` → `store_qa_base_branches`. Never staging bases or drafts.
+2. **Preview gate:** waits until workflow **PR Update** completes successfully for the PR’s latest head SHA, then uses that head’s preview URL (never a stale preview).
+3. **Selection:** `git diff` base…head → `src/qa/selection-rules.json` → Playwright `--grep`. Purchase funnel (`@funnel`) always runs. Scope scales small / medium / release with PR size and hot paths (`layout/`, `config/`, `main.js`).
+4. **Checks:** `qa-auto` fails the job (blocks merge when required); `qa-manual` stays pending until the checklist comment boxes are ticked (`store-qa-manual.yml` on comment edit).
+5. **Auto-fix:** optional `CURSOR_API_KEY` launches one Cursor Cloud Agent against the same PR branch for the head SHA; marker comment prevents loops; still-failing leaves an owner note. Never auto-merges.
+6. **Cost:** single job, Playwright browser cache, selected tests only.
+
 ## Build workflows (optional)
 
 - Build workflows install dependencies via `npm ci` and run `npx --no-install climaybe build-scripts` (scripts) and `npx --no-install climaybe build` (Tailwind), so CI uses versions pinned in `package-lock.json`.

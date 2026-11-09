@@ -1,0 +1,67 @@
+# climaybe — Store QA manual checklist re-evaluation
+# Re-runs when the qa-manual checklist PR comment is edited; completes the
+# qa-manual check once every task box is ticked.
+
+name: Store QA Manual
+
+on:
+  issue_comment:
+    types: [edited, created]
+
+jobs:
+  qa-manual:
+    name: qa-manual
+    if: >
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '<!-- climaybe-qa-manual -->')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      checks: write
+    steps:
+      - name: Parse checklist + update qa-manual check
+        uses: actions/github-script@v7
+        env:
+          QA_MANUAL_BODY: ${{ github.event.comment.body }}
+        with:
+          script: |
+            const body = process.env.QA_MANUAL_BODY || '';
+            const uncheckedIds = [];
+            const uncheckedRe = /^- \[ \] \*\*([^*]+)\*\*/gm;
+            const checkedRe = /^- \[x\] \*\*([^*]+)\*\*/gim;
+            let m;
+            while ((m = uncheckedRe.exec(body))) uncheckedIds.push(m[1]);
+            let checked = 0;
+            while ((m = checkedRe.exec(body))) checked += 1;
+            let total = uncheckedIds.length + checked;
+            if (total === 0) {
+              const u = body.match(/^- \[ \] /gm) || [];
+              const c = body.match(/^- \[x\] /gim) || [];
+              total = u.length + c.length;
+              checked = c.length;
+              // treat no-id unchecked as incomplete
+              if (u.length) uncheckedIds.push(...u.map(() => '(item)'));
+            }
+            const complete = total > 0 && uncheckedIds.length === 0;
+
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            const headSha = pr.data.head.sha;
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'qa-manual',
+              head_sha: headSha,
+              status: complete ? 'completed' : 'in_progress',
+              conclusion: complete ? 'success' : undefined,
+              output: {
+                title: complete ? 'Manual QA complete' : 'Manual QA checklist pending',
+                summary: complete
+                  ? `All ${total} manual items checked.`
+                  : `${total - checked} of ${total} manual item(s) remaining.`,
+              },
+            });

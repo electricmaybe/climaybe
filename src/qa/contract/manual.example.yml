@@ -1,0 +1,18 @@
+# Example qa/manual.yml — project-specific manual items.
+# Merged with climaybe's shared manual list (src/qa/manual-shared.yml).
+# Same id overrides the shared item.
+version: 1
+items:
+  - id: V-M01
+    title: Confirm Find Your Car float states on a real iPhone
+    expected: Empty → select car; with car → brand logo; model page → edit preselected
+    devices: [iphone]
+    when: [car]
+    required_on: [release, medium]
+
+  - id: V-M02
+    title: Theme-editor pass for changed Find Your Car sections
+    expected: Settings save; preview updates
+    devices: [desktop]
+    when: [car]
+    required_on: [release]
