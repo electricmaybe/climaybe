@@ -1,0 +1,605 @@
+# climaybe — Store QA (optional)
+# Change-aware Playwright store tests against the PR preview URL.
+# Opt in: "store_qa_workflows": true in climaybe.config.json + qa/config.yml in the theme repo.
+#
+# Triggered by workflow_run after PR Update succeeds (no busy-wait).
+# Runs ONLY for non-draft same-repo PRs whose base is main (single-store) or live-* (multi-store).
+# Secrets:
+#   CURSOR_API_KEY (optional) — scoped only to the autofix step; one Cursor cloud auto-fix round per PR
+
+name: Store QA
+
+on:
+  workflow_run:
+    workflows: ['PR Update']
+    types: [completed]
+
+concurrency:
+  group: store-qa-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  qa-auto:
+    name: qa-auto
+    # Fail closed before checkout/install/secret use: successful PR Update,
+    # same-repo head only, and only pull_request-triggered runs.
+    # Do NOT rely on workflow_run.pull_requests[0] here — that array is often
+    # empty. Base filtering (main / live-*) happens in the resolve step below.
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+      actions: read
+    steps:
+      - name: Resolve PR pinned to workflow_run.head_sha
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const runSha = run.head_sha;
+            const headBranch = run.head_branch;
+            const headRepo = run.head_repository?.full_name || '';
+
+            // Defense in depth (also enforced at job if:)
+            if (headRepo && headRepo !== context.repo.owner + '/' + context.repo.repo) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'fork-head');
+              console.log(`Skipping Store QA: head repo ${headRepo} is not ${context.repo.owner}/${context.repo.repo}`);
+              return;
+            }
+
+            const listed = run.pull_requests || [];
+            let pr = listed.find(p => p.head?.sha === runSha) || null;
+
+            if (!pr) {
+              const { data: pulls } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                head: `${context.repo.owner}:${headBranch}`,
+                per_page: 20,
+              });
+              // Exact SHA only — never fall back to pulls[0]
+              pr = pulls.find(p => p.head?.sha === runSha) || null;
+            }
+
+            if (!pr) {
+              // Broader search by SHA across open PRs (branch rename / head mismatch)
+              const { data: openPulls } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 50,
+              });
+              pr = openPulls.find(p => p.head?.sha === runSha) || null;
+            }
+
+            if (!pr) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'no-pr-for-sha');
+              console.log(`No open PR whose head is exactly ${runSha}; skipping.`);
+              return;
+            }
+
+            const full = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            const data = full.data;
+
+            if (data.head.repo?.full_name && data.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'fork-head');
+              console.log(`Skipping Store QA: PR head is from fork ${data.head.repo.full_name}`);
+              return;
+            }
+
+            if (data.draft) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'draft');
+              console.log('PR is draft; skipping Store QA.');
+              return;
+            }
+
+            // Always pin outputs to the workflow_run head SHA (not a drifting PR head)
+            core.setOutput('pr_number', String(data.number));
+            core.setOutput('head_sha', runSha);
+            core.setOutput('head_branch', data.head.ref);
+            core.setOutput('base_branch', data.base.ref);
+            core.setOutput('pr_url', data.html_url);
+
+            const base = data.base.ref || '';
+            if (base !== 'main' && !base.startsWith('live-')) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'wrong-base');
+              console.log(`Base ${base} is not main/live-*; skipping Store QA (checks closed below).`);
+              return;
+            }
+
+            // If the PR head moved on, this run is stale — a newer Store QA run will handle it.
+            if (data.head.sha !== runSha) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'stale-head');
+              console.log(`PR #${data.number} head is now ${data.head.sha}, not run SHA ${runSha}; skipping.`);
+              return;
+            }
+
+            core.setOutput('run', 'true');
+
+      - name: Close checks for non-target base (avoid hanging required checks)
+        if: steps.pr.outputs.run == 'false' && steps.pr.outputs.reason == 'wrong-base'
+        uses: actions/github-script@v7
+        env:
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_BASE_BRANCH: ${{ steps.pr.outputs.base_branch }}
+        with:
+          script: |
+            const sha = process.env.QA_HEAD_SHA;
+            const base = process.env.QA_BASE_BRANCH || '';
+            if (!sha) {
+              console.log('No head SHA; cannot close checks.');
+              return;
+            }
+            const summary =
+              `Store QA skipped: base \`${base}\` is not main/live-*. ` +
+              'Require qa-auto / qa-manual only on main and live-* branch protection rules ' +
+              '(not staging / other bases), so non-target PRs are not blocked.';
+            for (const name of ['qa-auto', 'qa-manual']) {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name,
+                head_sha: sha,
+                status: 'completed',
+                conclusion: 'success',
+                output: {
+                  title: `Store QA skipped (base ${base})`,
+                  summary,
+                },
+              });
+            }
+            await core.summary
+              .addHeading('Store QA skipped — non-target base')
+              .addRaw(summary)
+              .write();
+
+      - name: Checkout workflow_run head SHA
+        if: steps.pr.outputs.run == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        if: steps.pr.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies (ignore scripts — do not run PR-head lifecycle)
+        if: steps.pr.outputs.run == 'true'
+        run: |
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi
+
+      - name: Gate — opt-in + base branch + qa/config
+        id: gate
+        if: steps.pr.outputs.run == 'true'
+        env:
+          QA_BASE_BRANCH: ${{ steps.pr.outputs.base_branch }}
+        run: |
+          set +e
+          npx --no-install climaybe store-qa gate --base-branch "$QA_BASE_BRANCH"
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Store QA skipped (not opted in, wrong base, or missing qa/config.yml)."
+          fi
+
+      - name: Select tests (skip green when no theme changes)
+        id: select
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true'
+        env:
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_BASE_BRANCH: ${{ steps.pr.outputs.base_branch }}
+          QA_HEAD_BRANCH: ${{ steps.pr.outputs.head_branch }}
+        run: |
+          set -euo pipefail
+          mkdir -p qa-results
+          git fetch origin "$QA_BASE_BRANCH" --depth=1 || true
+          BASE_REF="origin/${QA_BASE_BRANCH}"
+          npx --no-install climaybe store-qa select \
+            --base "$BASE_REF" \
+            --base-branch "$QA_BASE_BRANCH" \
+            --head-branch "$QA_HEAD_BRANCH" || true
+          if [ ! -f qa-results/selection.json ]; then
+            echo '{"scope":"small","tags":["@funnel","@purchase"],"grep":"@funnel|@purchase","browserProjects":["mobile-webkit","desktop-chromium"],"skipBrowser":true,"themeFileCount":0}' > qa-results/selection.json
+          fi
+          STORE_ALIAS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.storeAlias||"")')
+          GREP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.grep||"@funnel")')
+          PROJECTS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write((s.browserProjects||[]).join(","))')
+          SKIP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(String(!!s.skipBrowser || Number(s.themeFileCount||0)===0))')
+          THEME_COUNT=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(String(s.themeFileCount||0))')
+          echo "store_alias=$STORE_ALIAS" >> "$GITHUB_OUTPUT"
+          echo "grep=$GREP" >> "$GITHUB_OUTPUT"
+          echo "projects=$PROJECTS" >> "$GITHUB_OUTPUT"
+          echo "theme_count=$THEME_COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$SKIP" = "true" ]; then
+            echo "skip_browser=true" >> "$GITHUB_OUTPUT"
+            echo "No theme changes (themeFileCount=$THEME_COUNT) — skipping browsers / preview (green)."
+          else
+            echo "skip_browser=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post skipped summary (no theme changes, no preview)
+        id: skipped
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.select.outputs.skip_browser == 'true'
+        uses: actions/github-script@v7
+        env:
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- climaybe-qa-auto -->';
+            const sha = process.env.QA_HEAD_SHA || '';
+            const body = [
+              marker,
+              `<!-- climaybe-qa-auto-sha:${sha} -->`,
+              '## Store QA — automated results',
+              '',
+              '**skipped: no theme changes, no preview**',
+              '',
+              'No theme files changed in this PR, so there is no Shopify preview to test against.',
+              '`qa-auto` passes (not a failure). Theme-changing PRs still always run the purchase funnel.',
+              '',
+              sha ? `Head: \`${sha}\`` : null,
+              process.env.QA_RUN_URL ? `Run: ${process.env.QA_RUN_URL}` : null,
+              '',
+            ].filter(Boolean).join('\n');
+            fs.mkdirSync('qa-results', { recursive: true });
+            fs.writeFileSync('qa-results/auto-comment.md', body + '\n', 'utf8');
+            fs.writeFileSync('qa-results/skipped.json', JSON.stringify({
+              reason: 'no-theme-changes-no-preview',
+              headSha: sha,
+            }, null, 2) + '\n');
+
+            const issue_number = Number(process.env.QA_PR_NUMBER);
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => {
+              const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+              return bot && (c.body || '').includes(marker);
+            });
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+            }
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'qa-auto',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'success',
+              output: {
+                title: 'Store QA skipped',
+                summary: 'skipped: no theme changes, no preview',
+              },
+            });
+
+            // Manual check: nothing to do when no theme changes
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'qa-manual',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'success',
+              output: {
+                title: 'Manual QA not required',
+                summary: 'No theme changes — manual checklist skipped.',
+              },
+            });
+
+            await core.summary
+              .addHeading('Store QA skipped')
+              .addRaw('skipped: no theme changes, no preview')
+              .write();
+
+      - name: Resolve preview URL for workflow_run head SHA (fail closed)
+        id: preview
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.select.outputs.skip_browser != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_STORE_ALIAS: ${{ steps.select.outputs.store_alias }}
+        run: |
+          set -euo pipefail
+          COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" --paginate)
+          PREVIEW_URL=$(QA_PR_COMMENTS="$COMMENTS" QA_HEAD_SHA="$QA_HEAD_SHA" QA_STORE_ALIAS="${QA_STORE_ALIAS:-}" \
+            npx --no-install climaybe store-qa resolve-preview)
+          echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          echo "preview_ready=true" >> "$GITHUB_OUTPUT"
+          echo "Found preview for $QA_HEAD_SHA (${QA_STORE_ALIAS:-default}): $PREVIEW_URL"
+
+      - name: Cache Playwright browsers
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-webkit-chromium
+
+      - name: Install Playwright browsers
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        run: |
+          npx --no-install playwright install --with-deps webkit chromium || npx playwright install --with-deps webkit chromium
+
+      - name: Run selected Playwright tests
+        id: pw
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.preview_url }}
+          QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+          QA_THEME_ROOT: ${{ github.workspace }}
+          QA_PROJECTS: ${{ steps.select.outputs.projects }}
+          QA_STORE_ALIAS: ${{ steps.select.outputs.store_alias }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          set +e
+          CONFIG=$(node -e '
+            const path=require("path");
+            try {
+              const {createRequire}=require("module");
+              const req=createRequire(path.join(process.cwd(),"package.json"));
+              const pkg=path.dirname(req.resolve("climaybe/package.json"));
+              console.log(path.join(pkg,"src/qa/playwright/playwright.config.js"));
+            } catch {
+              console.log("node_modules/climaybe/src/qa/playwright/playwright.config.js");
+            }
+          ')
+          EXTRA=""
+          if [ -d qa/specs ]; then EXTRA="qa/specs"; fi
+          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.select.outputs.grep }}" $EXTRA
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" != "0" ]; then echo "failed=true" >> "$GITHUB_OUTPUT"; else echo "failed=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Build auto report comment
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        env:
+          QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+          QA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          npx --no-install climaybe store-qa report --head-sha "$QA_HEAD_SHA" || true
+
+      - name: Upsert qa-auto PR comment
+        id: upsert_auto
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        uses: actions/github-script@v7
+        env:
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- climaybe-qa-auto -->';
+            const body = fs.existsSync('qa-results/auto-comment.md')
+              ? fs.readFileSync('qa-results/auto-comment.md', 'utf8')
+              : `${marker}\n## Store QA — automated results\n\n_No report generated._`;
+            const issue_number = Number(process.env.QA_PR_NUMBER);
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => {
+              const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+              return bot && (c.body || '').includes(marker);
+            });
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.setOutput('comment_id', String(existing.id));
+            } else {
+              const created = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+              core.setOutput('comment_id', String(created.data.id));
+            }
+
+      - name: Upsert qa-manual PR comment + pending check
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        uses: actions/github-script@v7
+        env:
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+        with:
+          script: |
+            const fs = require('fs');
+            const { execFileSync } = require('child_process');
+            const marker = '<!-- climaybe-qa-manual -->';
+            const issue_number = Number(process.env.QA_PR_NUMBER);
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => {
+              const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+              return bot && (c.body || '').includes(marker);
+            });
+            const previousBody = existing?.body || '';
+            execFileSync('npx', ['--no-install', 'climaybe', 'store-qa', 'manual',
+              '--head-sha', process.env.QA_HEAD_SHA,
+              '--preview-url', process.env.QA_PREVIEW_URL || '',
+            ], {
+              env: { ...process.env, QA_PREVIOUS_MANUAL_BODY: previousBody },
+              stdio: 'inherit',
+            });
+            const body = fs.existsSync('qa-results/manual.md')
+              ? fs.readFileSync('qa-results/manual.md', 'utf8')
+              : `${marker}\n<!-- climaybe-qa-manual-sha:${process.env.QA_HEAD_SHA} -->\n## Store QA — manual checklist\n\n- [x] No manual checks required`;
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.setOutput('manual_comment_id', String(existing.id));
+            } else {
+              const created = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+              core.setOutput('manual_comment_id', String(created.data.id));
+            }
+
+            const unchecked = (body.match(/^- \[ \] /gm) || []).length;
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'qa-manual',
+              head_sha: process.env.QA_HEAD_SHA,
+              status: unchecked === 0 ? 'completed' : 'in_progress',
+              conclusion: unchecked === 0 ? 'success' : undefined,
+              output: {
+                title: unchecked === 0 ? 'Manual QA complete' : 'Manual QA checklist pending',
+                summary: unchecked === 0
+                  ? 'All manual checklist items are checked.'
+                  : `${unchecked} manual item(s) remaining. Tick boxes on the Store QA manual checklist comment.`,
+              },
+            });
+
+      - name: Auto-fix round (optional CURSOR_API_KEY, once per PR)
+        id: autofix
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true' && steps.pw.outputs.failed == 'true'
+        env:
+          # Secret only on this step — never exposed to checkout/install/test of PR-head code
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          QA_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          QA_PR_URL: ${{ steps.pr.outputs.pr_url }}
+          QA_HEAD_BRANCH: ${{ steps.pr.outputs.head_branch }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" --paginate)
+          export QA_PRIOR_COMMENTS="$COMMENTS"
+          RESULT=$(npx --no-install climaybe store-qa autofix --head-sha "$QA_HEAD_SHA" || true)
+          echo "$RESULT"
+          echo "$RESULT" > qa-results/autofix-stdout.json
+          REASON=$(node -e 'try{const j=JSON.parse(process.argv[1]);console.log(j.reason||(j.ok&&!j.skipped?"triggered":"error"))}catch{console.log("error")}' "$RESULT")
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+          case "$REASON" in
+            triggered) AF=triggered ;;
+            missing-secret) AF=skipped-missing-secret ;;
+            already-ran) AF=skipped-already-ran ;;
+            failed-still) AF=failed-still ;;
+            no-failures) AF=skipped-no-failures ;;
+            *) AF=skipped-missing-secret ;;
+          esac
+          echo "autofix_status=$AF" >> "$GITHUB_OUTPUT"
+          if [ "$REASON" = "triggered" ]; then
+            gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" -f body="<!-- climaybe-qa-autofix-attempted -->"$'\n'"Store QA auto-fix agent launched for this PR (head \`$QA_HEAD_SHA\`). **Exactly one attempt per PR.** After the agent pushes, tests re-run; if they still fail, owner action is required. Never auto-merges."
+          fi
+          if [ "$REASON" = "failed-still" ]; then
+            gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" -f body="<!-- climaybe-qa-autofix-failed-still -->"$'\n'"## Store QA — owner action required"$'\n\n'"Auto-fix already ran once on this PR and automated tests are still failing on \`$QA_HEAD_SHA\`. No further agents will be launched. Please inspect the qa-auto report and artifacts."
+          fi
+          npx --no-install climaybe store-qa report --head-sha "$QA_HEAD_SHA" --autofix "$AF" || true
+
+      - name: Re-upsert qa-auto comment after autofix status
+        if: always() && steps.autofix.outputs.autofix_status != ''
+        uses: actions/github-script@v7
+        env:
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('qa-results/auto-comment.md')) return;
+            const marker = '<!-- climaybe-qa-auto -->';
+            const body = fs.readFileSync('qa-results/auto-comment.md', 'utf8');
+            const issue_number = Number(process.env.QA_PR_NUMBER);
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => {
+              const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+              return bot && (c.body || '').includes(marker);
+            });
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+            }
+
+      - name: Upload Playwright artifacts
+        if: always() && steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-qa-${{ steps.pr.outputs.pr_number }}-${{ steps.pr.outputs.head_sha }}
+          path: |
+            qa-results/
+          if-no-files-found: ignore
+
+      - name: Fail job when tests failed
+        if: steps.pw.outputs.failed == 'true'
+        run: |
+          echo "Store QA automated tests failed (qa-auto)."
+          exit 1

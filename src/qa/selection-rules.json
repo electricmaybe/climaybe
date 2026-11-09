@@ -1,0 +1,275 @@
+{
+  "alwaysTags": ["@funnel", "@purchase"],
+  "themePaths": [
+    "assets/",
+    "blocks/",
+    "config/",
+    "layout/",
+    "locales/",
+    "sections/",
+    "snippets/",
+    "templates/",
+    "_scripts/",
+    "_styles/",
+    "shopify.theme.toml",
+    "stores/"
+  ],
+  "nonThemeGlobs": [
+    ".github/",
+    "docs/",
+    "tests/",
+    "tools/",
+    "qa/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "CONTRIBUTING.md",
+    "package.json",
+    "package-lock.json",
+    ".gitignore",
+    ".shopifyignore",
+    "climaybe.config.json"
+  ],
+  "releasePathGlobs": [
+    "layout/",
+    "config/",
+    "_scripts/main.js",
+    "assets/index.js",
+    "assets/core-components.js"
+  ],
+  "scopes": {
+    "small": {
+      "maxThemeFiles": 5,
+      "viewports": ["mobile", "desktop"],
+      "description": "J1 (mobile WebKit + desktop Chromium) + mapped tests on mobile and desktop"
+    },
+    "medium": {
+      "maxThemeFiles": 30,
+      "viewports": ["mobile", "tablet", "desktop"],
+      "description": "J1 three viewports + mapped tests three viewports + home/PDP/collection/cart screenshots"
+    },
+    "release": {
+      "viewports": ["mobile", "tablet", "desktop"],
+      "fullSuite": true,
+      "description": "Full automated package three viewports + manual checklist"
+    }
+  },
+  "rules": [
+    {
+      "id": "pdp",
+      "globs": [
+        "sections/product--*",
+        "snippets/product--*",
+        "_scripts/product--*",
+        "assets/productpage.js",
+        "assets/product*.js"
+      ],
+      "tags": ["@pdp", "@variant", "@funnel"],
+      "manual": ["M01", "M04", "M06"]
+    },
+    {
+      "id": "length",
+      "globs": [
+        "snippets/product--length-*",
+        "_scripts/product--length-slider.js",
+        "assets/product--length-slider.js",
+        "assets/length-slider.css",
+        "*length-slider*"
+      ],
+      "tags": ["@pdp", "@variant", "@length", "@funnel"],
+      "manual": ["M01", "M04"]
+    },
+    {
+      "id": "gallery",
+      "globs": [
+        "*electric-slider*",
+        "*electric-thumbnails*",
+        "*product--slider*",
+        "*product-gallery*",
+        "_scripts/product-gallery*"
+      ],
+      "tags": ["@pdp", "@gallery"],
+      "manual": ["M01", "M04"],
+      "forceViewports": ["mobile", "tablet", "desktop"]
+    },
+    {
+      "id": "cart",
+      "globs": [
+        "sections/cart--*",
+        "snippets/cart--*",
+        "*api--cart--*",
+        "*header--cart*",
+        "_scripts/cart*",
+        "assets/cart*"
+      ],
+      "tags": ["@cart", "@funnel"],
+      "manual": ["M03", "M04"]
+    },
+    {
+      "id": "car-finder",
+      "globs": [
+        "*find-your-car*",
+        "*find-my-car*",
+        "*selected-car*",
+        "*api--find-your-car*",
+        "*car-model*",
+        "*car-brand*",
+        "*car-match*",
+        "*find-your-cable*",
+        "collection.car-*.json"
+      ],
+      "tags": ["@car"],
+      "manual": ["M02", "M04"]
+    },
+    {
+      "id": "header-nav",
+      "globs": [
+        "sections/header*",
+        "snippets/header*",
+        "*header--*",
+        "*country-selector*",
+        "*language-selector*",
+        "*m--country*",
+        "*m--language*"
+      ],
+      "tags": ["@nav", "@header", "@market"],
+      "manual": ["M02", "M03"]
+    },
+    {
+      "id": "overlay",
+      "globs": [
+        "*electric-modal*",
+        "*m--modal*",
+        "*m--drawer*",
+        "*electric-disclosure*",
+        "*drawer*"
+      ],
+      "tags": ["@overlay", "@zindex"],
+      "manual": ["M03", "M07"]
+    },
+    {
+      "id": "global-bundle",
+      "globs": [
+        "_scripts/main.js",
+        "assets/main.js",
+        "*core-components*",
+        "assets/index.js",
+        "_scripts/utils/**",
+        "utils/**"
+      ],
+      "tags": ["@funnel", "@nav", "@overlay", "@zindex", "@quality"],
+      "manual": ["M01", "M02", "M03", "M04", "M07"],
+      "forceScope": "medium"
+    },
+    {
+      "id": "styles",
+      "globs": ["_styles/**", "assets/style.css", "assets/critical.css", "**/*.css"],
+      "tags": ["@visual", "@zindex", "@overflow"],
+      "manual": ["M07"]
+    },
+    {
+      "id": "layout-head",
+      "globs": [
+        "layout/theme.liquid",
+        "snippets/_head-*",
+        "snippets/_script-*",
+        "*script-blocker*"
+      ],
+      "tags": ["@funnel", "@nav", "@overlay", "@quality", "@forms"],
+      "manual": ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"],
+      "forceScope": "release"
+    },
+    {
+      "id": "templates",
+      "globs": ["templates/*.json", "stores/*/templates/*.json"],
+      "tags": ["@templates"],
+      "manual": ["M06"]
+    },
+    {
+      "id": "locales",
+      "globs": ["locales/*.json", "stores/*/locales/*.json"],
+      "tags": ["@i18n", "@market"],
+      "manual": ["M07"]
+    },
+    {
+      "id": "config",
+      "globs": ["config/*", "stores/*/config/*"],
+      "tags": ["@funnel", "@visual"],
+      "manual": ["M06", "M07"],
+      "forceScope": "medium"
+    },
+    {
+      "id": "collection",
+      "globs": [
+        "*collection--*",
+        "*collection-filters*",
+        "*m--filters*",
+        "*infinite-scroll-collection*",
+        "*price-range*"
+      ],
+      "tags": ["@collection", "@nav"],
+      "manual": ["M07"]
+    },
+    {
+      "id": "forms",
+      "globs": [
+        "*contact-form*",
+        "*return-request*",
+        "*share--submit*",
+        "*footer-newsletter*",
+        "*newsletter*",
+        "*klaviyo*"
+      ],
+      "tags": ["@forms"],
+      "manual": ["M05"]
+    },
+    {
+      "id": "tracking",
+      "globs": ["*datalayer*", "*clarity-*", "*_jam-script*", "*gtm*"],
+      "tags": ["@tracking", "@quality"],
+      "manual": ["M04"]
+    }
+  ],
+  "implications": [
+    {
+      "provenBy": "@funnel-qty-increase",
+      "skips": ["@funnel-add-to-cart"]
+    },
+    {
+      "provenBy": "@funnel-checkout",
+      "skips": ["@funnel-cart-page-load"]
+    },
+    {
+      "provenBy": "@variant-change",
+      "skips": ["@variant-select-only"]
+    }
+  ],
+  "gatekeepers": [
+    {
+      "id": "smoke",
+      "tags": ["@funnel-smoke"],
+      "blocksAll": true
+    },
+    {
+      "id": "variant",
+      "tags": ["@variant-change"],
+      "blocks": [
+        "@funnel-add-to-cart",
+        "@funnel-qty-increase",
+        "@funnel-qty-decrease",
+        "@funnel-remove",
+        "@funnel-checkout"
+      ]
+    },
+    {
+      "id": "qty",
+      "tags": ["@funnel-qty-increase"],
+      "blocks": ["@funnel-qty-decrease", "@funnel-remove", "@funnel-checkout"]
+    },
+    {
+      "id": "checkout",
+      "tags": ["@funnel-checkout"],
+      "blocks": []
+    }
+  ]
+}

@@ -269,9 +269,6 @@ export function isProfileWorkflowsEnabled(cwd = process.cwd()) {
 }
 
 /**
- * Whether optional Linear issue-status sync workflows are enabled.
- */
-/**
  * Whether the scheduled Nightly Hotfix Tag workflow is scaffolded.
  * Opt-in (`"nightly_hotfix": true`); off by default to save Actions minutes.
  */
@@ -280,9 +277,21 @@ export function isNightlyHotfixEnabled(cwd = process.cwd()) {
   return config?.nightly_hotfix === true;
 }
 
+/**
+ * Whether optional Linear issue-status sync workflows are enabled.
+ */
 export function isLinearWorkflowsEnabled(cwd = process.cwd()) {
   const config = readConfig(cwd);
   return config?.linear_workflows === true;
+}
+
+/**
+ * Whether optional change-aware store QA workflows are enabled.
+ * Opt-in (`"store_qa_workflows": true`); requires preview workflows + qa/config.yml.
+ */
+export function isStoreQaWorkflowsEnabled(cwd = process.cwd()) {
+  const config = readConfig(cwd);
+  return config?.store_qa_workflows === true;
 }
 
 /**

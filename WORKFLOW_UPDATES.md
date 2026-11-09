@@ -4,6 +4,13 @@
 
 ---
 
+## Store QA (change-aware Playwright, opt-in)
+
+- New optional package (`store_qa_workflows: true`): scaffolds `store-qa.yml` + `store-qa-manual.yml`.
+- Shared core under `src/qa/` (selection rules, purchase funnel, universal checks, shared manual list, Cursor auto-fix helper). Theme repos add `qa/config.yml` (+ optional `manual.yml` / `specs/`) — contract in `src/qa/README.md`.
+- Triggered via `workflow_run` after **PR Update** (no busy-wait). Job `if:` requires success + same-repo head + `event == pull_request` (not `pull_requests[0]`). Base `main`/`live-*` filtered in resolve; non-target bases close `qa-auto`/`qa-manual` checks so nothing hangs. Pins to `workflow_run.head_sha` (exact PR match; stale heads skip). Preview URL fail-closed on full head SHA. Non-theme PRs pass green (`skipped: no theme changes, no preview`). `npm ci --ignore-scripts`; `CURSOR_API_KEY` scoped only to autofix. Forge-safe `qa-manual`. Escalate-once autofix per PR. Gatekeeper blocked steps + console aggregation in the auto report. Require `qa-auto`/`qa-manual` only on main/`live-*` branch protection.
+- Covered by `tests/qa/*.test.js` and scaffolding asserts in `tests/lib/workflows.test.js`.
+
 ## Hotfix tagging weekly with an early-exit gate; Create Release gate
 
 - `nightly-hotfix.yml` (opt-in via `nightly_hotfix: true`) now runs **weekly** (Mondays 07:00 UTC / 02:00 US Eastern) instead of nightly; `workflow_dispatch` is kept. The workflow name stays `Nightly Hotfix Tag` so `workflow_run` listeners (`create-release.yml`, `main-to-staging-stores.yml`) keep matching.

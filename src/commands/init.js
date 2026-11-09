@@ -6,6 +6,7 @@ import {
   promptPreviewWorkflows,
   promptBuildWorkflows,
   promptProfileWorkflows,
+  promptStoreQaWorkflows,
   promptLinearWorkflows,
   promptLinearTeam,
   promptLighthouseWorkflows,
@@ -108,6 +109,15 @@ async function runInitFlow() {
   hint('CI that measures Liquid TTFB for core templates on every push to main.');
   const enableProfileWorkflows = await promptProfileWorkflows();
 
+  let enableStoreQaWorkflows = false;
+  if (enablePreviewWorkflows) {
+    hint(
+      'Change-aware Playwright store QA on non-draft PRs into live-* (multi) or main (single). Needs qa/config.yml in the theme repo.',
+      'store-qa'
+    );
+    enableStoreQaWorkflows = await promptStoreQaWorkflows();
+  }
+
   hint(
     'CI that moves Linear issues when commits land on staging, main, staging-<alias>, or live-<alias>. Covers hops Linear git automations cannot see.',
     'linear-issue-status-sync'
@@ -181,6 +191,7 @@ async function runInitFlow() {
     preview_workflows: enablePreviewWorkflows,
     build_workflows: enableBuildWorkflows,
     profile_workflows: enableProfileWorkflows,
+    store_qa_workflows: enableStoreQaWorkflows || undefined,
     linear_workflows: enableLinearWorkflows,
     linear_team: enableLinearWorkflows && linearTeam ? linearTeam : undefined,
     linear_statuses: enableLinearWorkflows ? { ...DEFAULT_LINEAR_STATUSES } : undefined,
@@ -243,6 +254,7 @@ async function runInitFlow() {
     includeBuild: enableBuildWorkflows,
     includeProfile: enableProfileWorkflows,
     includeLinear: enableLinearWorkflows,
+    includeStoreQa: enableStoreQaWorkflows,
   });
 
   // 7. Optional commitlint + Husky and the AI ruleset (rules, skills, agents + editor bridges)
@@ -302,6 +314,7 @@ async function runInitFlow() {
   console.log(pc.dim(`  Preview workflows: ${enablePreviewWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Build workflows: ${enableBuildWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Profile workflows: ${enableProfileWorkflows ? 'enabled' : 'disabled'}`));
+  console.log(pc.dim(`  Store QA workflows: ${enableStoreQaWorkflows ? 'enabled' : 'disabled'}`));
   console.log(pc.dim(`  Linear issue status sync: ${enableLinearWorkflows ? 'enabled' : 'disabled'}`));
   if (enableBuildWorkflows) {
     console.log(pc.dim(`  Lighthouse CI: ${enableLighthouseWorkflows ? 'enabled' : 'disabled'}`));

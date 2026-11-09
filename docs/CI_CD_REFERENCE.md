@@ -58,6 +58,18 @@ When enabled (`linear_workflows: true`), `linear-status-sync.yml` runs on pushes
 
 Linear team workflow regexes remain configured in the Linear UI. This Action covers store-alias hops Linear’s native git automations cannot see (`main-to-staging-stores` and generic live deploy PRs). Do not store the API key in git or `climaybe.config.json`. Set or rotate it with `climaybe update:linear-key`.
 
+## Store QA (optional)
+
+When enabled (`store_qa_workflows: true`), climaybe scaffolds `store-qa.yml` and `store-qa-manual.yml`. Theme repos also add a `qa/` folder — see `src/qa/README.md` for the contract (`config.yml`, optional `manual.yml`, optional `specs/`).
+
+1. **Trigger:** `workflow_run` after **PR Update** succeeds (no polling). Job `if:` requires conclusion success + same-repo head + `event == pull_request` (never forks; does not use often-empty `pull_requests[0]`). Base `main` / `live-*` filtering is in the pre-checkout resolve step. Override bases with `qa/config.yml` → `base_branches` or `climaybe.config.json` → `store_qa_base_branches`.
+2. **Pinning:** PR lookup is exact `workflow_run.head_sha` only (no `pulls[0]` fallback); stale heads skip. Checkout + preview resolution use that SHA.
+3. **Preview gate:** preview comment must carry the **full** head SHA; URL extraction fails closed on SHA mismatch or empty URL. Multi-store selects by `QA_STORE_ALIAS` / `[alias preview](url)`.
+4. **Selection:** `git diff` base…head → `src/qa/selection-rules.json` → Playwright `--grep`. No theme changes → `qa-auto` passes with `skipped: no theme changes, no preview`. Theme-changing PRs always run the purchase funnel. Scope scales small / medium / release.
+5. **Checks:** `qa-auto` fails the job on test failure (blocks merge when required); `qa-manual` stays pending until the bot-managed checklist boxes are ticked (`store-qa-manual.yml` on forge-safe comment edit). **Require `qa-auto` / `qa-manual` only on `main` and `live-*` branch protection** (not staging/other bases). Non-target bases post terminal success checks so required-check lists do not hang.
+6. **Auto-fix:** optional `CURSOR_API_KEY` (scoped only to the autofix step) launches one Cursor Cloud Agent **per PR**; after the fix push, still-failing leaves an owner note and launches no further agents. Install uses `--ignore-scripts`. Never auto-merges.
+7. **Cost:** single job, Playwright browser cache, selected tests only, `workflow_run` trigger.
+
 ## Build workflows (optional)
 
 - Build workflows install dependencies via `npm ci` and run `npx --no-install climaybe build-scripts` (scripts) and `npx --no-install climaybe build` (Tailwind), so CI uses versions pinned in `package-lock.json`.

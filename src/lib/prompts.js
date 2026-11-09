@@ -164,6 +164,20 @@ export async function promptProfileWorkflows() {
 }
 
 /**
+ * Ask whether change-aware store QA workflows should be scaffolded (default: no — opt-in pilot).
+ */
+export async function promptStoreQaWorkflows() {
+  const { enableStoreQaWorkflows } = await prompts({
+    type: 'confirm',
+    name: 'enableStoreQaWorkflows',
+    message: 'Enable store QA workflows? (Playwright change-aware tests on live-*/main PRs)',
+    initial: false,
+  });
+
+  return !!enableStoreQaWorkflows;
+}
+
+/**
  * Ask whether Linear issue-status sync should be scaffolded (theme default: yes).
  */
 export async function promptLinearWorkflows() {

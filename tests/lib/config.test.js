@@ -18,6 +18,7 @@ import {
   isBuildWorkflowsEnabled,
   isProfileWorkflowsEnabled,
   isLinearWorkflowsEnabled,
+  isStoreQaWorkflowsEnabled,
   isCommitlintEnabled,
   isCursorSkillsEnabled,
   addStoreToConfig,
@@ -460,6 +461,28 @@ describe('config', () => {
       try {
         writeConfig({ stores: {}, linear_workflows: true }, dir);
         assert.strictEqual(isLinearWorkflowsEnabled(dir), true);
+      } finally {
+        teardown();
+      }
+    });
+  });
+
+  describe('isStoreQaWorkflowsEnabled', () => {
+    it('returns false when not set', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {} }, dir);
+        assert.strictEqual(isStoreQaWorkflowsEnabled(dir), false);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('returns true when store_qa_workflows is true', () => {
+      const dir = setup();
+      try {
+        writeConfig({ stores: {}, store_qa_workflows: true }, dir);
+        assert.strictEqual(isStoreQaWorkflowsEnabled(dir), true);
       } finally {
         teardown();
       }

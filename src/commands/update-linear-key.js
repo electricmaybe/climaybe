@@ -4,6 +4,7 @@ import {
   getMode,
   isBuildWorkflowsEnabled,
   isPreviewWorkflowsEnabled,
+  isStoreQaWorkflowsEnabled,
   isProfileWorkflowsEnabled,
   readConfig,
   writeConfig,
@@ -81,6 +82,7 @@ export async function updateLinearKeyCommand(opts = {}) {
     includeBuild: isBuildWorkflowsEnabled(),
     includeProfile: isProfileWorkflowsEnabled(),
     includeLinear: true,
+    includeStoreQa: isStoreQaWorkflowsEnabled(),
   });
 
   if (!apiKey) {

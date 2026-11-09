@@ -9,6 +9,7 @@ import {
   isPreviewWorkflowsEnabled,
   isProfileWorkflowsEnabled,
   isLinearWorkflowsEnabled,
+  isStoreQaWorkflowsEnabled,
   readConfig,
 } from '../lib/config.js';
 import { scaffoldWorkflows } from '../lib/workflows.js';
@@ -34,6 +35,7 @@ export async function updateCommand() {
   const includeBuild = isBuildWorkflowsEnabled();
   const includeProfile = isProfileWorkflowsEnabled();
   const includeLinear = isLinearWorkflowsEnabled();
+  const includeStoreQa = isStoreQaWorkflowsEnabled();
 
   // Keep theme project files in sync (root files, package.json, .gitignore, VS Code tasks).
   scaffoldThemeDevKit({
@@ -61,7 +63,7 @@ export async function updateCommand() {
     });
   }
 
-  scaffoldWorkflows(mode, { includePreview, includeBuild, includeProfile, includeLinear });
+  scaffoldWorkflows(mode, { includePreview, includeBuild, includeProfile, includeLinear, includeStoreQa });
 
   console.log(pc.bold(pc.green('\n  Project files updated!\n')));
 }

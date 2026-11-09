@@ -9,6 +9,7 @@ import {
   isBuildWorkflowsEnabled,
   isProfileWorkflowsEnabled,
   isLinearWorkflowsEnabled,
+  isStoreQaWorkflowsEnabled,
 } from '../lib/config.js';
 import { requireThemeProject } from '../lib/theme-guard.js';
 import { createStoreBranches } from '../lib/git.js';
@@ -47,7 +48,8 @@ export async function addStoreCommand() {
   const includeBuild = isBuildWorkflowsEnabled();
   const includeProfile = isProfileWorkflowsEnabled();
   const includeLinear = isLinearWorkflowsEnabled();
-  const workflowOptions = { includePreview, includeBuild, includeProfile, includeLinear };
+  const includeStoreQa = isStoreQaWorkflowsEnabled();
+  const workflowOptions = { includePreview, includeBuild, includeProfile, includeLinear, includeStoreQa };
 
   // Prompt for new store
   const store = await promptNewStore(existingAliases);

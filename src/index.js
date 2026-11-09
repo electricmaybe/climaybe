@@ -16,6 +16,15 @@ import { createEntrypointsCommand } from './commands/create-entrypoints.js';
 import { buildSchemasCommand } from './commands/build-schemas.js';
 import { harnessCommand } from './commands/harness.js';
 import { checkCommand } from './commands/check.js';
+import {
+  storeQaAutofixCommand,
+  storeQaGateCommand,
+  storeQaManualCommand,
+  storeQaParseManualCommand,
+  storeQaReportCommand,
+  storeQaResolvePreviewCommand,
+  storeQaSelectCommand,
+} from './commands/store-qa.js';
 import { serveAll, serveAssets, serveShopify, lintAll, buildAll } from './lib/dev-runtime.js';
 
 /**
@@ -130,6 +139,72 @@ function registerThemeCommands(cmd) {
     .option('--write-baseline', 'Write docs/harness/theme-check-baseline.json from current Theme Check errors')
     .option('--quiet', 'One-line summary for agent harness (init.sh)')
     .action(checkCommand);
+
+  const storeQa = cmd
+    .command('store-qa')
+    .description('Store QA helpers (selection, manual checklist, report, autofix)');
+
+  storeQa
+    .command('gate')
+    .description('Exit 0 when store QA should run for this PR base')
+    .option('--base-branch <branch>', 'PR base branch')
+    .action(storeQaGateCommand);
+
+  storeQa
+    .command('select')
+    .description('Diff vs base and print at-risk Playwright tag selection JSON')
+    .option('--base <ref>', 'Git base ref (e.g. origin/live-euro)')
+    .option('--base-branch <branch>', 'PR base branch name')
+    .option('--head-branch <branch>', 'PR head branch name')
+    .option('--files <list>', 'Newline-separated file list (skip git diff)')
+    .option('--release', 'Force release scope')
+    .action(storeQaSelectCommand);
+
+  storeQa
+    .command('manual')
+    .description('Merge shared + qa/manual.yml and print the PR checklist markdown')
+    .option('--selection <path>', 'Path to selection.json')
+    .option('--head-sha <sha>', 'PR head SHA')
+    .option('--preview-url <url>', 'Preview URL')
+    .option('--previous-body <text>', 'Existing checklist comment body (preserve ticks)')
+    .action(storeQaManualCommand);
+
+  storeQa
+    .command('resolve-preview')
+    .description('Pick preview URL from PR comments pinned to full head SHA (fail closed)')
+    .option('--comments <json>', 'PR comments JSON array')
+    .option('--head-sha <sha>', 'PR head SHA')
+    .option('--store-alias <alias>', 'Store alias for multi-store preview link')
+    .action(storeQaResolvePreviewCommand);
+
+  storeQa
+    .command('report')
+    .description('Build the qa-auto PR comment from Playwright results.json')
+    .option('--results <path>', 'Playwright JSON report path')
+    .option('--selection <path>', 'selection.json path')
+    .option('--head-sha <sha>', 'PR head SHA')
+    .option('--preview-url <url>', 'Preview URL')
+    .option('--run-url <url>', 'Actions run URL')
+    .option('--autofix <status>', 'Autofix status annotation')
+    .action(storeQaReportCommand);
+
+  storeQa
+    .command('autofix')
+    .description('Launch one Cursor cloud agent for failing tests (no-op without CURSOR_API_KEY)')
+    .option('--results <path>', 'normalized-results.json path')
+    .option('--head-sha <sha>', 'PR head SHA')
+    .option('--repo-url <url>', 'Repository HTTPS URL')
+    .option('--pr-url <url>', 'Pull request URL')
+    .option('--branch <name>', 'PR head branch')
+    .option('--preview-url <url>', 'Preview URL')
+    .option('--already-ran', 'Force skip (marker already present)')
+    .action(storeQaAutofixCommand);
+
+  storeQa
+    .command('parse-manual')
+    .description('Parse checklist comment body; exit 0 when complete')
+    .option('--body <text>', 'Comment markdown body')
+    .action(storeQaParseManualCommand);
 }
 
 /**

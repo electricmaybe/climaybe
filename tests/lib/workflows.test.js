@@ -325,6 +325,57 @@ describe('workflows', () => {
       }
     });
 
+    it('includes store QA workflows when includeStoreQa is true', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeStoreQa: true }, dir);
+        const workflowsDir = join(dir, '.github', 'workflows');
+        assert.ok(existsSync(join(workflowsDir, 'store-qa.yml')), 'expected store-qa.yml');
+        assert.ok(existsSync(join(workflowsDir, 'store-qa-manual.yml')), 'expected store-qa-manual.yml');
+        const wf = readFileSync(join(workflowsDir, 'store-qa.yml'), 'utf-8');
+        assert.match(wf, /name: qa-auto/);
+        assert.match(wf, /CURSOR_API_KEY/);
+        assert.match(wf, /workflow_run/);
+        assert.match(wf, /PR Update/);
+        assert.match(wf, /climaybe-qa-autofix-attempted/);
+        assert.match(wf, /resolve-preview/);
+        assert.match(wf, /store_qa_workflows/);
+        // Security: same-repo + pull_request event on job if; base filter in resolve (not pull_requests[0])
+        assert.match(wf, /head_repository\.full_name == github\.repository/);
+        assert.match(wf, /workflow_run\.event == 'pull_request'/);
+        assert.doesNotMatch(wf, /pull_requests\[0\]\.base\.ref/);
+        assert.match(wf, /wrong-base/);
+        assert.match(wf, /Close checks for non-target base/);
+        assert.match(wf, /npm ci --ignore-scripts/);
+        assert.match(wf, /Exact SHA only/);
+        assert.match(wf, /stale-head/);
+        assert.match(wf, /skipped: no theme changes, no preview/);
+        // CURSOR_API_KEY must not be job-level env (only autofix step)
+        assert.doesNotMatch(wf, /^ {4}env:\n {6}CURSOR_API_KEY:/m);
+        assert.match(wf, /# Secret only on this step[\s\S]*CURSOR_API_KEY: \$\{\{ secrets\.CURSOR_API_KEY \}\}/);
+        const manual = readFileSync(join(workflowsDir, 'store-qa-manual.yml'), 'utf-8');
+        assert.match(manual, /types: \[edited\]/);
+        assert.doesNotMatch(manual, /types: \[edited, created\]/);
+        assert.match(manual, /github-actions\[bot\]/);
+        assert.match(manual, /climaybe-qa-manual-sha/);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('omits store QA workflows by default and removes them on rescaffold', () => {
+      const dir = setup();
+      try {
+        scaffoldWorkflows('single', { includeStoreQa: true }, dir);
+        assert.ok(existsSync(join(dir, '.github', 'workflows', 'store-qa.yml')));
+        scaffoldWorkflows('single', {}, dir);
+        const files = readdirSync(join(dir, '.github', 'workflows')).filter((f) => f.endsWith('.yml'));
+        assert.ok(!files.includes('store-qa.yml'), 'expected store-qa.yml removed when disabled');
+      } finally {
+        teardown();
+      }
+    });
+
     it('profile workflow measures 4 templates with TTFB averaging', () => {
       const dir = setup();
       try {
