@@ -257,35 +257,92 @@ jobs:
           git fetch origin "$QA_BASE_BRANCH" --depth=1 || true
           BASE_REF="origin/${QA_BASE_BRANCH}"
           # Fail closed: never synthesize skipBrowser/themeFileCount:0 on select failure
-          # (that green-skipped theme PRs). If select fails, run the full suite instead.
+          # (that green-skipped theme PRs). If select fails, run the true release full suite.
           SELECT_OK=0
           npx --no-install climaybe store-qa select \
             --base "$BASE_REF" \
             --base-branch "$QA_BASE_BRANCH" \
             --head-branch "$QA_HEAD_BRANCH" && SELECT_OK=1 || true
           if [ "$SELECT_OK" != "1" ] || [ ! -f qa-results/selection.json ]; then
-            echo "::warning::Store QA selection failed — failing closed: running full suite (will not skip browsers / report success without running)."
-            node -e '
-              const fs = require("fs");
-              const selection = {
-                scope: "release",
-                tags: ["@funnel", "@purchase"],
-                grep: "@funnel|@purchase",
-                browserProjects: ["mobile-webkit", "tablet-webkit", "desktop-chromium"],
-                viewports: ["mobile", "tablet", "desktop"],
-                skipBrowser: false,
-                themeFileCount: 1,
-                fullSuite: true,
-                selectionFailed: true,
-                changedThemeFiles: ["(selection-failed-full-suite)"],
-                matchedRules: [],
-                manualIds: [],
-              };
-              fs.writeFileSync("qa-results/selection.json", JSON.stringify(selection, null, 2) + "\n");
-            '
+            echo "::warning::Store QA selection failed — failing closed: running true release full suite (will not skip browsers / report success without running)."
+            # 1) Prefer CLI release selection with a known theme path (bypasses broken git diff).
+            FALLBACK_OK=0
+            npx --no-install climaybe store-qa select \
+              --release \
+              --files "layout/theme.liquid" \
+              --base-branch "$QA_BASE_BRANCH" \
+              --head-branch "$QA_HEAD_BRANCH" && FALLBACK_OK=1 || true
+            if [ "$FALLBACK_OK" = "1" ] && [ -f qa-results/selection.json ]; then
+              node --input-type=module -e '
+                import fs from "node:fs";
+                const s = JSON.parse(fs.readFileSync("qa-results/selection.json", "utf8"));
+                s.selectionFailed = true;
+                s.skipBrowser = false;
+                s.fullSuite = true;
+                s.scope = "release";
+                s.themeFileCount = Math.max(Number(s.themeFileCount) || 0, 1);
+                s.changedThemeFiles = ["(selection-failed-full-suite)"];
+                fs.writeFileSync("qa-results/selection.json", JSON.stringify(s, null, 2) + "\n");
+              '
+            else
+              # 2) Build the real release union via selection.js (same tags/manual/viewports as release).
+              node --input-type=module -e '
+                import fs from "node:fs";
+                import path from "node:path";
+                import { createRequire } from "node:module";
+                const req = createRequire(path.join(process.cwd(), "package.json"));
+                let mod;
+                try {
+                  const pkg = path.dirname(req.resolve("climaybe/package.json"));
+                  mod = await import(path.join(pkg, "src/qa/lib/selection.js"));
+                } catch {
+                  mod = await import(path.resolve("node_modules/climaybe/src/qa/lib/selection.js"));
+                }
+                const selection = mod.buildFailClosedFullSuiteSelection({
+                  baseBranch: process.env.QA_BASE_BRANCH || "",
+                  headBranch: process.env.QA_HEAD_BRANCH || "",
+                });
+                try {
+                  const pkg = path.dirname(req.resolve("climaybe/package.json"));
+                  const { loadQaConfig } = await import(path.join(pkg, "src/qa/lib/config-loader.js"));
+                  const { resolveQaStoreAlias } = await import(path.join(pkg, "src/qa/lib/preview-url.js"));
+                  const { config } = loadQaConfig(process.cwd());
+                  selection.storeAlias = resolveQaStoreAlias(config, {
+                    baseBranch: process.env.QA_BASE_BRANCH || "",
+                    headBranch: process.env.QA_HEAD_BRANCH || "",
+                  });
+                } catch { /* store alias optional in fail-closed path */ }
+                fs.mkdirSync("qa-results", { recursive: true });
+                fs.writeFileSync("qa-results/selection.json", JSON.stringify(selection, null, 2) + "\n");
+              ' || {
+                # 3) Absolute last resort: empty grep → Playwright runs all discovered specs.
+                echo "::warning::Could not load climaybe selection.js — failing closed with no --grep (run all specs)."
+                node -e '
+                  const fs = require("fs");
+                  fs.mkdirSync("qa-results", { recursive: true });
+                  const selection = {
+                    scope: "release",
+                    tags: [],
+                    grep: "",
+                    browserProjects: ["mobile-webkit", "tablet-webkit", "desktop-chromium"],
+                    viewports: ["mobile", "tablet", "desktop"],
+                    skipBrowser: false,
+                    themeFileCount: 1,
+                    fullSuite: true,
+                    selectionFailed: true,
+                    runAllSpecs: true,
+                    changedThemeFiles: ["(selection-failed-full-suite)"],
+                    matchedRules: [],
+                    manualIds: [],
+                  };
+                  fs.writeFileSync("qa-results/selection.json", JSON.stringify(selection, null, 2) + "\n");
+                '
+              }
+            fi
           fi
           STORE_ALIAS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.storeAlias||"")')
-          GREP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.grep||"@funnel")')
+          # Preserve empty grep (run-all last resort); only default when grep is missing entirely.
+          GREP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.grep==null?"@funnel":String(s.grep))')
           PROJECTS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write((s.browserProjects||[]).join(","))')
           SKIP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(String(!!s.skipBrowser || Number(s.themeFileCount||0)===0))')
           THEME_COUNT=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(String(s.themeFileCount||0))')
@@ -550,7 +607,13 @@ jobs:
           ')
           # Do not pass qa/specs as a CLI path: Playwright would replace discovery roots.
           # Config uses dual projects (packaged journeys/universal + theme qa/specs).
-          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.select.outputs.grep }}"
+          # Empty grep (fail-closed last resort) omits --grep so all discovered specs run.
+          GREP="${{ steps.select.outputs.grep }}"
+          if [ -n "$GREP" ]; then
+            npx --no-install playwright test -c "$CONFIG" --grep "$GREP"
+          else
+            npx --no-install playwright test -c "$CONFIG"
+          fi
           code=$?
           set -e
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
