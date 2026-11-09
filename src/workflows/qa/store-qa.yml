@@ -386,9 +386,9 @@ jobs:
               console.log("node_modules/climaybe/src/qa/playwright/playwright.config.js");
             }
           ')
-          EXTRA=""
-          if [ -d qa/specs ]; then EXTRA="qa/specs"; fi
-          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.select.outputs.grep }}" $EXTRA
+          # Do not pass qa/specs as a CLI path: Playwright would replace testDir and
+          # drop shared journeys/universal. Theme specs are discovered via testMatch.
+          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.select.outputs.grep }}"
           code=$?
           set -e
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"

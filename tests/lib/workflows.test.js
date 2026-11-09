@@ -350,6 +350,9 @@ describe('workflows', () => {
         assert.match(wf, /Exact SHA only/);
         assert.match(wf, /stale-head/);
         assert.match(wf, /skipped: no theme changes, no preview/);
+        // Theme specs discovered via config testMatch — do not pass qa/specs as CLI path
+        assert.doesNotMatch(wf, /EXTRA="qa\/specs"/);
+        assert.match(wf, /Do not pass qa\/specs as a CLI path/);
         // CURSOR_API_KEY must not be job-level env (only autofix step)
         assert.doesNotMatch(wf, /^ {4}env:\n {6}CURSOR_API_KEY:/m);
         assert.match(wf, /# Secret only on this step[\s\S]*CURSOR_API_KEY: \$\{\{ secrets\.CURSOR_API_KEY \}\}/);

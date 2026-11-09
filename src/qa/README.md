@@ -32,6 +32,8 @@ List of `{ id, title, expected?, devices?, when?, required_on? }`. Merged with [
 
 Project Playwright tests. Tag with the same `@funnel` / `@pdp` / `@cart` / `@car` / … labels used by [`selection-rules.json`](./selection-rules.json). CI greps the selected tag set.
 
+Discovered automatically by the shared Playwright config (`testDir` = theme root, `testMatch` includes `qa/specs/**/*.spec.js` plus packaged `journeys/` / `universal/`). Do **not** pass `qa/specs` alone as a Playwright CLI path — that replaces `testDir` and drops the shared specs.
+
 ## Opt-in (theme repo)
 
 1. Install a climaybe version that includes store QA.
