@@ -1,150 +1,75 @@
 import { existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
+
+export const SHARED_TEST_MATCH = [
+  '**/journeys/**/*.spec.js',
+  '**/journeys/**/*.spec.mjs',
+  '**/journeys/**/*.spec.ts',
+  '**/universal/**/*.spec.js',
+  '**/universal/**/*.spec.mjs',
+  '**/universal/**/*.spec.ts',
+];
+
+export const THEME_TEST_MATCH = [
+  '**/*.spec.js',
+  '**/*.spec.mjs',
+  '**/*.spec.ts',
+  '**/*.spec.tsx',
+];
 
 /**
- * Build Playwright testDir + testMatch so shared climaybe journeys/universal
- * and theme-repo qa/specs/** are both discoverable.
+ * Build Playwright discovery for store QA.
  *
- * Theme CI must not pass `qa/specs` as a lone CLI path: Playwright then
- * replaces testDir and would drop shared specs. Discovery belongs in config.
+ * Playwright's collectFiles skips any `node_modules` directory under testDir.
+ * Therefore shared journeys/universal must use testDir = the package playwright
+ * folder (even when that folder lives under node_modules/climaybe/…), and theme
+ * qa/specs get a separate project with testDir = `<theme>/qa/specs`.
  *
  * @param {{
  *   themeRoot: string,
  *   sharedDir: string,
- *   cliArgs?: string[],
+ *   deviceProjects: Array<{ name: string, use: object }>,
  * }} opts
  * @returns {{
- *   testDir: string,
- *   testMatch: string[],
+ *   sharedDir: string,
+ *   sharedTestMatch: string[],
  *   themeSpecsDir: string | null,
- *   sharedRel: string,
- *   explicitCliPaths: boolean,
+ *   themeTestMatch: string[],
+ *   projects: Array<{ name: string, testDir: string, testMatch: string[], use: object }>,
  * }}
  */
 export function buildStoreQaPlaywrightDiscovery(opts) {
   const themeRoot = opts.themeRoot || process.cwd();
   const sharedDir = opts.sharedDir;
-  const cliArgs = opts.cliArgs || process.argv.slice(2);
-
-  const explicitCliPaths = cliArgs.some((arg) => isExplicitTestPathArg(arg));
-  const sharedRel = normalizeRel(relative(themeRoot, sharedDir)) || '.';
+  const deviceProjects = opts.deviceProjects || [];
   const themeSpecsDir = existsSync(join(themeRoot, 'qa', 'specs'))
     ? join(themeRoot, 'qa', 'specs')
     : null;
 
-  // When callers pass explicit file/dir paths (e.g. a single theme spec),
-  // drop the journeys/universal-only filter so those paths are not zeroed out.
-  if (explicitCliPaths) {
-    return {
-      testDir: themeRoot,
-      testMatch: [
-        '**/*.spec.js',
-        '**/*.spec.mjs',
-        '**/*.spec.ts',
-        '**/*.spec.tsx',
-        '**/*.test.js',
-        '**/*.test.mjs',
-        '**/*.test.ts',
-        '**/*.test.tsx',
-        '*.spec.js',
-        '*.spec.mjs',
-        '*.spec.ts',
-        '*.test.js',
-      ],
-      themeSpecsDir,
-      sharedRel,
-      explicitCliPaths: true,
-    };
+  /** @type {Array<{ name: string, testDir: string, testMatch: string[], use: object }>} */
+  const projects = [];
+  for (const device of deviceProjects) {
+    projects.push({
+      name: device.name,
+      testDir: sharedDir,
+      testMatch: SHARED_TEST_MATCH,
+      use: device.use,
+    });
+    if (themeSpecsDir) {
+      projects.push({
+        name: `${device.name}-theme`,
+        testDir: themeSpecsDir,
+        testMatch: THEME_TEST_MATCH,
+        use: device.use,
+      });
+    }
   }
-
-  const testMatch = [
-    `${sharedRel}/journeys/**/*.spec.js`,
-    `${sharedRel}/journeys/**/*.spec.mjs`,
-    `${sharedRel}/journeys/**/*.spec.ts`,
-    `${sharedRel}/universal/**/*.spec.js`,
-    `${sharedRel}/universal/**/*.spec.mjs`,
-    `${sharedRel}/universal/**/*.spec.ts`,
-    'qa/specs/**/*.spec.js',
-    'qa/specs/**/*.spec.mjs',
-    'qa/specs/**/*.spec.ts',
-  ];
 
   return {
-    testDir: themeRoot,
-    testMatch,
+    sharedDir,
+    sharedTestMatch: SHARED_TEST_MATCH,
     themeSpecsDir,
-    sharedRel,
-    explicitCliPaths: false,
+    themeTestMatch: THEME_TEST_MATCH,
+    projects,
   };
-}
-
-/**
- * Whether a relative path under testDir matches any testMatch glob.
- * Used by unit tests (and debugging) without requiring @playwright/test.
- * @param {string} filePath relative to testDir, posix-ish
- * @param {string[]} testMatch
- */
-export function pathMatchesTestMatch(filePath, testMatch) {
-  const normalized = String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '');
-  return (testMatch || []).some((pattern) => matchSimpleGlob(normalized, pattern));
-}
-
-/**
- * @param {string} arg
- */
-function isExplicitTestPathArg(arg) {
-  const a = String(arg || '');
-  if (!a || a.startsWith('-')) return false;
-  // Playwright subcommands / config flags values are not paths we care about
-  if (a === 'test' || a === 'install' || a === 'show-report') return false;
-  if (a.endsWith('.config.js') || a.endsWith('.config.ts') || a.endsWith('.config.mjs')) return false;
-  return (
-    a.includes('qa/specs') ||
-    a.includes('qa\\specs') ||
-    /\.(spec|test)\.(js|mjs|ts|tsx)$/.test(a) ||
-    /(^|\/)journeys(\/|$)/.test(a) ||
-    /(^|\/)universal(\/|$)/.test(a)
-  );
-}
-
-/**
- * @param {string} rel
- */
-function normalizeRel(rel) {
-  return String(rel || '')
-    .replace(/\\/g, '/')
-    .replace(/^\.\//, '');
-}
-
-/**
- * Minimal ** / * glob matcher for discovery unit tests.
- * @param {string} filePath
- * @param {string} pattern
- */
-function matchSimpleGlob(filePath, pattern) {
-  const g = String(pattern || '');
-  let re = '';
-  for (let i = 0; i < g.length; i += 1) {
-    const ch = g[i];
-    if (ch === '*' && g[i + 1] === '*') {
-      re += '.*';
-      i += 1;
-      if (g[i + 1] === '/') {
-        // **/ may match zero directories — allow optional slash
-        re += '/?';
-        i += 1;
-      }
-      continue;
-    }
-    if (ch === '*') {
-      re += '[^/]*';
-      continue;
-    }
-    if ('\\.[]{}()+-^$|?'.includes(ch)) {
-      re += `\\${ch}`;
-      continue;
-    }
-    re += ch;
-  }
-  return new RegExp(`^${re}$`).test(filePath);
 }

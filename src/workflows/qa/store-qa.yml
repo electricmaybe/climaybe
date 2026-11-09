@@ -424,8 +424,8 @@ jobs:
               console.log("node_modules/climaybe/src/qa/playwright/playwright.config.js");
             }
           ')
-          # Do not pass qa/specs as a CLI path: Playwright would replace testDir and
-          # drop shared journeys/universal. Theme specs are discovered via testMatch.
+          # Do not pass qa/specs as a CLI path: Playwright would replace discovery roots.
+          # Config uses dual projects (packaged journeys/universal + theme qa/specs).
           npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.select.outputs.grep }}"
           code=$?
           set -e

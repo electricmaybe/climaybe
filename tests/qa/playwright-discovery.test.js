@@ -1,155 +1,210 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  symlinkSync,
+  existsSync,
+  realpathSync,
+} from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import {
-  buildStoreQaPlaywrightDiscovery,
-  pathMatchesTestMatch,
-} from '../../src/qa/lib/playwright-discovery.js';
+import { spawnSync } from 'node:child_process';
+import { buildStoreQaPlaywrightDiscovery } from '../../src/qa/lib/playwright-discovery.js';
 import { selectTests, loadSelectionRules } from '../../src/qa/lib/selection.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SHARED_DIR = join(__dirname, '../../src/qa/playwright');
+const CLIMAYBE_ROOT = join(__dirname, '../..');
+const CONFIG = join(CLIMAYBE_ROOT, 'src/qa/playwright/playwright.config.js');
+const THEME_MARKER = 'THEME_QA_SPEC_MARKER_car @car';
+const SHARED_MARKER = 'J1 purchase funnel'; // real packaged funnel title prefix
 
 describe('store QA playwright discovery', () => {
   /** @type {string} */
   let themeRoot;
 
   before(() => {
-    themeRoot = mkdtempSync(join(tmpdir(), 'climaybe-qa-specs-'));
+    themeRoot = mkdtempSync(join(tmpdir(), 'climaybe-qa-list-'));
     mkdirSync(join(themeRoot, 'qa', 'specs'), { recursive: true });
+    mkdirSync(join(themeRoot, 'node_modules'), { recursive: true });
     writeFileSync(
       join(themeRoot, 'qa', 'specs', 'car-finder.spec.js'),
-      "import { test } from '@playwright/test';\ntest('theme car finder @car', async () => {});\n",
+      [
+        "import { test } from '@playwright/test';",
+        `test('${THEME_MARKER}', async () => {});`,
+        '',
+      ].join('\n'),
       'utf8'
     );
-    writeFileSync(
-      join(themeRoot, 'qa', 'specs', 'cart-drawer.spec.js'),
-      "import { test } from '@playwright/test';\ntest('theme cart drawer @cart', async () => {});\n",
-      'utf8'
-    );
-    // Simulate climaybe installed under the theme's node_modules
-    const pkgPlaywright = join(
-      themeRoot,
-      'node_modules',
-      'climaybe',
-      'src',
-      'qa',
-      'playwright'
-    );
-    mkdirSync(join(pkgPlaywright, 'journeys'), { recursive: true });
-    mkdirSync(join(pkgPlaywright, 'universal'), { recursive: true });
-    writeFileSync(
-      join(pkgPlaywright, 'journeys', 'purchase-funnel.spec.js'),
-      "import { test } from '@playwright/test';\ntest('J1 purchase funnel @funnel @purchase', async () => {});\n",
-      'utf8'
-    );
-    writeFileSync(
-      join(pkgPlaywright, 'universal', 'forms.spec.js'),
-      "import { test } from '@playwright/test';\ntest('U forms @forms', async () => {});\n",
-      'utf8'
-    );
+
+    // Realistic install: climaybe lives under the theme's node_modules
+    symlinkSync(CLIMAYBE_ROOT, join(themeRoot, 'node_modules', 'climaybe'));
+    // Theme specs resolve @playwright/test from the theme tree
+    const pwPkg = join(CLIMAYBE_ROOT, 'node_modules', '@playwright');
+    if (existsSync(pwPkg)) {
+      symlinkSync(pwPkg, join(themeRoot, 'node_modules', '@playwright'));
+    }
   });
 
   after(() => {
     rmSync(themeRoot, { recursive: true, force: true });
   });
 
-  it('picks up theme qa/specs and shared journeys/universal via testMatch', () => {
+  it('builds dual projects: shared package dir + theme qa/specs (not theme-root testDir)', () => {
     const sharedDir = join(themeRoot, 'node_modules', 'climaybe', 'src', 'qa', 'playwright');
     const discovery = buildStoreQaPlaywrightDiscovery({
       themeRoot,
       sharedDir,
-      cliArgs: ['node', 'playwright', 'test', '-c', 'playwright.config.js'],
+      deviceProjects: [{ name: 'desktop-chromium', use: {} }],
     });
-
-    assert.equal(discovery.testDir, themeRoot);
-    assert.equal(discovery.explicitCliPaths, false);
-    assert.ok(discovery.themeSpecsDir);
-
-    assert.equal(
-      pathMatchesTestMatch('qa/specs/car-finder.spec.js', discovery.testMatch),
-      true,
-      'theme car spec must match testMatch'
-    );
-    assert.equal(
-      pathMatchesTestMatch('qa/specs/cart-drawer.spec.js', discovery.testMatch),
-      true,
-      'theme cart spec must match testMatch'
-    );
-    assert.equal(
-      pathMatchesTestMatch(
-        'node_modules/climaybe/src/qa/playwright/journeys/purchase-funnel.spec.js',
-        discovery.testMatch
-      ),
-      true,
-      'shared funnel must still match'
-    );
-    assert.equal(
-      pathMatchesTestMatch(
-        'node_modules/climaybe/src/qa/playwright/universal/forms.spec.js',
-        discovery.testMatch
-      ),
-      true,
-      'shared universal must still match'
-    );
-    // Old journeys/universal-only filter would miss theme specs:
-    const legacy = ['**/journeys/**/*.spec.js', '**/universal/**/*.spec.js'];
-    assert.equal(pathMatchesTestMatch('qa/specs/car-finder.spec.js', legacy), false);
+    assert.equal(discovery.projects.length, 2);
+    assert.equal(discovery.projects[0].name, 'desktop-chromium');
+    assert.equal(discovery.projects[0].testDir, sharedDir);
+    assert.equal(discovery.projects[1].name, 'desktop-chromium-theme');
+    assert.equal(discovery.projects[1].testDir, join(themeRoot, 'qa', 'specs'));
+    // Must not use theme root as shared testDir (Playwright skips node_modules there)
+    assert.notEqual(discovery.projects[0].testDir, themeRoot);
   });
 
-  it('drops the narrow filter when an explicit qa/specs path is passed on the CLI', () => {
-    const discovery = buildStoreQaPlaywrightDiscovery({
+  it('playwright test --list finds packaged AND theme specs under node_modules/climaybe', () => {
+    const configViaNodeModules = join(
       themeRoot,
-      sharedDir: SHARED_DIR,
-      cliArgs: ['test', '-c', 'cfg.js', 'qa/specs'],
+      'node_modules',
+      'climaybe',
+      'src',
+      'qa',
+      'playwright',
+      'playwright.config.js'
+    );
+    assert.equal(existsSync(configViaNodeModules), true);
+    assert.equal(realpathSync(configViaNodeModules), realpathSync(CONFIG));
+
+    const listed = runPlaywrightList({
+      cwd: themeRoot,
+      config: configViaNodeModules,
+      env: {
+        QA_THEME_ROOT: themeRoot,
+        QA_PROJECTS: 'desktop-chromium',
+      },
     });
-    assert.equal(discovery.explicitCliPaths, true);
-    assert.equal(pathMatchesTestMatch('qa/specs/car-finder.spec.js', discovery.testMatch), true);
-    assert.equal(pathMatchesTestMatch('car-finder.spec.js', discovery.testMatch), true);
+
+    const total = listed.total;
+    const sharedHits = listed.lines.filter(
+      (l) => l.includes(SHARED_MARKER) || /journeys\/|universal\//.test(l)
+    );
+    const themeHits = listed.lines.filter((l) => l.includes('THEME_QA_SPEC_MARKER_car'));
+
+    assert.ok(
+      total >= 2,
+      `expected >= 2 listed tests (packaged + theme), got ${total}\n${listed.stdout}`
+    );
+    assert.ok(
+      sharedHits.length > 0,
+      `packaged journeys/universal missing from --list (node_modules skip regression)\n${listed.stdout}`
+    );
+    assert.ok(
+      themeHits.length > 0,
+      `theme qa/specs missing from --list\n${listed.stdout}`
+    );
+
+    // Record counts for the PR report / debugging
+    writeFileSync(
+      join(themeRoot, 'list-counts.json'),
+      JSON.stringify(
+        {
+          total,
+          sharedHits: sharedHits.length,
+          themeHits: themeHits.length,
+          sample: listed.lines.slice(0, 20),
+        },
+        null,
+        2
+      ) + '\n'
+    );
   });
 
-  it('honors diff-based tag selection so only matching theme specs would run under --grep', () => {
+  it('honors --grep tag selection across shared and theme projects', () => {
+    const configViaNodeModules = join(
+      themeRoot,
+      'node_modules',
+      'climaybe',
+      'src',
+      'qa',
+      'playwright',
+      'playwright.config.js'
+    );
     const rules = loadSelectionRules();
     const carSel = selectTests(
       ['_scripts/find-your-car-popup.js', 'snippets/m--find-your-car-popup.liquid'],
       rules
     );
-    const cartSel = selectTests(['snippets/cart--drawer.liquid'], rules);
-
     assert.ok(carSel.tags.includes('@car'));
     assert.ok(carSel.tags.includes('@funnel'));
-    assert.equal(carSel.tags.includes('@cart'), false);
-    assert.ok(cartSel.tags.includes('@cart'));
-    assert.ok(cartSel.tags.includes('@funnel'));
-    assert.equal(cartSel.tags.includes('@car'), false);
 
-    // Simulate Playwright --grep over discovered titles using whole-tag tokens
-    // (@car must not false-positive on @cart).
-    const titleHasSelectedTag = (title, tags) =>
-      tags.some((tag) => new RegExp(`${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`).test(title));
-
-    const carTitle = 'theme car finder @car';
-    const cartTitle = 'theme cart drawer @cart';
-    const funnelTitle = 'J1 purchase funnel @funnel @purchase';
-
-    assert.equal(titleHasSelectedTag(carTitle, carSel.tags), true);
-    assert.equal(titleHasSelectedTag(funnelTitle, carSel.tags), true);
-    assert.equal(titleHasSelectedTag(cartTitle, carSel.tags), false);
-
-    assert.equal(titleHasSelectedTag(cartTitle, cartSel.tags), true);
-    assert.equal(titleHasSelectedTag(funnelTitle, cartSel.tags), true);
-    assert.equal(titleHasSelectedTag(carTitle, cartSel.tags), false);
-
-    // Theme files are discoverable so --grep has something to filter
-    const discovery = buildStoreQaPlaywrightDiscovery({
-      themeRoot,
-      sharedDir: join(themeRoot, 'node_modules', 'climaybe', 'src', 'qa', 'playwright'),
-      cliArgs: [],
+    const carListed = runPlaywrightList({
+      cwd: themeRoot,
+      config: configViaNodeModules,
+      grep: '@car',
+      env: {
+        QA_THEME_ROOT: themeRoot,
+        QA_PROJECTS: 'desktop-chromium',
+      },
     });
-    assert.equal(pathMatchesTestMatch('qa/specs/car-finder.spec.js', discovery.testMatch), true);
-    assert.equal(pathMatchesTestMatch('qa/specs/cart-drawer.spec.js', discovery.testMatch), true);
+    assert.ok(
+      carListed.lines.some((l) => l.includes('THEME_QA_SPEC_MARKER_car')),
+      ` --grep @car should include theme spec\n${carListed.stdout}`
+    );
+
+    const funnelListed = runPlaywrightList({
+      cwd: themeRoot,
+      config: configViaNodeModules,
+      grep: '@funnel',
+      env: {
+        QA_THEME_ROOT: themeRoot,
+        QA_PROJECTS: 'desktop-chromium',
+      },
+    });
+    assert.ok(
+      funnelListed.lines.some((l) => l.includes(SHARED_MARKER) || /@funnel/.test(l)),
+      `--grep @funnel should include packaged funnel\n${funnelListed.stdout}`
+    );
+    // Theme @car-only title should not match a pure @funnel grep unless it also has @funnel
+    assert.equal(
+      funnelListed.lines.some((l) => l.includes('THEME_QA_SPEC_MARKER_car')),
+      false,
+      'theme @car-only spec must not match --grep @funnel'
+    );
   });
 });
+
+/**
+ * @param {{ cwd: string, config: string, grep?: string, env?: Record<string,string> }} opts
+ */
+function runPlaywrightList(opts) {
+  const cli = join(CLIMAYBE_ROOT, 'node_modules', '@playwright', 'test', 'cli.js');
+  const args = [cli, 'test', '-c', opts.config, '--list'];
+  if (opts.grep) args.push('--grep', opts.grep);
+  const result = spawnSync(process.execPath, args, {
+    cwd: opts.cwd,
+    env: { ...process.env, ...(opts.env || {}) },
+    encoding: 'utf8',
+    timeout: 120_000,
+  });
+  const stdout = `${result.stdout || ''}\n${result.stderr || ''}`;
+  if (result.status !== 0) {
+    throw new Error(`playwright --list failed (status ${result.status}):\n${stdout}`);
+  }
+  const lines = stdout
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  // Playwright prints "Total: N tests in M files" (wording varies slightly by version)
+  const totalMatch = stdout.match(/Total:\s*(\d+)\s*tests?/i);
+  const total = totalMatch
+    ? Number(totalMatch[1])
+    : lines.filter((l) => /›/.test(l) || /\.spec\./.test(l)).length;
+  return { stdout, lines, total, status: result.status };
+}

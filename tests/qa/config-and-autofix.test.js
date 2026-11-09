@@ -95,6 +95,21 @@ describe('store QA config + autofix helpers', () => {
       joinPreviewUrl(base, 'https://other.example/products/y'),
       'https://other.example/products/y'
     );
+
+    const withHash = joinPreviewUrl(base, '/products/z#reviews');
+    const u3 = new URL(withHash);
+    assert.equal(u3.pathname, '/products/z');
+    assert.equal(u3.hash, '#reviews');
+    assert.equal(u3.searchParams.get('preview_theme_id'), '123456789');
+
+    const trailing = joinPreviewUrl(
+      'https://voldt-euro.myshopify.com/?preview_theme_id=123456789',
+      '/collections/all/'
+    );
+    assert.equal(new URL(trailing).pathname, '/collections/all/');
+
+    assert.equal(joinPreviewUrl('', '/products/a'), '/products/a');
+    assert.equal(joinPreviewUrl('', 'products/a'), '/products/a');
   });
 
   it('documents CURSOR_API_KEY secret name and no-ops without it', async () => {

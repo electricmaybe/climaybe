@@ -90,9 +90,18 @@
     "stylelint-config-standard": "^36.0.1",
     "tailwindcss": "^4.1.18"
   },
+  "peerDependencies": {
+    "@playwright/test": ">=1.49.0"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.2.0",
+    "@playwright/test": "^1.65.0",
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/github": "^12.0.6",
     "@semantic-release/npm": "^13.1.5",

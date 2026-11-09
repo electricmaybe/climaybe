@@ -32,7 +32,7 @@ List of `{ id, title, expected?, devices?, when?, required_on? }`. Merged with [
 
 Project Playwright tests. Tag with the same `@funnel` / `@pdp` / `@cart` / `@car` / … labels used by [`selection-rules.json`](./selection-rules.json). CI greps the selected tag set.
 
-Discovered automatically by the shared Playwright config (`testDir` = theme root, `testMatch` includes `qa/specs/**/*.spec.js` plus packaged `journeys/` / `universal/`). Do **not** pass `qa/specs` alone as a Playwright CLI path — that replaces `testDir` and drops the shared specs.
+Discovered via dual Playwright projects: packaged `journeys/` + `universal/` use the climaybe package playwright dir as `testDir` (so `node_modules` skip does not hide them), and theme `qa/specs` use a sibling `*-theme` project with `testDir` = `qa/specs`. Do **not** pass `qa/specs` alone as a CLI path — that replaces discovery roots. Diff-based `--grep` still selects across both projects.
 
 ## Opt-in (theme repo)
 

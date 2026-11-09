@@ -12,7 +12,7 @@ const projectsFilter = (process.env.QA_PROJECTS || '')
   .map((s) => s.trim())
   .filter(Boolean);
 
-const allProjects = [
+const allDevices = [
   {
     name: 'mobile-webkit',
     use: { ...devices['iPhone 13'] },
@@ -30,23 +30,27 @@ const allProjects = [
   },
 ];
 
-const projects = projectsFilter.length
-  ? allProjects.filter((p) => projectsFilter.includes(p.name))
-  : allProjects;
+const deviceProjects = projectsFilter.length
+  ? allDevices.filter((p) => projectsFilter.includes(p.name))
+  : allDevices;
 
 const discovery = buildStoreQaPlaywrightDiscovery({
   themeRoot,
   sharedDir: __dirname,
+  deviceProjects,
 });
 
 /**
- * Shared Playwright config for climaybe store QA.
- * Discovers packaged journeys/universal plus theme-repo qa/specs/**.
- * Do not pass `qa/specs` alone on the CLI — that replaces testDir and drops shared specs.
+ * Shared Playwright config for store QA.
+ *
+ * Dual projects per viewport:
+ * - `<device>` → packaged journeys/universal (testDir = this package dir)
+ * - `<device>-theme` → theme `qa/specs` (testDir = `<themeRoot>/qa/specs`)
+ *
+ * Shared testDir must NOT be the theme root: Playwright skips `node_modules`
+ * under testDir, which would hide climaybe's packaged specs.
  */
 export default defineConfig({
-  testDir: discovery.testDir,
-  testMatch: discovery.testMatch,
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
@@ -66,5 +70,5 @@ export default defineConfig({
     video: 'off',
     actionTimeout: 15_000,
   },
-  projects,
+  projects: discovery.projects,
 });
