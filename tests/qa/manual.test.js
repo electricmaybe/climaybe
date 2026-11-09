@@ -109,6 +109,27 @@ items:
     }
   });
 
+  it('preserves ticked items across synchronize upserts', () => {
+    const previous = `<!-- climaybe-qa-manual -->
+- [x] **M01**: done
+- [ ] **M05**: todo
+`;
+    const built = buildManualChecklist({
+      selection: {
+        scope: 'release',
+        tags: ['@pdp', '@forms'],
+        headSha: 'abc',
+      },
+      previousBody: previous,
+    });
+    assert.match(built.comment, /- \[x\] \*\*M01\*\*/);
+    // M05 may or may not be selected depending on when filters; if selected, preserve unchecked
+    if (built.selected.some((i) => i.id === 'M05')) {
+      assert.match(built.comment, /- \[ \] \*\*M05\*\*/);
+    }
+    assert.ok(built.preservedCheckedIds.includes('M01'));
+  });
+
   it('loadManualFile returns empty for missing path', () => {
     assert.deepEqual(loadManualFile('/no/such/manual.yml'), { items: [] });
   });

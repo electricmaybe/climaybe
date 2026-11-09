@@ -56,14 +56,14 @@ Plus `qa/config.yml` with `base_branches: [live-*]` and store fixtures. A follow
 
 ## Runtime behavior
 
-- **Trigger:** non-draft PRs into `main` or `live-*` (configurable). Never staging bases/drafts.
-- **Preview:** waits until workflow **PR Update** completes successfully for the PR’s latest head SHA; uses that run’s preview URL (never stale).
-- **Selection:** `git diff` base…head → [`selection-rules.json`](./selection-rules.json) → Playwright `--grep`. Purchase funnel (`@funnel`) always runs. Scope: small / medium / release.
-- **Gatekeeper:** funnel steps are sequential; later steps mark as blocked when a prerequisite fails. Implications skip redundant asserts (qty-up ⇒ ATC; checkout ⇒ cart load).
-- **Checks:** `qa-auto` (blocks merge on failure) + `qa-manual` (pending until checklist boxes are ticked; re-eval on comment edit).
-- **Comments:** one auto results comment + one manual task-list comment (both updated in place).
-- **Auto-fix:** on failure, one Cursor agent via `CURSOR_API_KEY` for that head SHA; marker comment prevents loops; still-failing leaves an owner comment. No auto-merge.
-- **Cost:** single job, browser cache, selected tests only.
+- **Trigger:** `workflow_run` after **PR Update** succeeds (no busy-wait). Only non-draft PRs into `main` / `live-*` (configurable). Never staging bases/drafts.
+- **Preview:** preview comment must include the **full** head SHA (`<!-- climaybe-preview-sha:… -->`); URL pick fails closed on mismatch/empty. Multi-store picks `[alias preview](url)` via `QA_STORE_ALIAS`.
+- **Selection:** `git diff` base…head → [`selection-rules.json`](./selection-rules.json) → Playwright `--grep`. Purchase funnel (`@funnel`) always runs (even for docs-only diffs). Scope: small / medium / release.
+- **Gatekeeper:** funnel steps record pass/fail/blocked without aborting the chain; report applies `blockedTagsForFailures` / implications. Console errors aggregate into the auto comment.
+- **Checks:** `qa-auto` (blocks merge on failure) + `qa-manual` (pending until checklist boxes are ticked; forge-safe re-eval on bot comment edit bound to head SHA).
+- **Comments:** one auto results comment + one manual task-list comment (updated in place; manual ticks preserved across synchronize).
+- **Auto-fix:** on failure, one Cursor agent via `CURSOR_API_KEY` **per PR** (`climaybe-qa-autofix-attempted`); after the fix push, still-failing → owner comment, no more agents. No auto-merge.
+- **Cost:** single job, browser cache, selected tests only, `workflow_run` instead of polling.
 
 ## CLI (CI helpers)
 

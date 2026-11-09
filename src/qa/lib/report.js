@@ -12,6 +12,7 @@
  *   screenshot?: string,
  *   trace?: string,
  *   consoleErrors?: string[],
+ *   tags?: string[],
  * }} QaResultRow
  */
 
@@ -23,6 +24,7 @@
  *   tags?: string[],
  *   results: QaResultRow[],
  *   runUrl?: string,
+ *   consoleErrors?: string[],
  *   autofix?: 'triggered' | 'skipped-missing-secret' | 'skipped-already-ran' | 'skipped-no-failures' | 'failed-still' | null,
  * }} data
  */
@@ -33,6 +35,10 @@ export function renderAutoReportComment(data) {
   const failed = results.filter((r) => r.status === 'failed');
   const blocked = results.filter((r) => r.status === 'blocked');
   const skipped = results.filter((r) => r.status === 'skipped');
+  const consoleErrors = uniqueStrings([
+    ...(data.consoleErrors || []),
+    ...results.flatMap((r) => r.consoleErrors || []),
+  ]);
 
   const lines = [
     marker,
@@ -61,7 +67,7 @@ export function renderAutoReportComment(data) {
       if (row.screenshot) lines.push(`  - Screenshot: ${row.screenshot}`);
       if (row.trace) lines.push(`  - Trace: ${row.trace}`);
       if (row.consoleErrors?.length) {
-        lines.push(`  - Console: ${row.consoleErrors.slice(0, 3).join(' | ')}`);
+        lines.push(`  - Console: ${row.consoleErrors.slice(0, 5).join(' | ')}`);
       }
     }
     lines.push('');
@@ -70,19 +76,32 @@ export function renderAutoReportComment(data) {
   if (blocked.length) {
     lines.push('### Blocked (prerequisite failed)');
     for (const row of blocked) {
-      lines.push(`- **${row.id}** (${row.viewport || 'n/a'}): ${row.title}`);
+      lines.push(`- **${row.id}** (${row.viewport || 'n/a'}): ${row.title}${row.error ? ` — ${row.error}` : ''}`);
+    }
+    lines.push('');
+  }
+
+  if (consoleErrors.length) {
+    lines.push('### Console / network errors');
+    for (const err of consoleErrors.slice(0, 20)) {
+      lines.push(`- \`${err.replace(/`/g, "'")}\``);
+    }
+    if (consoleErrors.length > 20) {
+      lines.push(`- _…and ${consoleErrors.length - 20} more_`);
     }
     lines.push('');
   }
 
   if (data.autofix === 'triggered') {
-    lines.push('> Auto-fix: launched one Cursor cloud agent for this head SHA.');
+    lines.push('> Auto-fix: launched one Cursor cloud agent for this PR (escalate-once).');
   } else if (data.autofix === 'skipped-missing-secret') {
     lines.push('> Auto-fix: skipped (`CURSOR_API_KEY` not set).');
   } else if (data.autofix === 'skipped-already-ran') {
-    lines.push('> Auto-fix: already attempted for this head SHA — owner action needed.');
+    lines.push('> Auto-fix: already attempted once on this PR — owner action needed.');
   } else if (data.autofix === 'failed-still') {
-    lines.push('> Auto-fix already ran for this SHA and tests still fail. **Owner action required.** Never auto-merges.');
+    lines.push(
+      '> Auto-fix already ran once on this PR and tests still fail. **Owner action required.** Never auto-merges. No further agents will be launched.'
+    );
   } else if (data.autofix === 'skipped-no-failures') {
     lines.push('> Auto-fix: not needed.');
   }
@@ -133,6 +152,7 @@ export function renderAutofixPrompt(pkg) {
     'You are fixing failing store QA Playwright tests on an existing PR branch.',
     'Do NOT open a new PR. Do NOT merge. Push fixes to the same head branch.',
     'Fix ALL bundled failures in one pass. Prefer theme-safe, minimal diffs.',
+    'This is the only auto-fix round for this PR — make it count.',
     '',
     `PR: ${pkg.prUrl || '(unknown)'}`,
     `Branch: ${pkg.branch || '(unknown)'}`,
@@ -148,4 +168,11 @@ export function renderAutofixPrompt(pkg) {
     'Leave a short summary of what you changed.',
   ];
   return lines.join('\n');
+}
+
+/**
+ * @param {string[]} list
+ */
+function uniqueStrings(list) {
+  return [...new Set((list || []).filter(Boolean).map(String))];
 }

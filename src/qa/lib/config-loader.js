@@ -29,11 +29,14 @@ export function resolveStoreFixtures(config, storeAlias) {
   }
   if (!store) store = stores[0] || null;
 
-  const products = store?.products || config?.products || {};
-  const collections = store?.collections || config?.collections || {};
+  const products = { ...(config?.products || {}), ...(store?.products || {}) };
+  const collections = { ...(config?.collections || {}), ...(store?.collections || {}) };
   const viewports = config?.viewports || ['mobile', 'tablet', 'desktop'];
   const features = config?.features || {};
   const baseBranches = config?.base_branches || null;
+
+  // Soft-pass variant change only when config explicitly says the product has no variants.
+  const hasVariants = !(products.has_variants === false || features.variants === false);
 
   return {
     store,
@@ -42,6 +45,7 @@ export function resolveStoreFixtures(config, storeAlias) {
     productPath: products.sample || products.default || '/products/',
     soldOutPath: products.sold_out || null,
     variantProductPath: products.with_variants || products.sample || products.default || null,
+    hasVariants,
     collectionPath: collections.sample || collections.default || '/collections/all',
     contactPath: features.contact_path || '/pages/contact',
     viewports,

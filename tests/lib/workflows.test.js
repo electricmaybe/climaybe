@@ -335,9 +335,16 @@ describe('workflows', () => {
         const wf = readFileSync(join(workflowsDir, 'store-qa.yml'), 'utf-8');
         assert.match(wf, /name: qa-auto/);
         assert.match(wf, /CURSOR_API_KEY/);
-        assert.match(wf, /draft == false/);
-        assert.match(wf, /live-\*/);
+        assert.match(wf, /workflow_run/);
+        assert.match(wf, /PR Update/);
+        assert.match(wf, /climaybe-qa-autofix-attempted/);
+        assert.match(wf, /resolve-preview/);
         assert.match(wf, /store_qa_workflows/);
+        const manual = readFileSync(join(workflowsDir, 'store-qa-manual.yml'), 'utf-8');
+        assert.match(manual, /types: \[edited\]/);
+        assert.doesNotMatch(manual, /types: \[edited, created\]/);
+        assert.match(manual, /github-actions\[bot\]/);
+        assert.match(manual, /climaybe-qa-manual-sha/);
       } finally {
         teardown();
       }

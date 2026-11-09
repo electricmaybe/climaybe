@@ -22,6 +22,7 @@ import {
   storeQaManualCommand,
   storeQaParseManualCommand,
   storeQaReportCommand,
+  storeQaResolvePreviewCommand,
   storeQaSelectCommand,
 } from './commands/store-qa.js';
 import { serveAll, serveAssets, serveShopify, lintAll, buildAll } from './lib/dev-runtime.js';
@@ -165,7 +166,16 @@ function registerThemeCommands(cmd) {
     .option('--selection <path>', 'Path to selection.json')
     .option('--head-sha <sha>', 'PR head SHA')
     .option('--preview-url <url>', 'Preview URL')
+    .option('--previous-body <text>', 'Existing checklist comment body (preserve ticks)')
     .action(storeQaManualCommand);
+
+  storeQa
+    .command('resolve-preview')
+    .description('Pick preview URL from PR comments pinned to full head SHA (fail closed)')
+    .option('--comments <json>', 'PR comments JSON array')
+    .option('--head-sha <sha>', 'PR head SHA')
+    .option('--store-alias <alias>', 'Store alias for multi-store preview link')
+    .action(storeQaResolvePreviewCommand);
 
   storeQa
     .command('report')

@@ -97,13 +97,16 @@ jobs:
               fragments = walkJsonFiles('preview-fragments');
             }
 
+            const fullSha = process.env.HEAD_SHA_INPUT || context.payload.pull_request?.head?.sha || context.sha || '';
             const parts = [
               marker,
+              fullSha ? `<!-- climaybe-preview-sha:${fullSha} -->` : '',
               '## 🎨 Theme Preview Generated',
               '',
               `**Branch:** ${process.env.HEAD_REF_INPUT || context.payload.pull_request?.head?.ref || context.ref.replace('refs/heads/', '')}`,
-              `**Commit:** ${(process.env.HEAD_SHA_INPUT || context.payload.pull_request?.head?.sha || context.sha || '').substring(0, 7)}`
-            ];
+              // Full SHA so Store QA can pin the preview to this exact head (fail closed on mismatch).
+              `**Commit:** ${fullSha}`
+            ].filter(Boolean);
 
             if (fragments.length > 0) {
               parts.push('', '### Preview links (per store)');

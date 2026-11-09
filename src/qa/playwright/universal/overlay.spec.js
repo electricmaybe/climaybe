@@ -5,24 +5,22 @@ test.describe('Overlay / z-index @overlay @zindex @quality', () => {
     await gotoPath(page, qaFixtures.productPath);
     const atcSel =
       'button[name="add"], [name="add"], button:has-text("Add to cart"), button:has-text("Add to bag"), [data-add-to-cart]';
-    await page.locator(atcSel).first().scrollIntoViewIfNeeded();
+    const atc = page.locator(atcSel).first();
+    await expect(atc, 'ATC must be present for overlay check').toBeVisible({ timeout: 15_000 });
+    await atc.scrollIntoViewIfNeeded();
     const result = await assertNotCovered(page, atcSel);
-    if (result.skipped) {
-      test.info().annotations.push({ type: 'note', description: 'ATC not measurable; skipped' });
-      return;
-    }
+    expect(result.skipped, `ATC not measurable (${result.reason || 'unknown'})`).toBeFalsy();
     const top = result.top;
     expect(top, 'elementFromPoint should resolve').toBeTruthy();
     const cls = `${top?.id || ''} ${top?.className || ''} ${top?.tag || ''}`.toLowerCase();
     const coveringChrome =
-      cls.includes('cookie') ||
-      cls.includes('chat') ||
+      /\bcookie\b/.test(cls) ||
+      /\bchat\b/.test(cls) ||
       cls.includes('trustbadge') ||
-      cls.includes('sticky-header');
-    // Soft signal: if the top element is clearly unrelated chrome, fail
-    if (coveringChrome) {
-      expect(coveringChrome, `CTA covered by ${cls}`).toBeFalsy();
-    }
+      cls.includes('sticky-header') ||
+      cls.includes('intercom') ||
+      cls.includes('crisp');
+    expect(coveringChrome, `CTA covered by overlay/chrome: ${cls}`).toBeFalsy();
   });
 
   test('U23 no horizontal overflow @overflow @zindex', async ({ page, qaFixtures }) => {

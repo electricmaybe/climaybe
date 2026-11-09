@@ -1,7 +1,5 @@
 import { buildAutofixPackage, renderAutofixPrompt } from './report.js';
 
-const CURSOR_AGENTS_URL = 'https://api.cursor.com/v0/agents';
-// v1 path (preferred); fall back notes in docs if org still on v0
 const CURSOR_AGENTS_URL_V1 = 'https://api.cursor.com/v1/agents';
 
 /**
@@ -11,7 +9,12 @@ const CURSOR_AGENTS_URL_V1 = 'https://api.cursor.com/v1/agents';
 export const CURSOR_API_KEY_SECRET = 'CURSOR_API_KEY';
 
 /**
- * Marker label / comment prefix for one autofix attempt per head SHA.
+ * One auto-fix attempt per PR (not per head SHA). Prevents loops across pushes.
+ */
+export const AUTOFIX_PR_MARKER = 'climaybe-qa-autofix-attempted';
+
+/**
+ * @deprecated Prefer AUTOFIX_PR_MARKER — kept for reading legacy comments.
  * @param {string} headSha
  */
 export function autofixMarkerForSha(headSha) {
@@ -20,16 +23,20 @@ export function autofixMarkerForSha(headSha) {
 }
 
 /**
+ * True if this PR already launched (or finished) its single auto-fix round.
  * @param {string} body
- * @param {string} headSha
+ * @param {string} [_headSha] unused — escalate-once is per PR
  */
-export function commentHasAutofixMarker(body, headSha) {
-  const marker = `<!-- ${autofixMarkerForSha(headSha)} -->`;
-  return String(body || '').includes(marker);
+export function commentHasAutofixMarker(body, _headSha) {
+  const text = String(body || '');
+  if (text.includes(`<!-- ${AUTOFIX_PR_MARKER} -->`)) return true;
+  // Legacy per-SHA markers still count as "already attempted" for this PR
+  if (/<!-- climaybe-qa-autofix:[0-9a-f]+ -->/i.test(text)) return true;
+  return false;
 }
 
 /**
- * Launch a Cursor cloud agent against the same PR branch.
+ * Launch a Cursor cloud agent against the same PR branch (v1 API only).
  * No-ops when apiKey is missing.
  *
  * @param {{
@@ -83,52 +90,46 @@ export async function triggerCursorAutofix(opts) {
 
   const authHeader = `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}`;
 
-  for (const url of [CURSOR_AGENTS_URL_V1, CURSOR_AGENTS_URL]) {
+  try {
+    const res = await fetchImpl(CURSOR_AGENTS_URL_V1, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    let json = null;
     try {
-      const res = await fetchImpl(url, {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-      const text = await res.text();
-      let json = null;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = { raw: text };
-      }
-      if (res.ok) {
-        return {
-          ok: true,
-          skipped: false,
-          marker: autofixMarkerForSha(opts.headSha),
-          agent: json,
-          endpoint: url,
-        };
-      }
-      // Try next endpoint on 404
-      if (res.status === 404) continue;
+      json = JSON.parse(text);
+    } catch {
+      json = { raw: text };
+    }
+    if (res.ok) {
       return {
-        ok: false,
+        ok: true,
         skipped: false,
-        reason: 'api-error',
-        status: res.status,
-        body: json,
-        endpoint: url,
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        skipped: false,
-        reason: 'network-error',
-        error: err instanceof Error ? err.message : String(err),
-        endpoint: url,
+        marker: AUTOFIX_PR_MARKER,
+        agent: json,
+        endpoint: CURSOR_AGENTS_URL_V1,
       };
     }
+    return {
+      ok: false,
+      skipped: false,
+      reason: 'api-error',
+      status: res.status,
+      body: json,
+      endpoint: CURSOR_AGENTS_URL_V1,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      skipped: false,
+      reason: 'network-error',
+      error: err instanceof Error ? err.message : String(err),
+      endpoint: CURSOR_AGENTS_URL_V1,
+    };
   }
-
-  return { ok: false, skipped: false, reason: 'api-unreachable' };
 }

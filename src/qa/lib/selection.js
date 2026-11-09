@@ -158,7 +158,9 @@ export function selectTests(changedFiles, rules = loadSelectionRules(), opts = {
     fullSuite,
     manualIds: [...manualIds].sort(),
     browserProjects: viewportsToProjects(viewports),
-    skipBrowser: themeFiles.length === 0,
+    // Purchase funnel always runs once the workflow gate says run — never skip browsers
+    // just because the diff had no theme files (docs-only PRs still get J1 against preview).
+    skipBrowser: false,
   };
 }
 

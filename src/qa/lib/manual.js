@@ -90,7 +90,6 @@ export function selectManualItems(items, selection = {}) {
   ]);
 
   if (scope === 'release') {
-    // Release: all items that are required_on release, or have empty when (always), or match.
     return (items || []).filter((item) => {
       if (explicitIds.has(item.id)) return true;
       const req = item.required_on || [];
@@ -119,12 +118,35 @@ function itemMatchesAreas(item, areas) {
 }
 
 /**
+ * IDs that are already ticked in an existing checklist comment.
+ * @param {string} body
+ * @returns {string[]}
+ */
+export function parseCheckedManualIds(body) {
+  const text = String(body || '');
+  const ids = [];
+  const re = /^- \[x\] \*\*([^*]+)\*\*/gim;
+  let m;
+  while ((m = re.exec(text))) ids.push(m[1]);
+  // Special "no manual checks" line
+  if (/^- \[x\] No manual checks required/im.test(text)) ids.push('__none__');
+  return ids;
+}
+
+/**
  * Render a GitHub task-list comment body.
+ * Preserves ticks for ids still in the selected set (synchronize upserts).
  * @param {ManualItem[]} items
- * @param {{ headSha?: string, scope?: string, previewUrl?: string }} meta
+ * @param {{
+ *   headSha?: string,
+ *   scope?: string,
+ *   previewUrl?: string,
+ *   preserveCheckedIds?: string[],
+ * }} meta
  */
 export function renderManualChecklistComment(items, meta = {}) {
   const marker = '<!-- climaybe-qa-manual -->';
+  const preserve = new Set(meta.preserveCheckedIds || []);
   const lines = [
     marker,
     `<!-- climaybe-qa-manual-sha:${meta.headSha || ''} -->`,
@@ -141,11 +163,15 @@ export function renderManualChecklistComment(items, meta = {}) {
   if (!items.length) {
     lines.push('_No manual items selected for this diff._');
     lines.push('');
-    lines.push('- [x] No manual checks required');
+    const tick = preserve.has('__none__') || preserve.size === 0 ? 'x' : ' ';
+    // Always mark complete when no items are required
+    lines.push(`- [x] No manual checks required`);
+    void tick;
   } else {
     for (const item of items) {
       const devices = (item.devices || []).length ? ` (${item.devices.join(', ')})` : '';
-      lines.push(`- [ ] **${item.id}**${devices}: ${item.title}`);
+      const box = preserve.has(item.id) ? 'x' : ' ';
+      lines.push(`- [${box}] **${item.id}**${devices}: ${item.title}`);
       if (item.expected) lines.push(`  - Expected: ${item.expected}`);
     }
   }
@@ -171,7 +197,6 @@ export function parseManualChecklistProgress(body) {
   const uncheckedAny = /^- \[ \] /gm;
   const checkedAny = /^- \[x\] /gim;
 
-  // Prefer id-bearing items; fall back to any task list
   let m;
   const idUnchecked = [];
   while ((m = uncheckedRe.exec(text))) {
@@ -203,7 +228,12 @@ export function parseManualChecklistProgress(body) {
 
 /**
  * High-level: load shared + project, merge, select for selection result.
- * @param {{ projectManualPath?: string, sharedPath?: string, selection?: object }} opts
+ * @param {{
+ *   projectManualPath?: string,
+ *   sharedPath?: string,
+ *   selection?: object,
+ *   previousBody?: string,
+ * }} opts
  */
 export function buildManualChecklist(opts = {}) {
   const shared = loadSharedManual(opts.sharedPath);
@@ -213,13 +243,21 @@ export function buildManualChecklist(opts = {}) {
     project.items.map((it) => ({ ...it, source: 'project' }))
   );
   const selected = selectManualItems(merged, opts.selection || {});
+  const preserveCheckedIds = parseCheckedManualIds(opts.previousBody || '');
+  // Only preserve ticks for items that remain relevant
+  const selectedIds = new Set(selected.map((i) => i.id));
+  const preserved = preserveCheckedIds.filter(
+    (id) => id === '__none__' || selectedIds.has(id)
+  );
   return {
     merged,
     selected,
+    preservedCheckedIds: preserved,
     comment: renderManualChecklistComment(selected, {
       headSha: opts.selection?.headSha,
       scope: opts.selection?.scope,
       previewUrl: opts.selection?.previewUrl,
+      preserveCheckedIds: preserved,
     }),
   };
 }

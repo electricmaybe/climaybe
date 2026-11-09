@@ -359,12 +359,12 @@ Opt-in change-aware Playwright store QA. Enabled via `climaybe init` (`Enable st
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `store-qa.yml` | Non-draft PR into `main` or `live-*` | Waits for **PR Update** success on the head SHA, selects at-risk tests from the base…head diff, always runs the purchase funnel, posts/updates one `qa-auto` results comment, posts a manual checklist comment, uploads traces/screenshots. Optional one-shot Cursor auto-fix via `CURSOR_API_KEY`. |
-| `store-qa-manual.yml` | Checklist comment create/edit | Re-evaluates task boxes; `qa-manual` check stays pending until all are ticked |
+| `store-qa.yml` | `workflow_run` after **PR Update** succeeds | Resolves the non-draft PR, pins preview URL to the **full** head SHA (fail closed), selects at-risk tests, always runs the purchase funnel, posts/updates `qa-auto` + manual checklist (preserving ticks), uploads artifacts. Optional one-shot Cursor auto-fix via `CURSOR_API_KEY` (**once per PR**). |
+| `store-qa-manual.yml` | Edit of bot-managed checklist comment | Forge-safe re-eval (bot author + head-SHA marker); `qa-manual` stays pending until all boxes are ticked |
 
 **Theme contract:** `qa/config.yml` (stores, sample products/variants/collections, viewports, flags), optional `qa/manual.yml`, optional `qa/specs/`. Shared core (selection rules, funnel journey, universal checks, shared manual list) ships inside climaybe.
 
-**Secrets:** `CURSOR_API_KEY` (optional) — Cursor Cloud Agents API key for one auto-fix round per head SHA; step no-ops when unset. Never auto-merges.
+**Secrets:** `CURSOR_API_KEY` (optional) — Cursor Cloud Agents API key for one auto-fix round **per PR**; step no-ops when unset. Never auto-merges.
 
 **Voldt `live-*` pilot:** set `store_qa_workflows: true`, keep `preview_workflows: true`, add `qa/config.yml` with `base_branches: [live-*]`, install `@playwright/test`, run `npx climaybe update`.
 

@@ -2,26 +2,26 @@
 # Change-aware Playwright store tests against the PR preview URL.
 # Opt in: "store_qa_workflows": true in climaybe.config.json + qa/config.yml in the theme repo.
 #
-# Runs ONLY on non-draft PRs whose base is main (single-store) or live-* (multi-store),
-# after PR Update has finished for the latest head SHA.
+# Triggered by workflow_run after PR Update succeeds (no busy-wait).
+# Runs ONLY for non-draft PRs whose base is main (single-store) or live-* (multi-store).
 # Secrets:
-#   CURSOR_API_KEY (optional) — one Cursor cloud auto-fix round per head SHA; no-op when unset
+#   CURSOR_API_KEY (optional) — one Cursor cloud auto-fix round per PR; no-op when unset
 
 name: Store QA
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main, 'live-*']
+  workflow_run:
+    workflows: ['PR Update']
+    types: [completed]
 
 concurrency:
-  group: store-qa-${{ github.event.pull_request.number }}
+  group: store-qa-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
 jobs:
   qa-auto:
     name: qa-auto
-    if: github.event.pull_request.draft == false
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,30 +29,76 @@ jobs:
       checks: write
       actions: read
     env:
-      QA_BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
-      QA_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
-      QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      QA_PR_NUMBER: ${{ github.event.pull_request.number }}
       CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
     steps:
+      - name: Resolve PR context from PR Update run
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const headSha = run.head_sha;
+            const headBranch = run.head_branch;
+            let pr = (run.pull_requests || [])[0] || null;
+            if (!pr) {
+              const { data: pulls } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                head: `${context.repo.owner}:${headBranch}`,
+                per_page: 10,
+              });
+              pr = pulls.find(p => p.head.sha === headSha) || pulls[0] || null;
+            }
+            if (!pr) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'no-open-pr');
+              console.log('No open PR for this PR Update run; skipping Store QA.');
+              return;
+            }
+            const full = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            const data = full.data;
+            if (data.draft) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'draft');
+              console.log('PR is draft; skipping Store QA.');
+              return;
+            }
+            core.setOutput('run', 'true');
+            core.setOutput('pr_number', String(data.number));
+            core.setOutput('head_sha', data.head.sha);
+            core.setOutput('head_branch', data.head.ref);
+            core.setOutput('base_branch', data.base.ref);
+            core.setOutput('pr_url', data.html_url);
+
       - name: Checkout PR head
+        if: steps.pr.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ steps.pr.outputs.head_sha }}
           fetch-depth: 0
 
       - name: Set up Node.js
+        if: steps.pr.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
 
       - name: Install dependencies
+        if: steps.pr.outputs.run == 'true'
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
       - name: Gate — opt-in + base branch + qa/config
         id: gate
+        if: steps.pr.outputs.run == 'true'
+        env:
+          QA_BASE_BRANCH: ${{ steps.pr.outputs.base_branch }}
         run: |
           set +e
           npx --no-install climaybe store-qa gate --base-branch "$QA_BASE_BRANCH"
@@ -65,136 +111,99 @@ jobs:
             echo "Store QA skipped (not opted in, wrong base, or missing qa/config.yml)."
           fi
 
-      - name: Wait for PR Update preview for this head SHA
+      - name: Select tests + resolve preview URL for this head SHA (fail closed)
         id: preview
-        if: steps.gate.outputs.run == 'true'
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_BASE_BRANCH: ${{ steps.pr.outputs.base_branch }}
+          QA_HEAD_BRANCH: ${{ steps.pr.outputs.head_branch }}
         run: |
           set -euo pipefail
-          HEAD_SHA="$QA_HEAD_SHA"
-          PR_NUMBER="$QA_PR_NUMBER"
-          echo "Waiting for workflow 'PR Update' success on $HEAD_SHA ..."
-          PREVIEW_URL=""
-          for i in $(seq 1 60); do
-            # Find newest completed PR Update run for this head SHA
-            RUN_JSON=$(gh run list --workflow "PR Update" --branch "${{ github.event.pull_request.head.ref }}" --limit 20 --json databaseId,headSha,conclusion,status,url 2>/dev/null || echo '[]')
-            MATCH=$(node -e '
-              const runs=JSON.parse(process.argv[1]||"[]");
-              const sha=process.argv[2];
-              const hit=runs.find(r=>r.headSha===sha);
-              if(!hit){console.log(JSON.stringify({found:false}));process.exit(0)}
-              console.log(JSON.stringify({found:true,status:hit.status,conclusion:hit.conclusion,id:hit.databaseId,url:hit.url}));
-            ' "$RUN_JSON" "$HEAD_SHA")
-            FOUND=$(node -e 'console.log(JSON.parse(process.argv[1]).found)' "$MATCH")
-            STATUS=$(node -e 'const j=JSON.parse(process.argv[1]);console.log(j.status||"")' "$MATCH")
-            CONC=$(node -e 'const j=JSON.parse(process.argv[1]);console.log(j.conclusion||"")' "$MATCH")
-            if [ "$FOUND" = "true" ] && [ "$STATUS" = "completed" ]; then
-              if [ "$CONC" != "success" ]; then
-                echo "PR Update finished with conclusion=$CONC — cannot run store QA against a stale/missing preview."
-                echo "preview_ready=false" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-              # Extract preview URL from the climaybe preview PR comment for this head
-              COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --paginate)
-              PREVIEW_URL=$(node -e '
-                const comments=JSON.parse(process.argv[1]||"[]");
-                const sha=process.argv[2];
-                const mine=comments.filter(c => String(c.body||"").includes("<!-- climaybe-preview-comment -->"));
-                const body=(mine[mine.length-1]||{}).body||"";
-                if (sha && body && !body.includes(sha) && !body.includes(sha.slice(0,7))) {
-                  // still accept if comment exists; head sha line may vary
-                }
-                const m=body.match(/https?:\/\/[^\s)]+/g)||[];
-                const preview=m.find(u=>/preview_theme_id=|\/\?preview_theme_id=|myshopify\.com/i.test(u))||m[0]||"";
-                process.stdout.write(preview);
-              ' "$COMMENTS" "$HEAD_SHA")
-              echo "preview_ready=true" >> "$GITHUB_OUTPUT"
-              echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
-              echo "Found preview: $PREVIEW_URL"
-              exit 0
-            fi
-            echo "Attempt $i/60: preview not ready yet (found=$FOUND status=$STATUS)..."
-            sleep 20
-          done
-          echo "Timed out waiting for PR Update."
-          echo "preview_ready=false" >> "$GITHUB_OUTPUT"
-
-      - name: Select at-risk tests
-        id: select
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
-        run: |
-          git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=1 || true
-          BASE_REF="origin/${{ github.event.pull_request.base.ref }}"
-          npx --no-install climaybe store-qa select --base "$BASE_REF" --base-branch "$QA_BASE_BRANCH" --head-branch "$QA_HEAD_BRANCH" > qa-results/selection.stdout.json || true
+          mkdir -p qa-results
+          git fetch origin "$QA_BASE_BRANCH" --depth=1 || true
+          BASE_REF="origin/${QA_BASE_BRANCH}"
+          npx --no-install climaybe store-qa select \
+            --base "$BASE_REF" \
+            --base-branch "$QA_BASE_BRANCH" \
+            --head-branch "$QA_HEAD_BRANCH" || true
           if [ ! -f qa-results/selection.json ]; then
             echo '{"scope":"small","tags":["@funnel","@purchase"],"grep":"@funnel|@purchase","browserProjects":["mobile-webkit","desktop-chromium"],"skipBrowser":false}' > qa-results/selection.json
           fi
-          SKIP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.skipBrowser?"true":"false")')
+          STORE_ALIAS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.storeAlias||"")')
+          echo "store_alias=$STORE_ALIAS" >> "$GITHUB_OUTPUT"
           GREP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.grep||"@funnel")')
           PROJECTS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write((s.browserProjects||[]).join(","))')
-          echo "skip_browser=$SKIP" >> "$GITHUB_OUTPUT"
           echo "grep=$GREP" >> "$GITHUB_OUTPUT"
           echo "projects=$PROJECTS" >> "$GITHUB_OUTPUT"
 
+          COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" --paginate)
+          PREVIEW_URL=$(QA_PR_COMMENTS="$COMMENTS" QA_HEAD_SHA="$QA_HEAD_SHA" QA_STORE_ALIAS="$STORE_ALIAS" \
+            npx --no-install climaybe store-qa resolve-preview)
+          echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          echo "preview_ready=true" >> "$GITHUB_OUTPUT"
+          echo "Found preview for $QA_HEAD_SHA ($STORE_ALIAS): $PREVIEW_URL"
+
       - name: Cache Playwright browsers
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true' && steps.select.outputs.skip_browser != 'true'
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}-webkit-chromium
 
       - name: Install Playwright browsers
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true' && steps.select.outputs.skip_browser != 'true'
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
         run: |
           npx --no-install playwright install --with-deps webkit chromium || npx playwright install --with-deps webkit chromium
 
       - name: Run selected Playwright tests
         id: pw
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true' && steps.select.outputs.skip_browser != 'true'
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.preview_url }}
           QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
           QA_THEME_ROOT: ${{ github.workspace }}
-          QA_PROJECTS: ${{ steps.select.outputs.projects }}
+          QA_PROJECTS: ${{ steps.preview.outputs.projects }}
+          QA_STORE_ALIAS: ${{ steps.preview.outputs.store_alias }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
           set +e
           CONFIG=$(node -e '
-            const fs=require("fs");const path=require("path");
-            const candidates=[
-              "node_modules/climaybe/src/qa/playwright/playwright.config.js",
-              path.join(process.env.npm_config_prefix||"","lib/node_modules/climaybe/src/qa/playwright/playwright.config.js"),
-            ];
-            // Resolve via createRequire from climaybe package
+            const path=require("path");
             try {
               const {createRequire}=require("module");
               const req=createRequire(path.join(process.cwd(),"package.json"));
               const pkg=path.dirname(req.resolve("climaybe/package.json"));
               console.log(path.join(pkg,"src/qa/playwright/playwright.config.js"));
             } catch {
-              console.log(candidates[0]);
+              console.log("node_modules/climaybe/src/qa/playwright/playwright.config.js");
             }
           ')
-          # Also include project specs if present
           EXTRA=""
           if [ -d qa/specs ]; then EXTRA="qa/specs"; fi
-          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.select.outputs.grep }}" $EXTRA
+          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.preview.outputs.grep }}" $EXTRA
           code=$?
           set -e
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           if [ "$code" != "0" ]; then echo "failed=true" >> "$GITHUB_OUTPUT"; else echo "failed=false" >> "$GITHUB_OUTPUT"; fi
 
       - name: Build auto report comment
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
         env:
           QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
           QA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
           npx --no-install climaybe store-qa report --head-sha "$QA_HEAD_SHA" || true
 
       - name: Upsert qa-auto PR comment
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        id: upsert_auto
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
         uses: actions/github-script@v7
+        env:
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         with:
           script: |
             const fs = require('fs');
@@ -202,13 +211,17 @@ jobs:
             const body = fs.existsSync('qa-results/auto-comment.md')
               ? fs.readFileSync('qa-results/auto-comment.md', 'utf8')
               : `${marker}\n## Store QA — automated results\n\n_No report generated._`;
+            const issue_number = Number(process.env.QA_PR_NUMBER);
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number,
               per_page: 100,
             });
-            const existing = comments.find(c => (c.body || '').includes(marker));
+            const existing = comments.find(c => {
+              const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+              return bot && (c.body || '').includes(marker);
+            });
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
@@ -216,40 +229,51 @@ jobs:
                 comment_id: existing.id,
                 body,
               });
+              core.setOutput('comment_id', String(existing.id));
             } else {
-              await github.rest.issues.createComment({
+              const created = await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
+                issue_number,
                 body,
               });
+              core.setOutput('comment_id', String(created.data.id));
             }
 
-      - name: Build + upsert manual checklist comment
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
-        env:
-          QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
-        run: |
-          npx --no-install climaybe store-qa manual --head-sha "$QA_HEAD_SHA" --preview-url "$QA_PREVIEW_URL" > /tmp/manual-out.md || true
-        # upsert via github-script below
-
       - name: Upsert qa-manual PR comment + pending check
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
         uses: actions/github-script@v7
+        env:
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
         with:
           script: |
             const fs = require('fs');
+            const { execFileSync } = require('child_process');
             const marker = '<!-- climaybe-qa-manual -->';
-            const body = fs.existsSync('qa-results/manual.md')
-              ? fs.readFileSync('qa-results/manual.md', 'utf8')
-              : `${marker}\n## Store QA — manual checklist\n\n- [x] No manual checks required`;
+            const issue_number = Number(process.env.QA_PR_NUMBER);
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number,
               per_page: 100,
             });
-            const existing = comments.find(c => (c.body || '').includes(marker));
+            const existing = comments.find(c => {
+              const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+              return bot && (c.body || '').includes(marker);
+            });
+            const previousBody = existing?.body || '';
+            execFileSync('npx', ['--no-install', 'climaybe', 'store-qa', 'manual',
+              '--head-sha', process.env.QA_HEAD_SHA,
+              '--preview-url', process.env.QA_PREVIEW_URL || '',
+            ], {
+              env: { ...process.env, QA_PREVIOUS_MANUAL_BODY: previousBody },
+              stdio: 'inherit',
+            });
+            const body = fs.existsSync('qa-results/manual.md')
+              ? fs.readFileSync('qa-results/manual.md', 'utf8')
+              : `${marker}\n<!-- climaybe-qa-manual-sha:${process.env.QA_HEAD_SHA} -->\n## Store QA — manual checklist\n\n- [x] No manual checks required`;
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
@@ -257,16 +281,17 @@ jobs:
                 comment_id: existing.id,
                 body,
               });
+              core.setOutput('manual_comment_id', String(existing.id));
             } else {
-              await github.rest.issues.createComment({
+              const created = await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: context.issue.number,
+                issue_number,
                 body,
               });
+              core.setOutput('manual_comment_id', String(created.data.id));
             }
 
-            // Pending qa-manual check until boxes are ticked (re-eval on comment edit workflow)
             const unchecked = (body.match(/^- \[ \] /gm) || []).length;
             await github.rest.checks.create({
               owner: context.repo.owner,
@@ -283,12 +308,15 @@ jobs:
               },
             });
 
-      - name: Auto-fix round (optional CURSOR_API_KEY)
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true' && steps.pw.outputs.failed == 'true'
+      - name: Auto-fix round (optional CURSOR_API_KEY, once per PR)
+        id: autofix
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true' && steps.pw.outputs.failed == 'true'
         env:
           QA_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
-          QA_PR_URL: ${{ github.event.pull_request.html_url }}
-          QA_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          QA_PR_URL: ${{ steps.pr.outputs.pr_url }}
+          QA_HEAD_BRANCH: ${{ steps.pr.outputs.head_branch }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -296,26 +324,69 @@ jobs:
           export QA_PRIOR_COMMENTS="$COMMENTS"
           RESULT=$(npx --no-install climaybe store-qa autofix --head-sha "$QA_HEAD_SHA" || true)
           echo "$RESULT"
-          MARKER=$(node -e 'try{const j=JSON.parse(process.argv[1]);if(j.marker)console.log(j.marker)}catch{}' "$RESULT")
-          if [ -n "$MARKER" ]; then
-            gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" -f body="<!-- ${MARKER} -->"$'\n'"Store QA auto-fix agent launched for \`$QA_HEAD_SHA\`. Exactly one attempt per head SHA. Never auto-merges."
-          fi
-          # Refresh auto comment with autofix status
-          REASON=$(node -e 'try{const j=JSON.parse(process.argv[1]);console.log(j.skipped?(j.reason||"skipped"):(j.ok?"triggered":"error"))}catch{console.log("error")}' "$RESULT")
+          echo "$RESULT" > qa-results/autofix-stdout.json
+          REASON=$(node -e 'try{const j=JSON.parse(process.argv[1]);console.log(j.reason||(j.ok&&!j.skipped?"triggered":"error"))}catch{console.log("error")}' "$RESULT")
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
           case "$REASON" in
             triggered) AF=triggered ;;
             missing-secret) AF=skipped-missing-secret ;;
             already-ran) AF=skipped-already-ran ;;
+            failed-still) AF=failed-still ;;
             no-failures) AF=skipped-no-failures ;;
             *) AF=skipped-missing-secret ;;
           esac
+          echo "autofix_status=$AF" >> "$GITHUB_OUTPUT"
+          if [ "$REASON" = "triggered" ]; then
+            gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" -f body="<!-- climaybe-qa-autofix-attempted -->"$'\n'"Store QA auto-fix agent launched for this PR (head \`$QA_HEAD_SHA\`). **Exactly one attempt per PR.** After the agent pushes, tests re-run; if they still fail, owner action is required. Never auto-merges."
+          fi
+          if [ "$REASON" = "failed-still" ]; then
+            gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" -f body="<!-- climaybe-qa-autofix-failed-still -->"$'\n'"## Store QA — owner action required"$'\n\n'"Auto-fix already ran once on this PR and automated tests are still failing on \`$QA_HEAD_SHA\`. No further agents will be launched. Please inspect the qa-auto report and artifacts."
+          fi
           npx --no-install climaybe store-qa report --head-sha "$QA_HEAD_SHA" --autofix "$AF" || true
 
+      - name: Re-upsert qa-auto comment after autofix status
+        if: always() && steps.autofix.outputs.autofix_status != ''
+        uses: actions/github-script@v7
+        env:
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('qa-results/auto-comment.md')) return;
+            const marker = '<!-- climaybe-qa-auto -->';
+            const body = fs.readFileSync('qa-results/auto-comment.md', 'utf8');
+            const issue_number = Number(process.env.QA_PR_NUMBER);
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => {
+              const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+              return bot && (c.body || '').includes(marker);
+            });
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+            }
+
       - name: Upload Playwright artifacts
-        if: always() && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
+        if: always() && steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: store-qa-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          name: store-qa-${{ steps.pr.outputs.pr_number }}-${{ steps.pr.outputs.head_sha }}
           path: |
             qa-results/
           if-no-files-found: ignore
@@ -324,10 +395,4 @@ jobs:
         if: steps.pw.outputs.failed == 'true'
         run: |
           echo "Store QA automated tests failed (qa-auto)."
-          exit 1
-
-      - name: Fail when preview never became ready
-        if: steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready != 'true'
-        run: |
-          echo "Preview was not ready for this head SHA; qa-auto fails closed."
           exit 1

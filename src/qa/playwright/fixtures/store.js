@@ -1,5 +1,29 @@
 import { test as base, expect } from '@playwright/test';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadQaConfig, resolveStoreFixtures } from '../../lib/config-loader.js';
+
+function consoleLogPath() {
+  const root = process.env.QA_THEME_ROOT || process.cwd();
+  return join(root, 'qa-results', 'console-errors.json');
+}
+
+function appendConsoleErrors(errors) {
+  if (!errors?.length) return;
+  const path = consoleLogPath();
+  mkdirSync(join(path, '..'), { recursive: true });
+  let all = [];
+  if (existsSync(path)) {
+    try {
+      all = JSON.parse(readFileSync(path, 'utf-8'));
+    } catch {
+      all = [];
+    }
+  }
+  if (!Array.isArray(all)) all = [];
+  const merged = [...all, ...errors.filter(Boolean)];
+  writeFileSync(path, JSON.stringify([...new Set(merged)], null, 2) + '\n', 'utf-8');
+}
 
 /**
  * Attach console + network listeners; expose fixtures from qa/config.yml.
@@ -19,7 +43,6 @@ export const test = base.extend({
     const isThemeRelevant = (text, location) => {
       const blob = `${text} ${location || ''}`.toLowerCase();
       if (allow.some((a) => blob.includes(a))) return false;
-      // Prefer failing on theme asset / inline theme script sources
       if (blob.includes('/cdn/shop/') || blob.includes('shopifycloud.com')) return false;
       return true;
     };
@@ -45,6 +68,7 @@ export const test = base.extend({
     });
 
     await use(errors);
+    appendConsoleErrors(errors);
   },
 });
 
@@ -57,7 +81,9 @@ export { expect };
  */
 export async function gotoPath(page, path) {
   const base = process.env.PLAYWRIGHT_BASE_URL || process.env.QA_PREVIEW_URL || '';
-  const url = path.startsWith('http') ? path : `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+  const url = path.startsWith('http')
+    ? path
+    : `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
   await page.goto(url, { waitUntil: 'domcontentloaded' });
 }
 
@@ -68,9 +94,9 @@ export async function gotoPath(page, path) {
  */
 export async function assertNotCovered(page, selector) {
   const handle = page.locator(selector).first();
-  if ((await handle.count()) === 0) return { skipped: true };
+  if ((await handle.count()) === 0) return { skipped: true, reason: 'missing-target' };
   const box = await handle.boundingBox();
-  if (!box) return { skipped: true };
+  if (!box) return { skipped: true, reason: 'no-box' };
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
   const top = await page.evaluate(

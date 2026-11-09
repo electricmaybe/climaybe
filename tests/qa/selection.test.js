@@ -23,9 +23,9 @@ describe('store QA selection', () => {
     assert.equal(pathMatchesGlob('docs/readme.md', 'sections/product--*'), false);
   });
 
-  it('always includes purchase funnel even for empty theme diffs', () => {
+  it('always includes purchase funnel and never skips browsers for empty theme diffs', () => {
     const sel = selectTests(['docs/README.md'], rules);
-    assert.equal(sel.skipBrowser, true);
+    assert.equal(sel.skipBrowser, false);
     assert.ok(sel.tags.includes('@funnel'));
     assert.ok(sel.tags.includes('@purchase'));
   });

@@ -62,12 +62,12 @@ Linear team workflow regexes remain configured in the Linear UI. This Action cov
 
 When enabled (`store_qa_workflows: true`), climaybe scaffolds `store-qa.yml` and `store-qa-manual.yml`. Theme repos also add a `qa/` folder — see `src/qa/README.md` for the contract (`config.yml`, optional `manual.yml`, optional `specs/`).
 
-1. **Trigger:** non-draft PRs whose base is `main` (single-store default) or `live-*` (multi-store default). Override with `qa/config.yml` → `base_branches` or `climaybe.config.json` → `store_qa_base_branches`. Never staging bases or drafts.
-2. **Preview gate:** waits until workflow **PR Update** completes successfully for the PR’s latest head SHA, then uses that head’s preview URL (never a stale preview).
+1. **Trigger:** `workflow_run` after **PR Update** succeeds (no polling). Only non-draft PRs whose base is `main` (single-store default) or `live-*` (multi-store default). Override with `qa/config.yml` → `base_branches` or `climaybe.config.json` → `store_qa_base_branches`. Never staging bases or drafts.
+2. **Preview gate:** preview comment must carry the **full** head SHA; URL extraction fails closed on SHA mismatch or empty URL. Multi-store selects by `QA_STORE_ALIAS` / `[alias preview](url)`.
 3. **Selection:** `git diff` base…head → `src/qa/selection-rules.json` → Playwright `--grep`. Purchase funnel (`@funnel`) always runs. Scope scales small / medium / release with PR size and hot paths (`layout/`, `config/`, `main.js`).
-4. **Checks:** `qa-auto` fails the job (blocks merge when required); `qa-manual` stays pending until the checklist comment boxes are ticked (`store-qa-manual.yml` on comment edit).
-5. **Auto-fix:** optional `CURSOR_API_KEY` launches one Cursor Cloud Agent against the same PR branch for the head SHA; marker comment prevents loops; still-failing leaves an owner note. Never auto-merges.
-6. **Cost:** single job, Playwright browser cache, selected tests only.
+4. **Checks:** `qa-auto` fails the job (blocks merge when required); `qa-manual` stays pending until the bot-managed checklist boxes are ticked (`store-qa-manual.yml` on forge-safe comment edit).
+5. **Auto-fix:** optional `CURSOR_API_KEY` launches one Cursor Cloud Agent **per PR**; after the fix push, still-failing leaves an owner note and launches no further agents. Never auto-merges.
+6. **Cost:** single job, Playwright browser cache, selected tests only, `workflow_run` trigger.
 
 ## Build workflows (optional)
 
