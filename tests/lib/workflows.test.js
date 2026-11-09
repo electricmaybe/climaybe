@@ -340,6 +340,17 @@ describe('workflows', () => {
         assert.match(wf, /climaybe-qa-autofix-attempted/);
         assert.match(wf, /resolve-preview/);
         assert.match(wf, /store_qa_workflows/);
+        // Security: fork + base filter before checkout; secret scoped to autofix; ignore-scripts
+        assert.match(wf, /head_repository\.full_name == github\.repository/);
+        assert.match(wf, /pull_requests\[0\]\.base\.ref == 'main'/);
+        assert.match(wf, /startsWith\(github\.event\.workflow_run\.pull_requests\[0\]\.base\.ref, 'live-'\)/);
+        assert.match(wf, /npm ci --ignore-scripts/);
+        assert.match(wf, /Exact SHA only/);
+        assert.match(wf, /stale-head/);
+        assert.match(wf, /skipped: no theme changes, no preview/);
+        // CURSOR_API_KEY must not be job-level env (only autofix step)
+        assert.doesNotMatch(wf, /^ {4}env:\n {6}CURSOR_API_KEY:/m);
+        assert.match(wf, /# Secret only on this step[\s\S]*CURSOR_API_KEY: \$\{\{ secrets\.CURSOR_API_KEY \}\}/);
         const manual = readFileSync(join(workflowsDir, 'store-qa-manual.yml'), 'utf-8');
         assert.match(manual, /types: \[edited\]/);
         assert.doesNotMatch(manual, /types: \[edited, created\]/);

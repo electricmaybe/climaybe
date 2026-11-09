@@ -23,19 +23,21 @@ describe('store QA selection', () => {
     assert.equal(pathMatchesGlob('docs/readme.md', 'sections/product--*'), false);
   });
 
-  it('always includes purchase funnel and never skips browsers for empty theme diffs', () => {
-    const sel = selectTests(['docs/README.md'], rules);
-    assert.equal(sel.skipBrowser, false);
-    assert.ok(sel.tags.includes('@funnel'));
-    assert.ok(sel.tags.includes('@purchase'));
+  it('skips browsers for non-theme diffs (no preview) but still tags funnel for theme PRs', () => {
+    const docsOnly = selectTests(['docs/README.md'], rules);
+    assert.equal(docsOnly.skipBrowser, true);
+    assert.equal(docsOnly.themeFileCount, 0);
+    assert.ok(docsOnly.tags.includes('@funnel'));
+    assert.ok(docsOnly.tags.includes('@purchase'));
   });
 
-  it('maps cart snippet changes to cart + funnel and small scope', () => {
+  it('maps cart snippet changes to cart + funnel and always runs browsers', () => {
     const sel = selectTests(
       ['snippets/cart--drawer.liquid', 'snippets/header--cart-bubble.liquid'],
       rules
     );
     assert.equal(sel.skipBrowser, false);
+    assert.ok(sel.themeFileCount >= 2);
     assert.equal(sel.scope, 'small');
     assert.ok(sel.tags.includes('@cart'));
     assert.ok(sel.tags.includes('@funnel'));
@@ -89,6 +91,15 @@ describe('store QA selection', () => {
   it('blocks dependent tags when a gatekeeper fails', () => {
     const blocked = blockedTagsForFailures(['@funnel-smoke'], rules);
     assert.ok(blocked.includes('*'));
+  });
+
+  it('blocks all qty steps when variant-change fails (not a bare @funnel-qty stub)', () => {
+    const blocked = blockedTagsForFailures(['@variant-change'], rules);
+    assert.ok(blocked.includes('@funnel-qty-increase'));
+    assert.ok(blocked.includes('@funnel-qty-decrease'));
+    assert.ok(blocked.includes('@funnel-add-to-cart'));
+    assert.ok(blocked.includes('@funnel-checkout'));
+    assert.equal(blocked.includes('@funnel-qty'), false);
   });
 
   it('skips implied tags when a later step is proven', () => {

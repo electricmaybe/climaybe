@@ -3,9 +3,9 @@
 # Opt in: "store_qa_workflows": true in climaybe.config.json + qa/config.yml in the theme repo.
 #
 # Triggered by workflow_run after PR Update succeeds (no busy-wait).
-# Runs ONLY for non-draft PRs whose base is main (single-store) or live-* (multi-store).
+# Runs ONLY for non-draft same-repo PRs whose base is main (single-store) or live-* (multi-store).
 # Secrets:
-#   CURSOR_API_KEY (optional) — one Cursor cloud auto-fix round per PR; no-op when unset
+#   CURSOR_API_KEY (optional) — scoped only to the autofix step; one Cursor cloud auto-fix round per PR
 
 name: Store QA
 
@@ -21,61 +21,119 @@ concurrency:
 jobs:
   qa-auto:
     name: qa-auto
-    if: github.event.workflow_run.conclusion == 'success'
+    # Fail closed before any checkout/install/secret use:
+    # same-repo heads only, and only main / live-* bases (never staging/*).
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      (
+        github.event.workflow_run.pull_requests[0].base.ref == 'main' ||
+        startsWith(github.event.workflow_run.pull_requests[0].base.ref, 'live-')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
       checks: write
       actions: read
-    env:
-      CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
     steps:
-      - name: Resolve PR context from PR Update run
+      - name: Resolve PR pinned to workflow_run.head_sha
         id: pr
         uses: actions/github-script@v7
         with:
           script: |
             const run = context.payload.workflow_run;
-            const headSha = run.head_sha;
+            const runSha = run.head_sha;
             const headBranch = run.head_branch;
-            let pr = (run.pull_requests || [])[0] || null;
+            const headRepo = run.head_repository?.full_name || '';
+
+            // Defense in depth (also enforced at job if:)
+            if (headRepo && headRepo !== context.repo.owner + '/' + context.repo.repo) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'fork-head');
+              console.log(`Skipping Store QA: head repo ${headRepo} is not ${context.repo.owner}/${context.repo.repo}`);
+              return;
+            }
+
+            const listed = run.pull_requests || [];
+            let pr = listed.find(p => p.head?.sha === runSha) || null;
+
             if (!pr) {
               const { data: pulls } = await github.rest.pulls.list({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 state: 'open',
                 head: `${context.repo.owner}:${headBranch}`,
-                per_page: 10,
+                per_page: 20,
               });
-              pr = pulls.find(p => p.head.sha === headSha) || pulls[0] || null;
+              // Exact SHA only — never fall back to pulls[0]
+              pr = pulls.find(p => p.head?.sha === runSha) || null;
             }
+
+            if (!pr) {
+              // Broader search by SHA across open PRs (branch rename / head mismatch)
+              const { data: openPulls } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 50,
+              });
+              pr = openPulls.find(p => p.head?.sha === runSha) || null;
+            }
+
             if (!pr) {
               core.setOutput('run', 'false');
-              core.setOutput('reason', 'no-open-pr');
-              console.log('No open PR for this PR Update run; skipping Store QA.');
+              core.setOutput('reason', 'no-pr-for-sha');
+              console.log(`No open PR whose head is exactly ${runSha}; skipping.`);
               return;
             }
+
             const full = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number,
             });
             const data = full.data;
+
+            if (data.head.repo?.full_name && data.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'fork-head');
+              console.log(`Skipping Store QA: PR head is from fork ${data.head.repo.full_name}`);
+              return;
+            }
+
             if (data.draft) {
               core.setOutput('run', 'false');
               core.setOutput('reason', 'draft');
               console.log('PR is draft; skipping Store QA.');
               return;
             }
+
+            const base = data.base.ref || '';
+            if (base !== 'main' && !base.startsWith('live-')) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'wrong-base');
+              console.log(`Base ${base} is not main/live-*; skipping Store QA.`);
+              return;
+            }
+
+            // If the PR head moved on, this run is stale — a newer Store QA run will handle it.
+            if (data.head.sha !== runSha) {
+              core.setOutput('run', 'false');
+              core.setOutput('reason', 'stale-head');
+              console.log(`PR #${data.number} head is now ${data.head.sha}, not run SHA ${runSha}; skipping.`);
+              return;
+            }
+
             core.setOutput('run', 'true');
             core.setOutput('pr_number', String(data.number));
-            core.setOutput('head_sha', data.head.sha);
+            // Always pin to the workflow_run head SHA (not a drifting PR head)
+            core.setOutput('head_sha', runSha);
             core.setOutput('head_branch', data.head.ref);
             core.setOutput('base_branch', data.base.ref);
             core.setOutput('pr_url', data.html_url);
 
-      - name: Checkout PR head
+      - name: Checkout workflow_run head SHA
         if: steps.pr.outputs.run == 'true'
         uses: actions/checkout@v4
         with:
@@ -89,10 +147,10 @@ jobs:
           node-version: '24'
           cache: npm
 
-      - name: Install dependencies
+      - name: Install dependencies (ignore scripts — do not run PR-head lifecycle)
         if: steps.pr.outputs.run == 'true'
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi
 
       - name: Gate — opt-in + base branch + qa/config
         id: gate
@@ -111,13 +169,11 @@ jobs:
             echo "Store QA skipped (not opted in, wrong base, or missing qa/config.yml)."
           fi
 
-      - name: Select tests + resolve preview URL for this head SHA (fail closed)
-        id: preview
+      - name: Select tests (skip green when no theme changes)
+        id: select
         if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
           QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           QA_BASE_BRANCH: ${{ steps.pr.outputs.base_branch }}
           QA_HEAD_BRANCH: ${{ steps.pr.outputs.head_branch }}
         run: |
@@ -130,21 +186,133 @@ jobs:
             --base-branch "$QA_BASE_BRANCH" \
             --head-branch "$QA_HEAD_BRANCH" || true
           if [ ! -f qa-results/selection.json ]; then
-            echo '{"scope":"small","tags":["@funnel","@purchase"],"grep":"@funnel|@purchase","browserProjects":["mobile-webkit","desktop-chromium"],"skipBrowser":false}' > qa-results/selection.json
+            echo '{"scope":"small","tags":["@funnel","@purchase"],"grep":"@funnel|@purchase","browserProjects":["mobile-webkit","desktop-chromium"],"skipBrowser":true,"themeFileCount":0}' > qa-results/selection.json
           fi
           STORE_ALIAS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.storeAlias||"")')
-          echo "store_alias=$STORE_ALIAS" >> "$GITHUB_OUTPUT"
           GREP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.grep||"@funnel")')
           PROJECTS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write((s.browserProjects||[]).join(","))')
+          SKIP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(String(!!s.skipBrowser || Number(s.themeFileCount||0)===0))')
+          THEME_COUNT=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(String(s.themeFileCount||0))')
+          echo "store_alias=$STORE_ALIAS" >> "$GITHUB_OUTPUT"
           echo "grep=$GREP" >> "$GITHUB_OUTPUT"
           echo "projects=$PROJECTS" >> "$GITHUB_OUTPUT"
+          echo "theme_count=$THEME_COUNT" >> "$GITHUB_OUTPUT"
+          if [ "$SKIP" = "true" ]; then
+            echo "skip_browser=true" >> "$GITHUB_OUTPUT"
+            echo "No theme changes (themeFileCount=$THEME_COUNT) — skipping browsers / preview (green)."
+          else
+            echo "skip_browser=false" >> "$GITHUB_OUTPUT"
+          fi
 
+      - name: Post skipped summary (no theme changes, no preview)
+        id: skipped
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.select.outputs.skip_browser == 'true'
+        uses: actions/github-script@v7
+        env:
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- climaybe-qa-auto -->';
+            const sha = process.env.QA_HEAD_SHA || '';
+            const body = [
+              marker,
+              `<!-- climaybe-qa-auto-sha:${sha} -->`,
+              '## Store QA — automated results',
+              '',
+              '**skipped: no theme changes, no preview**',
+              '',
+              'No theme files changed in this PR, so there is no Shopify preview to test against.',
+              '`qa-auto` passes (not a failure). Theme-changing PRs still always run the purchase funnel.',
+              '',
+              sha ? `Head: \`${sha}\`` : null,
+              process.env.QA_RUN_URL ? `Run: ${process.env.QA_RUN_URL}` : null,
+              '',
+            ].filter(Boolean).join('\n');
+            fs.mkdirSync('qa-results', { recursive: true });
+            fs.writeFileSync('qa-results/auto-comment.md', body + '\n', 'utf8');
+            fs.writeFileSync('qa-results/skipped.json', JSON.stringify({
+              reason: 'no-theme-changes-no-preview',
+              headSha: sha,
+            }, null, 2) + '\n');
+
+            const issue_number = Number(process.env.QA_PR_NUMBER);
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => {
+              const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+              return bot && (c.body || '').includes(marker);
+            });
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+            }
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'qa-auto',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'success',
+              output: {
+                title: 'Store QA skipped',
+                summary: 'skipped: no theme changes, no preview',
+              },
+            });
+
+            // Manual check: nothing to do when no theme changes
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'qa-manual',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'success',
+              output: {
+                title: 'Manual QA not required',
+                summary: 'No theme changes — manual checklist skipped.',
+              },
+            });
+
+            await core.summary
+              .addHeading('Store QA skipped')
+              .addRaw('skipped: no theme changes, no preview')
+              .write();
+
+      - name: Resolve preview URL for workflow_run head SHA (fail closed)
+        id: preview
+        if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.select.outputs.skip_browser != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_STORE_ALIAS: ${{ steps.select.outputs.store_alias }}
+        run: |
+          set -euo pipefail
           COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${QA_PR_NUMBER}/comments" --paginate)
-          PREVIEW_URL=$(QA_PR_COMMENTS="$COMMENTS" QA_HEAD_SHA="$QA_HEAD_SHA" QA_STORE_ALIAS="$STORE_ALIAS" \
+          PREVIEW_URL=$(QA_PR_COMMENTS="$COMMENTS" QA_HEAD_SHA="$QA_HEAD_SHA" QA_STORE_ALIAS="${QA_STORE_ALIAS:-}" \
             npx --no-install climaybe store-qa resolve-preview)
           echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
           echo "preview_ready=true" >> "$GITHUB_OUTPUT"
-          echo "Found preview for $QA_HEAD_SHA ($STORE_ALIAS): $PREVIEW_URL"
+          echo "Found preview for $QA_HEAD_SHA (${QA_STORE_ALIAS:-default}): $PREVIEW_URL"
 
       - name: Cache Playwright browsers
         if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
@@ -165,8 +333,8 @@ jobs:
           PLAYWRIGHT_BASE_URL: ${{ steps.preview.outputs.preview_url }}
           QA_PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
           QA_THEME_ROOT: ${{ github.workspace }}
-          QA_PROJECTS: ${{ steps.preview.outputs.projects }}
-          QA_STORE_ALIAS: ${{ steps.preview.outputs.store_alias }}
+          QA_PROJECTS: ${{ steps.select.outputs.projects }}
+          QA_STORE_ALIAS: ${{ steps.select.outputs.store_alias }}
           QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
           set +e
@@ -183,7 +351,7 @@ jobs:
           ')
           EXTRA=""
           if [ -d qa/specs ]; then EXTRA="qa/specs"; fi
-          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.preview.outputs.grep }}" $EXTRA
+          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.select.outputs.grep }}" $EXTRA
           code=$?
           set -e
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
@@ -312,6 +480,8 @@ jobs:
         id: autofix
         if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true' && steps.pw.outputs.failed == 'true'
         env:
+          # Secret only on this step — never exposed to checkout/install/test of PR-head code
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           QA_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
           QA_PR_URL: ${{ steps.pr.outputs.pr_url }}
           QA_HEAD_BRANCH: ${{ steps.pr.outputs.head_branch }}

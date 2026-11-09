@@ -253,7 +253,12 @@
     {
       "id": "variant",
       "tags": ["@variant-change"],
-      "blocks": ["@funnel-add-to-cart", "@funnel-qty", "@funnel-checkout"]
+      "blocks": [
+        "@funnel-add-to-cart",
+        "@funnel-qty-increase",
+        "@funnel-qty-decrease",
+        "@funnel-checkout"
+      ]
     },
     {
       "id": "qty",
