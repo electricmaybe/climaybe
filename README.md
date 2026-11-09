@@ -304,7 +304,7 @@ Separate from classic branch protection. When Store QA is enabled, climaybe mana
 | single-store | `refs/heads/main` | `qa-auto`, `qa-manual` |
 | multi-store | `refs/heads/live-*` | `qa-auto`, `qa-manual` |
 
-Idempotent: create if missing, update if drift, no-op if already correct. Never edits other rulesets. Auto-runs from `init` / `update` / `add-store` / `ensure-branches` when `store_qa_workflows: true`; or run `climaybe ensure-qa-ruleset` (with `--dry-run` to preview) on existing repos.
+Idempotent: create if missing, update if drift, no-op if already correct. Never edits other rulesets. Repository admins always bypass (`RepositoryRole` id 5). `do_not_enforce_on_create` is on so new `live-*` branches can be created before checks exist. Auto-runs from `init` / `update` / `add-store` / `ensure-branches` when `store_qa_workflows: true`; or run `climaybe ensure-qa-ruleset` (with `--dry-run` to preview) on existing repos.
 
 ## Workflows
 

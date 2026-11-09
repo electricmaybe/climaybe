@@ -7,8 +7,10 @@ import { tmpdir } from 'node:os';
 import {
   QA_REQUIRED_CHECKS,
   QA_RULESET_NAME,
+  QA_RULESET_ADMIN_BYPASS_ACTORS,
   getQaRulesetRefIncludes,
   buildQaRulesetPayload,
+  normalizeBypassActorsForCompare,
   normalizeQaRulesetForCompare,
   qaRulesetMatchesDesired,
   isAdminPermissionError,
@@ -65,16 +67,21 @@ describe('qa-ruleset', () => {
       assert.deepEqual(getQaRulesetRefIncludes(), ['refs/heads/main']);
     });
 
-    it('builds an active branch ruleset with required status checks only', () => {
+    it('builds an active branch ruleset with required status checks, admin bypass, and create allow', () => {
       const payload = buildQaRulesetPayload('multi');
       assert.equal(payload.name, QA_RULESET_NAME);
       assert.equal(payload.target, 'branch');
       assert.equal(payload.enforcement, 'active');
       assert.deepEqual(payload.conditions.ref_name.include, ['refs/heads/live-*']);
       assert.deepEqual(payload.conditions.ref_name.exclude, []);
+      assert.deepEqual(payload.bypass_actors, [
+        { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' },
+      ]);
+      assert.deepEqual(QA_RULESET_ADMIN_BYPASS_ACTORS, payload.bypass_actors);
       assert.equal(payload.rules.length, 1);
       assert.equal(payload.rules[0].type, 'required_status_checks');
       assert.equal(payload.rules[0].parameters.strict_required_status_checks_policy, false);
+      assert.equal(payload.rules[0].parameters.do_not_enforce_on_create, true);
       assert.deepEqual(
         payload.rules[0].parameters.required_status_checks.map((c) => c.context),
         ['qa-auto', 'qa-manual']
@@ -93,12 +100,15 @@ describe('qa-ruleset', () => {
         updated_at: '2026-01-02T00:00:00Z',
         _links: { self: { href: '…' } },
         ...desired,
+        bypass_actors: [
+          { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' },
+        ],
         rules: [
           {
             type: 'required_status_checks',
             parameters: {
               strict_required_status_checks_policy: false,
-              do_not_enforce_on_create: false,
+              do_not_enforce_on_create: true,
               required_status_checks: [
                 { context: 'qa-manual', integration_id: null },
                 { context: 'qa-auto' },
@@ -109,6 +119,27 @@ describe('qa-ruleset', () => {
       };
       assert.equal(qaRulesetMatchesDesired(desired, fromApi), true);
       assert.ok(normalizeQaRulesetForCompare(fromApi));
+    });
+
+    it('includes bypass_actors and do_not_enforce_on_create in idempotency compare', () => {
+      const desired = buildQaRulesetPayload('single');
+      assert.deepEqual(normalizeBypassActorsForCompare(desired.bypass_actors), [
+        { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' },
+      ]);
+
+      const missingBypass = structuredClone(desired);
+      missingBypass.bypass_actors = [];
+      assert.equal(qaRulesetMatchesDesired(desired, missingBypass), false);
+
+      const wrongBypassMode = structuredClone(desired);
+      wrongBypassMode.bypass_actors = [
+        { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'pull_request' },
+      ];
+      assert.equal(qaRulesetMatchesDesired(desired, wrongBypassMode), false);
+
+      const enforceOnCreate = structuredClone(desired);
+      enforceOnCreate.rules[0].parameters.do_not_enforce_on_create = false;
+      assert.equal(qaRulesetMatchesDesired(desired, enforceOnCreate), false);
     });
 
     it('detects ref or check drift', () => {

@@ -9,6 +9,18 @@ export const QA_REQUIRED_CHECKS = ['qa-auto', 'qa-manual'];
 export const QA_RULESET_NAME = 'climaybe QA gate';
 
 /**
+ * Repository admin role (GitHub built-in RepositoryRole id 5).
+ * Always-bypass so admins are not blocked by missing qa-auto/qa-manual.
+ */
+export const QA_RULESET_ADMIN_BYPASS_ACTORS = [
+  {
+    actor_id: 5,
+    actor_type: 'RepositoryRole',
+    bypass_mode: 'always',
+  },
+];
+
+/**
  * @param {string} [mode]
  * @returns {string[]} GitHub ruleset ref_name.include patterns for release targets
  */
@@ -28,6 +40,7 @@ export function buildQaRulesetPayload(mode = 'single') {
     name: QA_RULESET_NAME,
     target: 'branch',
     enforcement: 'active',
+    bypass_actors: QA_RULESET_ADMIN_BYPASS_ACTORS.map((a) => ({ ...a })),
     conditions: {
       ref_name: {
         include: getQaRulesetRefIncludes(mode),
@@ -39,12 +52,34 @@ export function buildQaRulesetPayload(mode = 'single') {
         type: 'required_status_checks',
         parameters: {
           strict_required_status_checks_policy: false,
-          do_not_enforce_on_create: false,
+          // Allow creating matching branches (e.g. new live-*) before checks exist.
+          do_not_enforce_on_create: true,
           required_status_checks: QA_REQUIRED_CHECKS.map((context) => ({ context })),
         },
       },
     ],
   };
+}
+
+/**
+ * Normalize bypass_actors for idempotency compare (order-insensitive).
+ * @param {unknown} actors
+ */
+export function normalizeBypassActorsForCompare(actors) {
+  if (!Array.isArray(actors)) return [];
+  return actors
+    .filter((a) => a && typeof a === 'object')
+    .map((a) => ({
+      actor_id: Number(a.actor_id),
+      actor_type: String(a.actor_type || ''),
+      bypass_mode: String(a.bypass_mode || ''),
+    }))
+    .filter((a) => Number.isFinite(a.actor_id) && a.actor_type)
+    .sort((a, b) => {
+      const keyA = `${a.actor_type}:${a.actor_id}:${a.bypass_mode}`;
+      const keyB = `${b.actor_type}:${b.actor_id}:${b.bypass_mode}`;
+      return keyA.localeCompare(keyB);
+    });
 }
 
 /**
@@ -75,6 +110,7 @@ export function normalizeQaRulesetForCompare(ruleset) {
 
   const strict = statusRule?.parameters?.strict_required_status_checks_policy === true;
   const doNotEnforce = statusRule?.parameters?.do_not_enforce_on_create === true;
+  const bypassActors = normalizeBypassActorsForCompare(ruleset.bypass_actors);
 
   return {
     name: String(ruleset.name || ''),
@@ -85,6 +121,7 @@ export function normalizeQaRulesetForCompare(ruleset) {
     contexts,
     strict,
     doNotEnforce,
+    bypassActors,
   };
 }
 
