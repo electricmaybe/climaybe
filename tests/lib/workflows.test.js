@@ -340,10 +340,12 @@ describe('workflows', () => {
         assert.match(wf, /climaybe-qa-autofix-attempted/);
         assert.match(wf, /resolve-preview/);
         assert.match(wf, /store_qa_workflows/);
-        // Security: fork + base filter before checkout; secret scoped to autofix; ignore-scripts
+        // Security: same-repo + pull_request event on job if; base filter in resolve (not pull_requests[0])
         assert.match(wf, /head_repository\.full_name == github\.repository/);
-        assert.match(wf, /pull_requests\[0\]\.base\.ref == 'main'/);
-        assert.match(wf, /startsWith\(github\.event\.workflow_run\.pull_requests\[0\]\.base\.ref, 'live-'\)/);
+        assert.match(wf, /workflow_run\.event == 'pull_request'/);
+        assert.doesNotMatch(wf, /pull_requests\[0\]\.base\.ref/);
+        assert.match(wf, /wrong-base/);
+        assert.match(wf, /Close checks for non-target base/);
         assert.match(wf, /npm ci --ignore-scripts/);
         assert.match(wf, /Exact SHA only/);
         assert.match(wf, /stale-head/);

@@ -97,6 +97,7 @@ describe('store QA selection', () => {
     const blocked = blockedTagsForFailures(['@variant-change'], rules);
     assert.ok(blocked.includes('@funnel-qty-increase'));
     assert.ok(blocked.includes('@funnel-qty-decrease'));
+    assert.ok(blocked.includes('@funnel-remove'));
     assert.ok(blocked.includes('@funnel-add-to-cart'));
     assert.ok(blocked.includes('@funnel-checkout'));
     assert.equal(blocked.includes('@funnel-qty'), false);

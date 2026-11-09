@@ -174,15 +174,17 @@ describe('store QA config + autofix helpers', () => {
     assert.equal(rows[1].status, 'blocked');
   });
 
-  it('blocks qty increase and decrease when variant-change fails', () => {
+  it('blocks qty increase, decrease, and remove when variant-change fails', () => {
     const rows = applyGatekeeperToRows([
       { id: 'U02', title: 'variant', status: 'failed', tags: ['@variant-change'] },
       { id: 'U06', title: 'qty+', status: 'passed', tags: ['@funnel-qty-increase'] },
       { id: 'U07', title: 'qty-', status: 'passed', tags: ['@funnel-qty-decrease'] },
+      { id: 'U08', title: 'remove', status: 'passed', tags: ['@funnel-remove'] },
     ]);
     assert.equal(rows[0].status, 'failed');
     assert.equal(rows[1].status, 'blocked');
     assert.equal(rows[2].status, 'blocked');
+    assert.equal(rows[3].status, 'blocked');
   });
 
   it('normalizes playwright JSON reporter shape', () => {

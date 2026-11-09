@@ -21,15 +21,14 @@ concurrency:
 jobs:
   qa-auto:
     name: qa-auto
-    # Fail closed before any checkout/install/secret use:
-    # same-repo heads only, and only main / live-* bases (never staging/*).
+    # Fail closed before checkout/install/secret use: successful PR Update,
+    # same-repo head only, and only pull_request-triggered runs.
+    # Do NOT rely on workflow_run.pull_requests[0] here — that array is often
+    # empty. Base filtering (main / live-*) happens in the resolve step below.
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
-      (
-        github.event.workflow_run.pull_requests[0].base.ref == 'main' ||
-        startsWith(github.event.workflow_run.pull_requests[0].base.ref, 'live-')
-      )
+      github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -109,11 +108,18 @@ jobs:
               return;
             }
 
+            // Always pin outputs to the workflow_run head SHA (not a drifting PR head)
+            core.setOutput('pr_number', String(data.number));
+            core.setOutput('head_sha', runSha);
+            core.setOutput('head_branch', data.head.ref);
+            core.setOutput('base_branch', data.base.ref);
+            core.setOutput('pr_url', data.html_url);
+
             const base = data.base.ref || '';
             if (base !== 'main' && !base.startsWith('live-')) {
               core.setOutput('run', 'false');
               core.setOutput('reason', 'wrong-base');
-              console.log(`Base ${base} is not main/live-*; skipping Store QA.`);
+              console.log(`Base ${base} is not main/live-*; skipping Store QA (checks closed below).`);
               return;
             }
 
@@ -126,12 +132,43 @@ jobs:
             }
 
             core.setOutput('run', 'true');
-            core.setOutput('pr_number', String(data.number));
-            // Always pin to the workflow_run head SHA (not a drifting PR head)
-            core.setOutput('head_sha', runSha);
-            core.setOutput('head_branch', data.head.ref);
-            core.setOutput('base_branch', data.base.ref);
-            core.setOutput('pr_url', data.html_url);
+
+      - name: Close checks for non-target base (avoid hanging required checks)
+        if: steps.pr.outputs.run == 'false' && steps.pr.outputs.reason == 'wrong-base'
+        uses: actions/github-script@v7
+        env:
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_BASE_BRANCH: ${{ steps.pr.outputs.base_branch }}
+        with:
+          script: |
+            const sha = process.env.QA_HEAD_SHA;
+            const base = process.env.QA_BASE_BRANCH || '';
+            if (!sha) {
+              console.log('No head SHA; cannot close checks.');
+              return;
+            }
+            const summary =
+              `Store QA skipped: base \`${base}\` is not main/live-*. ` +
+              'Require qa-auto / qa-manual only on main and live-* branch protection rules ' +
+              '(not staging / other bases), so non-target PRs are not blocked.';
+            for (const name of ['qa-auto', 'qa-manual']) {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name,
+                head_sha: sha,
+                status: 'completed',
+                conclusion: 'success',
+                output: {
+                  title: `Store QA skipped (base ${base})`,
+                  summary,
+                },
+              });
+            }
+            await core.summary
+              .addHeading('Store QA skipped — non-target base')
+              .addRaw(summary)
+              .write();
 
       - name: Checkout workflow_run head SHA
         if: steps.pr.outputs.run == 'true'

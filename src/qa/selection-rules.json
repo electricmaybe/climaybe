@@ -257,6 +257,7 @@
         "@funnel-add-to-cart",
         "@funnel-qty-increase",
         "@funnel-qty-decrease",
+        "@funnel-remove",
         "@funnel-checkout"
       ]
     },
