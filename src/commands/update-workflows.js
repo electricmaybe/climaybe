@@ -18,6 +18,7 @@ import { scaffoldThemeDevKit } from '../lib/theme-dev-kit.js';
 import { scaffoldCommitlint } from '../lib/commit-tooling.js';
 import { scaffoldAiConfig } from '../lib/cursor-bundle.js';
 import { logHarnessResult, scaffoldHarness } from '../lib/harness.js';
+import { logQaRulesetResult, syncQaRuleset } from '../lib/qa-ruleset.js';
 
 export async function updateCommand() {
   console.log(pc.bold('\n  climaybe — Update\n'));
@@ -64,6 +65,11 @@ export async function updateCommand() {
   }
 
   scaffoldWorkflows(mode, { includePreview, includeBuild, includeProfile, includeLinear, includeStoreQa });
+
+  if (includeStoreQa) {
+    const qaRuleset = syncQaRuleset({ mode, cwd: process.cwd() });
+    logQaRulesetResult(qaRuleset, mode);
+  }
 
   console.log(pc.bold(pc.green('\n  Project files updated!\n')));
 }

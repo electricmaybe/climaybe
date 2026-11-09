@@ -41,8 +41,9 @@ Discovered via dual Playwright projects: packaged `journeys/` + `universal/` use
 3. Ensure `"preview_workflows": true` (QA waits for **PR Update** on the head SHA).
 4. Add `qa/config.yml` (start from [`contract/config.example.yml`](./contract/config.example.yml)).
 5. Add `@playwright/test` to the theme `package.json` (devDependency).
-6. Run `npx climaybe update` to scaffold `store-qa.yml` + `store-qa-manual.yml`.
-7. Optional secret: `CURSOR_API_KEY` — one Cursor cloud auto-fix round per PR; no-op when unset. Never auto-merges. Scoped only to the autofix workflow step (not exposed to checkout/install/test).
+6. Run `npx climaybe update` to scaffold `store-qa.yml` + `store-qa-manual.yml` and reconcile the **`climaybe QA gate`** repository ruleset (`qa-auto` + `qa-manual` on `main` or `live-*`).
+7. On existing repos you can also run `npx climaybe ensure-qa-ruleset` (or `--dry-run` first). Needs GitHub **admin** via authenticated `gh`.
+8. Optional secret: `CURSOR_API_KEY` — one Cursor cloud auto-fix round per PR; no-op when unset. Never auto-merges. Scoped only to the autofix workflow step (not exposed to checkout/install/test).
 
 ### Voldt `live-*` pilot
 
@@ -64,7 +65,7 @@ Plus `qa/config.yml` with `base_branches: [live-*]` and store fixtures. A follow
 - **Selection:** `git diff` base…head → [`selection-rules.json`](./selection-rules.json) → Playwright `--grep`. No theme changes → `qa-auto` **passes** with `skipped: no theme changes, no preview`. Theme-changing PRs always run the purchase funnel. Scope: small / medium / release.
 - **Install:** `npm ci --ignore-scripts` so PR-head lifecycle scripts never see secrets.
 - **Gatekeeper:** funnel steps record pass/fail/blocked without aborting the chain; report applies `blockedTagsForFailures` / implications. Console errors aggregate into the auto comment.
-- **Checks:** `qa-auto` (blocks merge on failure) + `qa-manual` (pending until checklist boxes are ticked; forge-safe re-eval on bot comment edit bound to head SHA). **Branch protection:** require `qa-auto` / `qa-manual` only on `main` and `live-*` rules where Store QA is enabled — not on staging/other bases. Non-target bases **and** gate skips (not opted in / missing `qa/config.yml`) post terminal success checks so required-check lists do not hang.
+- **Checks:** `qa-auto` (blocks merge on failure) + `qa-manual` (pending until checklist boxes are ticked; forge-safe re-eval on bot comment edit bound to head SHA). **Ruleset:** climaybe manages a repo-level ruleset named `climaybe QA gate` that requires those two checks on `main` (single-store) or `live-*` (multi-store) — not on staging/other bases. Non-target bases **and** gate skips (not opted in / missing `qa/config.yml`) post terminal success checks so required-check lists do not hang.
 - **Preview navigation:** `gotoPath` joins the preview base with the storefront path via the URL API so `?preview_theme_id=` stays a query param (never `…?preview_theme_id=ID/products/…`).
 - **Comments:** one auto results comment + one manual task-list comment (updated in place; manual ticks preserved across synchronize).
 - **Auto-fix:** on failure, one Cursor agent via `CURSOR_API_KEY` **per PR** (`climaybe-qa-autofix-attempted`); after the fix push, still-failing → owner comment, no more agents. No auto-merge.

@@ -26,15 +26,25 @@ describe('CLI', () => {
     assert.ok(program.commands.find((c) => c.name() === 'reinit'));
   });
 
-  it('registers theme and root add-store, switch, sync, add-dev-kit, ensure-branches, update', () => {
+  it('registers theme and root add-store, switch, sync, add-dev-kit, ensure-branches, ensure-qa-ruleset, update', () => {
     const program = createProgram();
     const theme = program.commands.find((c) => c.name() === 'theme');
     const themeNames = theme.commands.map((c) => c.name());
     const rootNames = program.commands.map((c) => c.name());
-    for (const name of ['add-store', 'switch', 'sync', 'add-dev-kit', 'ensure-branches', 'update']) {
+    for (const name of [
+      'add-store',
+      'switch',
+      'sync',
+      'add-dev-kit',
+      'ensure-branches',
+      'ensure-qa-ruleset',
+      'update',
+    ]) {
       assert.ok(themeNames.includes(name), `theme ${name}`);
       assert.ok(rootNames.includes(name), `root ${name}`);
     }
+    const ensureQa = theme.commands.find((c) => c.name() === 'ensure-qa-ruleset');
+    assert.ok(ensureQa?.options.some((o) => o.long === '--dry-run'));
     const themeUpdate = theme.commands.find((c) => c.name() === 'update');
     const rootUpdate = program.commands.find((c) => c.name() === 'update');
     assert.ok(themeUpdate?.aliases().includes('update-workflows'));

@@ -73,7 +73,8 @@ shown in the prompt; press Enter to accept.
 12. Asks whether to install the **[AI ruleset](#ai-ruleset)**, and if so which editors to bridge
 13. Asks whether to scaffold the **[coding-agent harness](#coding-agent-harness)** (`AGENTS.md`, `init.sh`, state files)
 14. Writes `climaybe.config.json`, scaffolds workflows, and creates branches/store directories
-15. Optionally configures CI secrets (and can add a GitHub/GitLab remote if the folder has none). When Linear sync is enabled, `LINEAR_API_KEY` is in the skippable secret list.
+15. When Store QA is enabled, creates/updates the repo-level **[QA ruleset](#qa-ruleset-climaybe-qa-gate)** (`qa-auto` + `qa-manual`)
+16. Optionally configures CI secrets (and can add a GitHub/GitLab remote if the folder has none). When Linear sync is enabled, `LINEAR_API_KEY` is in the skippable secret list.
 
 ### `climaybe app init`
 
@@ -124,10 +125,30 @@ When a GitHub remote and authenticated `gh` CLI are available, this command also
 - single-store: protect `main` (PR required)
 - multi-store: protect `live-<alias>` (PR required; bypass users: `shopify[bot]`, `github-actions[bot]`, `actions-user`)
 
+When `store_qa_workflows` is enabled, it also reconciles the **[QA ruleset](#qa-ruleset-climaybe-qa-gate)**.
+
 ```bash
 npx climaybe ensure-branches
 git push origin --all
 ```
+
+### `climaybe ensure-qa-ruleset` / `climaybe theme ensure-qa-ruleset`
+
+Create or update the idempotent repo-level GitHub ruleset **`climaybe QA gate`**, which requires status checks `qa-auto` and `qa-manual` on release targets:
+- **single-store:** `main`
+- **multi-store:** `live-*`
+
+Does **not** modify other rulesets or classic branch protection. Uses the GitHub Rulesets REST API via authenticated `gh`. Needs repo **admin** (or rulesets write); otherwise exits with a clear message.
+
+```bash
+# Preview (no writes)
+npx climaybe ensure-qa-ruleset --dry-run
+
+# Apply on an existing theme repo (e.g. after enabling store_qa_workflows)
+npx climaybe ensure-qa-ruleset
+```
+
+Also runs automatically from `init` / `reinit`, `update`, `add-store`, and `ensure-branches` when Store QA is enabled.
 
 ### `climaybe update` / `climaybe theme update`
 
@@ -139,6 +160,7 @@ Refresh all climaybe-managed project files from your installed CLI version:
 - optional commitlint + Husky files (if enabled)
 - optional AI ruleset in `.config/ai/` + editor bridges (if enabled)
 - optional coding-agent harness files (if `harness: true` — creates **missing** files only; never overwrites)
+- when `store_qa_workflows` is enabled: the **[QA ruleset](#qa-ruleset-climaybe-qa-gate)**
 
 ```bash
 npx climaybe update
@@ -273,6 +295,17 @@ Direct pushes to `staging-<store>` or `live-<store>` are automatically synced ba
 
 It is **best-effort**: it only runs when `origin` is GitHub and the `gh` CLI is installed and authenticated. Otherwise it skips cleanly and prints why — it never fails the command.
 
+### QA ruleset (`climaybe QA gate`)
+
+Separate from classic branch protection. When Store QA is enabled, climaybe manages **one** repository ruleset named **`climaybe QA gate`** via the Rulesets API:
+
+| Mode | Branch pattern | Required checks |
+|------|----------------|-----------------|
+| single-store | `refs/heads/main` | `qa-auto`, `qa-manual` |
+| multi-store | `refs/heads/live-*` | `qa-auto`, `qa-manual` |
+
+Idempotent: create if missing, update if drift, no-op if already correct. Never edits other rulesets. Auto-runs from `init` / `update` / `add-store` / `ensure-branches` when `store_qa_workflows: true`; or run `climaybe ensure-qa-ruleset` (with `--dry-run` to preview) on existing repos.
+
 ## Workflows
 
 ### Shared (both modes)
@@ -366,7 +399,7 @@ Opt-in change-aware Playwright store QA. Enabled via `climaybe init` (`Enable st
 
 **Secrets:** `CURSOR_API_KEY` (optional) — Cursor Cloud Agents API key for one auto-fix round **per PR**; step no-ops when unset. Never auto-merges.
 
-**Voldt `live-*` pilot:** set `store_qa_workflows: true`, keep `preview_workflows: true`, add `qa/config.yml` with `base_branches: [live-*]`, install `@playwright/test`, run `npx climaybe update`.
+**Voldt `live-*` pilot:** set `store_qa_workflows: true`, keep `preview_workflows: true`, add `qa/config.yml` with `base_branches: [live-*]`, install `@playwright/test`, run `npx climaybe update` (also applies the [QA ruleset](#qa-ruleset-climaybe-qa-gate)). On existing repos: `npx climaybe ensure-qa-ruleset --dry-run` then `npx climaybe ensure-qa-ruleset`.
 
 ### Build and Lighthouse workflows
 

@@ -6,6 +6,7 @@ import { syncCommand } from './commands/sync.js';
 import { updateCommand } from './commands/update-workflows.js';
 import { updateLinearKeyCommand } from './commands/update-linear-key.js';
 import { ensureBranchesCommand } from './commands/ensure-branches.js';
+import { ensureQaRulesetCommand } from './commands/ensure-qa-ruleset.js';
 import { setupCommitlintCommand } from './commands/setup-commitlint.js';
 import { addCursorSkillCommand } from './commands/add-cursor-skill.js';
 import { addDevKitCommand } from './commands/add-dev-kit.js';
@@ -125,6 +126,14 @@ function registerThemeCommands(cmd) {
     .command('ensure-branches')
     .description('Create missing staging and per-store branches from current HEAD (then push)')
     .action(ensureBranchesCommand);
+
+  cmd
+    .command('ensure-qa-ruleset')
+    .description(
+      'Create or update the repo-level "climaybe QA gate" ruleset (requires qa-auto + qa-manual on main or live-*)'
+    )
+    .option('--dry-run', 'Print the intended ruleset change without calling the GitHub write API')
+    .action(ensureQaRulesetCommand);
 
   cmd
     .command('harness')
