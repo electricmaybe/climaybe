@@ -8,6 +8,7 @@ import {
   blockedTagsForFailures,
   skippedByImplication,
   viewportsToProjects,
+  buildFailClosedFullSuiteSelection,
 } from '../../src/qa/lib/selection.js';
 
 describe('store QA selection', () => {
@@ -112,5 +113,32 @@ describe('store QA selection', () => {
     const sel = selectTests(['sections/cart--drawer.liquid'], rules);
     assert.match(sel.grep, /@funnel/);
     assert.match(sel.grep, /@cart/);
+  });
+
+  it('buildFailClosedFullSuiteSelection matches the true release tag union', () => {
+    const release = selectTests(['layout/theme.liquid'], rules, { forceRelease: true });
+    const failClosed = buildFailClosedFullSuiteSelection({ rules });
+
+    assert.equal(failClosed.scope, 'release');
+    assert.equal(failClosed.fullSuite, true);
+    assert.equal(failClosed.skipBrowser, false);
+    assert.equal(failClosed.selectionFailed, true);
+    assert.ok(failClosed.themeFileCount >= 1);
+    assert.deepEqual(failClosed.browserProjects, [
+      'mobile-webkit',
+      'tablet-webkit',
+      'desktop-chromium',
+    ]);
+    // Must be the real release union — not a funnel-only stub.
+    assert.deepEqual(failClosed.tags, release.tags);
+    assert.equal(failClosed.grep, release.grep);
+    assert.ok(failClosed.tags.includes('@cart'));
+    assert.ok(failClosed.tags.includes('@pdp'));
+    assert.ok(failClosed.tags.includes('@nav'));
+    assert.notEqual(failClosed.grep, '@funnel|@purchase');
+    assert.match(failClosed.grep, /@cart/);
+    assert.match(failClosed.grep, /@pdp/);
+    assert.ok(failClosed.manualIds.length >= release.manualIds.length);
+    assert.ok(failClosed.matchedRules.includes('layout-head'));
   });
 });

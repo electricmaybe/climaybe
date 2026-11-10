@@ -351,6 +351,32 @@ describe('workflows', () => {
         assert.match(wf, /Exact SHA only/);
         assert.match(wf, /stale-head/);
         assert.match(wf, /skipped: no theme changes, no preview/);
+        // Fail closed on select: true release full suite (not funnel-only stub / not green skip)
+        assert.match(wf, /failing closed: running true release full suite/);
+        assert.match(wf, /--release/);
+        assert.match(wf, /--files "layout\/theme\.liquid"/);
+        assert.match(wf, /buildFailClosedFullSuiteSelection/);
+        assert.match(wf, /selectionFailed = true|selectionFailed: true/);
+        assert.match(wf, /skipBrowser = false|skipBrowser: false/);
+        // Must not hardcode a funnel-only grep while claiming fullSuite
+        assert.doesNotMatch(wf, /grep:\s*"@funnel\|@purchase"/);
+        assert.doesNotMatch(wf, /tags:\s*\["@funnel",\s*"@purchase"\]/);
+        // Old fail-open green-skip synthesis must stay gone
+        assert.doesNotMatch(wf, /"skipBrowser":true,"themeFileCount":0/);
+        assert.doesNotMatch(
+          wf,
+          /echo '\{"scope":"small"[^']*"skipBrowser":true,"themeFileCount":0\}'/
+        );
+        // Empty grep last resort omits --grep so all specs run
+        assert.match(wf, /runAllSpecs: true/);
+        assert.match(wf, /if \[ -n "\$GREP" \]; then/);
+        assert.match(wf, /playwright test -c "\$CONFIG" --grep "\$GREP"/);
+        assert.match(wf, /playwright test -c "\$CONFIG"$/m);
+        // Preview resolve failure must close qa-manual (not leave required check pending)
+        assert.match(wf, /Close checks when preview URL cannot be resolved/);
+        assert.match(wf, /preview\.outcome == 'failure'/);
+        assert.match(wf, /failed: preview URL unresolved/);
+        assert.match(wf, /conclusion: 'neutral'/);
         // Theme specs via dual projects — do not pass qa/specs as CLI path
         assert.doesNotMatch(wf, /EXTRA="qa\/specs"/);
         assert.match(wf, /Do not pass qa\/specs as a CLI path/);

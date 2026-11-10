@@ -9,7 +9,10 @@
 - New optional package (`store_qa_workflows: true`): scaffolds `store-qa.yml` + `store-qa-manual.yml`.
 - Shared core under `src/qa/` (selection rules, purchase funnel, universal checks, shared manual list, Cursor auto-fix helper). Theme repos add `qa/config.yml` (+ optional `manual.yml` / `specs/`) — contract in `src/qa/README.md`.
 - Triggered via `workflow_run` after **PR Update** (no busy-wait). Job `if:` requires success + same-repo head + `event == pull_request` (not `pull_requests[0]`). Base `main`/`live-*` filtered in resolve; non-target bases close `qa-auto`/`qa-manual` checks so nothing hangs. Pins to `workflow_run.head_sha` (exact PR match; stale heads skip). Preview URL fail-closed on full head SHA. Non-theme PRs pass green (`skipped: no theme changes, no preview`). `npm ci --ignore-scripts`; `CURSOR_API_KEY` scoped only to autofix. Forge-safe `qa-manual`. Escalate-once autofix per PR. Gatekeeper blocked steps + console aggregation in the auto report. Require `qa-auto`/`qa-manual` only on main/`live-*` branch protection.
-- Covered by `tests/qa/*.test.js` and scaffolding asserts in `tests/lib/workflows.test.js`.
+- **Fail-closed selection:** if `store-qa select` fails, the workflow runs the **true release full suite** from `selection.js` (`buildFailClosedFullSuiteSelection` / `--release --files layout/theme.liquid` — all rule tags, three viewports; never a funnel-only `@funnel|@purchase` stub, never a green skip). Absolute last resort omits `--grep` so Playwright runs all discovered specs.
+- **Preview resolve failure:** always upserts terminal `qa-auto` (failure) + `qa-manual` (neutral) checks so a required `qa-manual` check cannot stay pending forever when the preview URL is missing.
+- **Ruleset plan gating:** free-org private repos that get `Upgrade to GitHub Pro or make this repository public…` are reported as a plan limitation (checks still run, not enforced), not as a missing admin token; `ensure-qa-ruleset` exits non-zero only for real errors.
+- Covered by `tests/qa/*.test.js` and scaffolding asserts in `tests/lib/workflows.test.js` / `tests/lib/qa-ruleset.test.js`.
 
 ## Hotfix tagging weekly with an early-exit gate; Create Release gate
 

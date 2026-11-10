@@ -42,7 +42,7 @@ Discovered via dual Playwright projects: packaged `journeys/` + `universal/` use
 4. Add `qa/config.yml` (start from [`contract/config.example.yml`](./contract/config.example.yml)).
 5. Add `@playwright/test` to the theme `package.json` (devDependency).
 6. Run `npx climaybe update` to scaffold `store-qa.yml` + `store-qa-manual.yml` and reconcile the **`climaybe QA gate`** repository ruleset (`qa-auto` + `qa-manual` on `main` or `live-*`).
-7. On existing repos you can also run `npx climaybe ensure-qa-ruleset` (or `--dry-run` first). Needs GitHub **admin** via authenticated `gh`.
+7. On existing repos you can also run `npx climaybe ensure-qa-ruleset` (or `--dry-run` first). Needs GitHub **admin** via authenticated `gh`. Private repos on a free GitHub org cannot use repository rulesets (plan limitation) — climaybe prints that clearly; checks still run but are not merge-enforced until the plan allows rulesets.
 8. Optional secret: `CURSOR_API_KEY` — one Cursor cloud auto-fix round per PR; no-op when unset. Never auto-merges. Scoped only to the autofix workflow step (not exposed to checkout/install/test).
 
 ### Voldt `live-*` pilot
@@ -62,7 +62,8 @@ Plus `qa/config.yml` with `base_branches: [live-*]` and store fixtures. A follow
 - **Trigger:** `workflow_run` after **PR Update** succeeds (no busy-wait). Job `if:` requires conclusion success + same-repo head + `event == pull_request` (does **not** use often-empty `pull_requests[0]`). Base `main` / `live-*` filtering is in the pre-checkout resolve step. Never drafts/forks.
 - **Pinning:** everything uses `workflow_run.head_sha`; PR lookup is exact-SHA only (no `pulls[0]` fallback); if the PR head moved on, the run skips.
 - **Preview:** preview comment must include the **full** head SHA (`<!-- climaybe-preview-sha:… -->`); URL pick fails closed on mismatch/empty. Multi-store picks `[alias preview](url)` via `QA_STORE_ALIAS`.
-- **Selection:** `git diff` base…head → [`selection-rules.json`](./selection-rules.json) → Playwright `--grep`. No theme changes → `qa-auto` **passes** with `skipped: no theme changes, no preview`. Theme-changing PRs always run the purchase funnel. Scope: small / medium / release.
+- **Selection:** `git diff` base…head → [`selection-rules.json`](./selection-rules.json) → Playwright `--grep`. No theme changes → `qa-auto` **passes** with `skipped: no theme changes, no preview`. If selection itself fails, CI **fails closed** and runs the true release tag union from `buildFailClosedFullSuiteSelection` (never a funnel-only stub, never green-skips; last resort omits `--grep` to run all specs). Theme-changing PRs always run the purchase funnel. Scope: small / medium / release.
+- **Preview missing:** if the preview URL cannot be resolved, `qa-auto` fails with a clear reason and `qa-manual` is closed as **neutral** (not left pending).
 - **Install:** `npm ci --ignore-scripts` so PR-head lifecycle scripts never see secrets.
 - **Gatekeeper:** funnel steps record pass/fail/blocked without aborting the chain; report applies `blockedTagsForFailures` / implications. Console errors aggregate into the auto comment.
 - **Checks:** `qa-auto` (blocks merge on failure) + `qa-manual` (pending until checklist boxes are ticked; forge-safe re-eval on bot comment edit bound to head SHA). **Ruleset:** climaybe manages a repo-level ruleset named `climaybe QA gate` that requires those two checks on `main` (single-store) or `live-*` (multi-store) — not on staging/other bases. Non-target bases **and** gate skips (not opted in / missing `qa/config.yml`) post terminal success checks so required-check lists do not hang.

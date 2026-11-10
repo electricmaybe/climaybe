@@ -159,7 +159,24 @@ function ghErrorText(result) {
   return `${result?.stderr || ''} ${result?.stdout || ''}`.trim();
 }
 
+/**
+ * Detect GitHub plan / product gating for repository rulesets (private repo on free org).
+ * These 403s are not missing admin permission — rulesets simply are not available.
+ * @param {unknown} text
+ */
+export function isRulesetPlanLimitationError(text) {
+  const t = String(text || '');
+  return (
+    /Upgrade to GitHub Pro/i.test(t) ||
+    /make this repository public to enable (this|the) feature/i.test(t) ||
+    /Upgrade to GitHub Team/i.test(t) ||
+    /GitHub Pro or make this repository public/i.test(t)
+  );
+}
+
 export function isAdminPermissionError(text) {
+  // Plan-gated 403s also contain "403" / "Forbidden" — classify them separately.
+  if (isRulesetPlanLimitationError(text)) return false;
   const t = String(text || '');
   return (
     /\b403\b/.test(t) ||
@@ -170,6 +187,50 @@ export function isAdminPermissionError(text) {
     /Insufficient privileges/i.test(t) ||
     /requires .+ admin/i.test(t)
   );
+}
+
+/** User-facing copy when rulesets API is plan-gated. */
+export const QA_RULESET_PLAN_LIMITATION_MESSAGE =
+  'Repository rulesets are unavailable on this GitHub plan (private repo in a free organization). ' +
+  'Upgrade to GitHub Pro or make this repository public to enable rulesets. ' +
+  'Store QA checks still run but are not enforced via a ruleset.';
+
+/**
+ * Classify a rulesets API error into a syncQaRuleset skip result, or null if unclassified.
+ * @param {Error & { body?: string }} err
+ * @param {{ dryRun?: boolean, refs: string[], rulesetId?: number | null }} ctx
+ */
+function rulesetApiErrorResult(err, ctx) {
+  const detail = err.body || err.message || '';
+  if (isRulesetPlanLimitationError(detail)) {
+    return emptyResult({
+      skipped: 'plan_required',
+      dryRun: ctx.dryRun,
+      refs: ctx.refs,
+      rulesetId: ctx.rulesetId ?? null,
+      error: err.message,
+      message: QA_RULESET_PLAN_LIMITATION_MESSAGE,
+    });
+  }
+  if (isAdminPermissionError(detail)) {
+    return emptyResult({
+      skipped: 'admin_required',
+      dryRun: ctx.dryRun,
+      refs: ctx.refs,
+      rulesetId: ctx.rulesetId ?? null,
+      error: err.message,
+      message:
+        'GitHub token lacks admin permission to manage repository rulesets. Grant admin (or rulesets write) and re-run.',
+    });
+  }
+  return emptyResult({
+    skipped: 'api_error',
+    dryRun: ctx.dryRun,
+    refs: ctx.refs,
+    rulesetId: ctx.rulesetId ?? null,
+    error: err.message,
+    message: err.message,
+  });
 }
 
 /**
@@ -280,23 +341,7 @@ export function syncQaRuleset({
   try {
     listed = api.listRulesets();
   } catch (err) {
-    if (isAdminPermissionError(err.body || err.message)) {
-      return emptyResult({
-        skipped: 'admin_required',
-        dryRun,
-        refs,
-        error: err.message,
-        message:
-          'GitHub token lacks admin permission to manage repository rulesets. Grant admin (or rulesets write) and re-run.',
-      });
-    }
-    return emptyResult({
-      skipped: 'api_error',
-      dryRun,
-      refs,
-      error: err.message,
-      message: err.message,
-    });
+    return rulesetApiErrorResult(err, { dryRun, refs });
   }
 
   const summaries = Array.isArray(listed) ? listed : [];
@@ -307,25 +352,7 @@ export function syncQaRuleset({
     try {
       existing = api.getRuleset(match.id);
     } catch (err) {
-      if (isAdminPermissionError(err.body || err.message)) {
-        return emptyResult({
-          skipped: 'admin_required',
-          dryRun,
-          refs,
-          rulesetId: match.id,
-          error: err.message,
-          message:
-            'GitHub token lacks admin permission to manage repository rulesets. Grant admin (or rulesets write) and re-run.',
-        });
-      }
-      return emptyResult({
-        skipped: 'api_error',
-        dryRun,
-        refs,
-        rulesetId: match.id,
-        error: err.message,
-        message: err.message,
-      });
+      return rulesetApiErrorResult(err, { dryRun, refs, rulesetId: match.id });
     }
   }
 
@@ -378,22 +405,10 @@ export function syncQaRuleset({
       message: `Created ruleset "${QA_RULESET_NAME}".`,
     });
   } catch (err) {
-    if (isAdminPermissionError(err.body || err.message)) {
-      return emptyResult({
-        skipped: 'admin_required',
-        dryRun: false,
-        refs,
-        error: err.message,
-        message:
-          'GitHub token lacks admin permission to manage repository rulesets. Grant admin (or rulesets write) and re-run.',
-      });
-    }
-    return emptyResult({
-      skipped: 'api_error',
+    return rulesetApiErrorResult(err, {
       dryRun: false,
       refs,
-      error: err.message,
-      message: err.message,
+      rulesetId: existing?.id ?? match?.id ?? null,
     });
   }
 }
@@ -414,6 +429,10 @@ export function logQaRulesetResult(result, mode = 'single') {
   }
   if (result.skipped === 'repo_parse_failed') {
     console.log(pc.dim(`  ${prefix}: skipped (could not resolve owner/repo from origin).`));
+    return;
+  }
+  if (result.skipped === 'plan_required') {
+    console.log(pc.yellow(`  ${prefix}: ${result.message || QA_RULESET_PLAN_LIMITATION_MESSAGE}`));
     return;
   }
   if (result.skipped === 'admin_required') {

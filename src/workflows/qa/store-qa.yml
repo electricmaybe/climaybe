@@ -256,15 +256,93 @@ jobs:
           mkdir -p qa-results
           git fetch origin "$QA_BASE_BRANCH" --depth=1 || true
           BASE_REF="origin/${QA_BASE_BRANCH}"
+          # Fail closed: never synthesize skipBrowser/themeFileCount:0 on select failure
+          # (that green-skipped theme PRs). If select fails, run the true release full suite.
+          SELECT_OK=0
           npx --no-install climaybe store-qa select \
             --base "$BASE_REF" \
             --base-branch "$QA_BASE_BRANCH" \
-            --head-branch "$QA_HEAD_BRANCH" || true
-          if [ ! -f qa-results/selection.json ]; then
-            echo '{"scope":"small","tags":["@funnel","@purchase"],"grep":"@funnel|@purchase","browserProjects":["mobile-webkit","desktop-chromium"],"skipBrowser":true,"themeFileCount":0}' > qa-results/selection.json
+            --head-branch "$QA_HEAD_BRANCH" && SELECT_OK=1 || true
+          if [ "$SELECT_OK" != "1" ] || [ ! -f qa-results/selection.json ]; then
+            echo "::warning::Store QA selection failed — failing closed: running true release full suite (will not skip browsers / report success without running)."
+            # 1) Prefer CLI release selection with a known theme path (bypasses broken git diff).
+            FALLBACK_OK=0
+            npx --no-install climaybe store-qa select \
+              --release \
+              --files "layout/theme.liquid" \
+              --base-branch "$QA_BASE_BRANCH" \
+              --head-branch "$QA_HEAD_BRANCH" && FALLBACK_OK=1 || true
+            if [ "$FALLBACK_OK" = "1" ] && [ -f qa-results/selection.json ]; then
+              node --input-type=module -e '
+                import fs from "node:fs";
+                const s = JSON.parse(fs.readFileSync("qa-results/selection.json", "utf8"));
+                s.selectionFailed = true;
+                s.skipBrowser = false;
+                s.fullSuite = true;
+                s.scope = "release";
+                s.themeFileCount = Math.max(Number(s.themeFileCount) || 0, 1);
+                s.changedThemeFiles = ["(selection-failed-full-suite)"];
+                fs.writeFileSync("qa-results/selection.json", JSON.stringify(s, null, 2) + "\n");
+              '
+            else
+              # 2) Build the real release union via selection.js (same tags/manual/viewports as release).
+              node --input-type=module -e '
+                import fs from "node:fs";
+                import path from "node:path";
+                import { createRequire } from "node:module";
+                const req = createRequire(path.join(process.cwd(), "package.json"));
+                let mod;
+                try {
+                  const pkg = path.dirname(req.resolve("climaybe/package.json"));
+                  mod = await import(path.join(pkg, "src/qa/lib/selection.js"));
+                } catch {
+                  mod = await import(path.resolve("node_modules/climaybe/src/qa/lib/selection.js"));
+                }
+                const selection = mod.buildFailClosedFullSuiteSelection({
+                  baseBranch: process.env.QA_BASE_BRANCH || "",
+                  headBranch: process.env.QA_HEAD_BRANCH || "",
+                });
+                try {
+                  const pkg = path.dirname(req.resolve("climaybe/package.json"));
+                  const { loadQaConfig } = await import(path.join(pkg, "src/qa/lib/config-loader.js"));
+                  const { resolveQaStoreAlias } = await import(path.join(pkg, "src/qa/lib/preview-url.js"));
+                  const { config } = loadQaConfig(process.cwd());
+                  selection.storeAlias = resolveQaStoreAlias(config, {
+                    baseBranch: process.env.QA_BASE_BRANCH || "",
+                    headBranch: process.env.QA_HEAD_BRANCH || "",
+                  });
+                } catch { /* store alias optional in fail-closed path */ }
+                fs.mkdirSync("qa-results", { recursive: true });
+                fs.writeFileSync("qa-results/selection.json", JSON.stringify(selection, null, 2) + "\n");
+              ' || {
+                # 3) Absolute last resort: empty grep → Playwright runs all discovered specs.
+                echo "::warning::Could not load climaybe selection.js — failing closed with no --grep (run all specs)."
+                node -e '
+                  const fs = require("fs");
+                  fs.mkdirSync("qa-results", { recursive: true });
+                  const selection = {
+                    scope: "release",
+                    tags: [],
+                    grep: "",
+                    browserProjects: ["mobile-webkit", "tablet-webkit", "desktop-chromium"],
+                    viewports: ["mobile", "tablet", "desktop"],
+                    skipBrowser: false,
+                    themeFileCount: 1,
+                    fullSuite: true,
+                    selectionFailed: true,
+                    runAllSpecs: true,
+                    changedThemeFiles: ["(selection-failed-full-suite)"],
+                    matchedRules: [],
+                    manualIds: [],
+                  };
+                  fs.writeFileSync("qa-results/selection.json", JSON.stringify(selection, null, 2) + "\n");
+                '
+              }
+            fi
           fi
           STORE_ALIAS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.storeAlias||"")')
-          GREP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.grep||"@funnel")')
+          # Preserve empty grep (run-all last resort); only default when grep is missing entirely.
+          GREP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(s.grep==null?"@funnel":String(s.grep))')
           PROJECTS=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write((s.browserProjects||[]).join(","))')
           SKIP=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(String(!!s.skipBrowser || Number(s.themeFileCount||0)===0))')
           THEME_COUNT=$(node -e 'const s=require("./qa-results/selection.json");process.stdout.write(String(s.themeFileCount||0))')
@@ -389,6 +467,109 @@ jobs:
           echo "preview_ready=true" >> "$GITHUB_OUTPUT"
           echo "Found preview for $QA_HEAD_SHA (${QA_STORE_ALIAS:-default}): $PREVIEW_URL"
 
+      # If preview resolve fails, the job would otherwise exit before qa-manual is upserted,
+      # leaving a required check pending forever. Always close both checks with a clear reason.
+      - name: Close checks when preview URL cannot be resolved
+        if: >
+          always() &&
+          steps.pr.outputs.run == 'true' &&
+          steps.gate.outputs.run == 'true' &&
+          steps.select.outputs.skip_browser != 'true' &&
+          steps.preview.outcome == 'failure'
+        uses: actions/github-script@v7
+        env:
+          QA_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          QA_PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          QA_STORE_ALIAS: ${{ steps.select.outputs.store_alias }}
+          QA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const sha = process.env.QA_HEAD_SHA;
+            const alias = process.env.QA_STORE_ALIAS || '';
+            if (!sha) {
+              console.log('No head SHA; cannot close checks after preview failure.');
+              return;
+            }
+            const summary =
+              `Store QA failed: could not resolve a Shopify preview URL for head \`${sha}\`` +
+              (alias ? ` (store alias \`${alias}\`)` : '') +
+              '. Ensure PR Update posted a preview comment bound to this full SHA ' +
+              '(`<!-- climaybe-preview-sha:… -->`). Manual checklist was not opened.';
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'qa-auto',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'failure',
+              output: {
+                title: 'Store QA failed — preview URL unresolved',
+                summary,
+              },
+            });
+            // Neutral (not pending): nothing to tick without a preview; do not hang required checks.
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'qa-manual',
+              head_sha: sha,
+              status: 'completed',
+              conclusion: 'neutral',
+              output: {
+                title: 'Manual QA not started — preview unresolved',
+                summary:
+                  'Preview URL could not be resolved, so the manual checklist was not posted. ' +
+                  'Re-run Store QA after PR Update publishes a preview for this head SHA.',
+              },
+            });
+
+            const marker = '<!-- climaybe-qa-auto -->';
+            const body = [
+              marker,
+              `<!-- climaybe-qa-auto-sha:${sha} -->`,
+              '## Store QA — automated results',
+              '',
+              '**failed: preview URL unresolved**',
+              '',
+              summary,
+              '',
+              process.env.QA_RUN_URL ? `Run: ${process.env.QA_RUN_URL}` : null,
+              '',
+            ].filter(Boolean).join('\n');
+            const issue_number = Number(process.env.QA_PR_NUMBER);
+            if (Number.isFinite(issue_number) && issue_number > 0) {
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                per_page: 100,
+              });
+              const existing = comments.find(c => {
+                const bot = c.user?.type === 'Bot' || String(c.user?.login || '').endsWith('[bot]');
+                return bot && (c.body || '').includes(marker);
+              });
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number,
+                  body,
+                });
+              }
+            }
+
+            await core.summary
+              .addHeading('Store QA failed — preview unresolved')
+              .addRaw(summary)
+              .write();
+
       - name: Cache Playwright browsers
         if: steps.pr.outputs.run == 'true' && steps.gate.outputs.run == 'true' && steps.preview.outputs.preview_ready == 'true'
         uses: actions/cache@v4
@@ -426,7 +607,13 @@ jobs:
           ')
           # Do not pass qa/specs as a CLI path: Playwright would replace discovery roots.
           # Config uses dual projects (packaged journeys/universal + theme qa/specs).
-          npx --no-install playwright test -c "$CONFIG" --grep "${{ steps.select.outputs.grep }}"
+          # Empty grep (fail-closed last resort) omits --grep so all discovered specs run.
+          GREP="${{ steps.select.outputs.grep }}"
+          if [ -n "$GREP" ]; then
+            npx --no-install playwright test -c "$CONFIG" --grep "$GREP"
+          else
+            npx --no-install playwright test -c "$CONFIG"
+          fi
           code=$?
           set -e
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"

@@ -165,6 +165,37 @@ export function selectTests(changedFiles, rules = loadSelectionRules(), opts = {
 }
 
 /**
+ * Fail-closed CI fallback when `store-qa select` itself fails.
+ * Uses the true release / fullSuite union from selection rules (all rule tags,
+ * three viewports, all manual ids) — never a funnel-only stub, never skipBrowser.
+ *
+ * @param {{
+ *   rules?: SelectionRules,
+ *   baseBranch?: string,
+ *   headBranch?: string,
+ * }} [opts]
+ */
+export function buildFailClosedFullSuiteSelection(opts = {}) {
+  const rules = opts.rules || loadSelectionRules();
+  // layout/theme.liquid is a releasePathGlob + layout-head forceScope=release trigger;
+  // forceRelease makes the scope unambiguous even if rules drift.
+  const selection = selectTests(['layout/theme.liquid'], rules, {
+    forceRelease: true,
+    baseBranch: opts.baseBranch,
+    headBranch: opts.headBranch,
+  });
+  return {
+    ...selection,
+    skipBrowser: false,
+    themeFileCount: Math.max(Number(selection.themeFileCount) || 0, 1),
+    fullSuite: true,
+    scope: 'release',
+    selectionFailed: true,
+    changedThemeFiles: ['(selection-failed-full-suite)'],
+  };
+}
+
+/**
  * @param {QaScope} scope
  */
 function scopeRank(scope) {
